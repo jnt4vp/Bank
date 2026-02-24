@@ -472,6 +472,229 @@ python simulator.py
 
 ---
 
+## AWS EC2 Deployment (Single Instance)
+
+### Architecture
+```
+┌─────────────────────────────────────────────────────┐
+│                 EC2 (t3.micro)                      │
+│  ┌───────────────────────────────────────────────┐  │
+│  │              Docker Compose                   │  │
+│  │  ┌─────────┐  ┌─────────┐  ┌──────────────┐   │  │
+│  │  │  Nginx  │─▶│ FastAPI │─▶│  PostgreSQL  │   │  │
+│  │  │  :80    │  │  :8000  │  │    :5432     │   │  │
+│  │  │  :443   │  └─────────┘  └──────────────┘   │  │
+│  │  └─────────┘                                  │  │
+│  │   (serves React build + proxies /api)         │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### Production Docker Compose
+
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: bankspank-db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: bankspank
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: bankspank-api
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/bankspank
+      JWT_SECRET: ${JWT_SECRET}
+      OLLAMA_URL: http://host.docker.internal:11434
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: bankspank-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend-dist:/usr/share/nginx/html:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+
+volumes:
+  pgdata:
+```
+
+### Nginx Configuration
+
+```nginx
+# nginx/nginx.conf
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    server {
+        listen 80;
+        server_name your-domain.com;
+
+        # Certbot challenge
+        location /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
+        # Redirect to HTTPS
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        server_name your-domain.com;
+
+        ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+
+        # React frontend
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+        }
+
+        # FastAPI backend
+        location /api {
+            proxy_pass http://backend:8000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+}
+```
+
+### Deployment Script
+
+```bash
+#!/bin/bash
+# deploy.sh - Run on EC2 instance
+
+set -e
+
+# Pull latest code
+cd /home/ubuntu/bankspank
+git pull origin main
+
+# Build frontend
+cd frontend
+npm ci
+npm run build
+cp -r dist ../frontend-dist
+
+# Build and restart services
+cd ..
+docker-compose -f docker-compose.prod.yml build
+docker-compose -f docker-compose.prod.yml up -d
+
+echo "Deployed successfully!"
+```
+
+### EC2 Setup Commands
+
+```bash
+# 1. Launch EC2 (Ubuntu 22.04, t3.micro, open ports 22, 80, 443)
+
+# 2. SSH in and install dependencies
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker.io docker-compose git nodejs npm
+
+# 3. Add user to docker group
+sudo usermod -aG docker ubuntu
+newgrp docker
+
+# 4. Clone repo
+git clone https://github.com/your-username/bankspank.git
+cd bankspank
+
+# 5. Create .env file
+cp .env.example .env
+nano .env  # Edit with production values
+
+# 6. Build frontend
+cd src && npm ci && npm run build && cd ..
+mkdir -p frontend-dist && cp -r src/dist/* frontend-dist/
+
+# 7. Get SSL certificate (replace with your domain)
+docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
+  --webroot --webroot-path=/var/www/certbot \
+  -d your-domain.com
+
+# 8. Start everything
+docker-compose -f docker-compose.prod.yml up -d
+
+# 9. (Optional) Install Ollama for AI classification
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull phi3
+```
+
+### Cost Estimate
+
+| Resource | Spec | Monthly Cost |
+|----------|------|--------------|
+| EC2 | t3.micro (free tier) | $0-8 |
+| EBS | 20GB gp3 | ~$2 |
+| Domain | Route 53 | $0.50 |
+| **Total** | | **~$3-11/mo** |
+
+*Free tier eligible for first 12 months*
+
+---
+
+## Project Structure (Updated for Deployment)
+
+```
+Bank/
+├── src/                        # React frontend (Vite)
+├── backend/                    # FastAPI backend
+│   ├── Dockerfile              # Backend container
+│   └── ...
+├── scripts/
+│   └── simulator.py
+├── nginx/
+│   └── nginx.conf              # Production nginx config
+├── docker-compose.yml          # Development (DB only)
+├── docker-compose.prod.yml     # Production (all services)
+├── deploy.sh                   # Deployment script
+├── .env.example
+└── SPEC.md
+```
+
+---
+
 ## Future Enhancements (Out of Scope for MVP)
 
 - Accountability partners (share access with trusted person)
