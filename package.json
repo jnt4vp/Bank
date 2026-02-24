@@ -1,12 +1,15 @@
 {
-  "name": "example-app",
+  "name": "bank",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "bash scripts/dev.sh",
     "build": "vite build",
     "lint": "eslint .",
+    "test": "node --test tests/frontend/app.smoke.test.mjs",
+    "test:frontend": "node --test tests/frontend/app.smoke.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

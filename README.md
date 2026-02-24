@@ -12,17 +12,64 @@ Local development guide for the current repo snapshot.
 
 - Node.js 20+
 - Python 3.11+
-- Docker (for local Postgres)
+- Docker Engine + Docker Compose plugin (`docker compose`) for local Postgres
+
+On Linux, you may also need Docker socket permissions before `make dev` works:
+
+```bash
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+newgrp docker
+docker ps
+```
+
+(`docker-compose` also works if installed, but `docker compose` is the modern command.)
+
+## Fast Start (One Command)
+
+After completing the one-time setup steps (`cp .env.example .env`, backend deps, `npm install`, and first-run migrations), you can start local development with:
+
+```bash
+make dev
+```
+
+This starts:
+
+- PostgreSQL (Docker)
+- FastAPI backend (`:8000`)
+- Vite frontend (`:5173`)
+
+First run only (before `make dev`), initialize the database schema:
+
+```bash
+alembic upgrade head
+```
+
+If you do not have Docker Compose installed but already have PostgreSQL running locally, use:
+
+```bash
+make dev-no-db
+```
+
+If `make dev` fails with `address already in use` for port `5432`, another Postgres instance is already running. Either stop it, or keep using your existing Postgres and run `make dev-no-db`.
 
 ## 1. Start Postgres
 
 From the repo root:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts a local Postgres instance on `localhost:5432`.
+
+Preflight check (helps catch Docker permission issues early):
+
+```bash
+docker ps
+```
+
+If port `5432` is already in use, use `make dev-no-db` and point `.env` at your existing Postgres.
 
 ## 2. Configure Environment
 
@@ -49,6 +96,8 @@ Run database migrations:
 ```bash
 alembic upgrade head
 ```
+
+You only need this once on first setup (and again after future migration changes).
 
 Start the API from the repo root:
 
@@ -93,19 +142,39 @@ curl -X POST http://localhost:8000/api/auth/login \
   -d '{"email":"test@example.com","password":"password123"}'
 ```
 
+## 6. Tests (Beginner Feedback Loop)
+
+Backend smoke test:
+
+```bash
+make test-backend
+```
+
+Frontend smoke test:
+
+```bash
+npm test
+```
+
+Run both:
+
+```bash
+make test
+```
+
 ## Common Commands
 
 Stop local Postgres:
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 Reset local Postgres data:
 
 ```bash
-docker-compose down -v
-docker-compose up -d
+docker compose down -v
+docker compose up -d
 alembic upgrade head
 ```
 
@@ -113,3 +182,6 @@ alembic upgrade head
 
 - `docker-compose.prod.yml` and `deploy/` contain deployment options, but this README is intentionally local-dev only.
 - The frontend is currently a placeholder UI and does not yet implement the full product flows described in `SPEC.md`.
+- `make dev` leaves the Postgres container running when you stop the frontend/backend. Use `docker compose down` to stop it.
+- `make dev-no-db` skips Docker and assumes Postgres is already running and matches `DATABASE_URL`.
+- The local scripts support both `docker compose` and `docker-compose`.
