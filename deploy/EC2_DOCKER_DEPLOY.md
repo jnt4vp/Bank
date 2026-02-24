@@ -8,6 +8,17 @@ Deploy the Bank API to AWS EC2 using Docker.
 - EC2 instance running Amazon Linux 2023
 - Security group allowing inbound ports: 22 (SSH), 80 (HTTP)
 
+## Architecture
+
+```
+Internet → port 80 → [frontend container / nginx]
+                           ├── / and /* → serves React static files
+                           ├── /api/*   → proxies to [api container :8000]
+                           └── /health  → proxies to [api container :8000]
+                                              ↓
+                                    [postgres container]
+```
+
 ## Step 1: Launch EC2 Instance
 
 1. Go to AWS Console → EC2 → Launch Instance
@@ -93,11 +104,27 @@ sudo docker-compose -f docker-compose.prod.yml restart
 sudo docker-compose -f docker-compose.prod.yml down
 ```
 
-### Update deployment
+### Update deployment (pull latest code + rebuild all)
 ```bash
 cd /opt/bankapp
 sudo git pull
 sudo -E docker-compose -f docker-compose.prod.yml up -d --build
+```
+
+### Update frontend only
+```bash
+cd /opt/bankapp
+sudo git pull
+sudo docker-compose -f docker-compose.prod.yml build frontend
+sudo docker-compose -f docker-compose.prod.yml up -d --no-deps frontend
+```
+
+### Update backend (API) only
+```bash
+cd /opt/bankapp
+sudo git pull
+sudo docker-compose -f docker-compose.prod.yml build api
+sudo docker-compose -f docker-compose.prod.yml up -d --no-deps api
 ```
 
 ## Test the API
@@ -124,6 +151,7 @@ curl http://localhost/api/auth/me \
 
 ## Access from Browser
 
+- Frontend: `http://your-ec2-public-ip/`
 - API Docs: `http://your-ec2-public-ip/docs`
 - Health Check: `http://your-ec2-public-ip/health`
 
