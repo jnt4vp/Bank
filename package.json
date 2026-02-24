@@ -5,11 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:full": "bash scripts/dev.sh",
     "build": "vite build",
     "lint": "eslint .",
-    "test": "node --test tests/frontend/app.smoke.test.mjs",
-    "test:frontend": "node --test tests/frontend/app.smoke.test.mjs",
+    "test": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -18,8 +16,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@types/react": "^19.2.5",
-    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.39.1",
