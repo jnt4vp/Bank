@@ -1,116 +1,115 @@
-# Bank Spank
+# Bank
 
-A mock financial accountability app that detects irresponsible purchases using AI classification and sends alerts to users. Simulates bank integration via external POST requests.
+Local development guide for the current repo snapshot.
 
-## Current Status
+## Current Scope
 
-- **Backend**: Auth endpoints live (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`) — FastAPI + PostgreSQL
-- **Frontend**: Placeholder React/Vite screen
-- **Deployment**: Docker Compose on EC2 (see [Production Deployment](#production-deployment))
+- Backend: FastAPI auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`)
+- Frontend: Vite + React placeholder app
+- Database: PostgreSQL (recommended via Docker for local dev)
 
-## Tech Stack
+## Prerequisites
 
-- **Frontend**: React 19 + Vite + Tailwind CSS + React Router
-- **Backend**: Python 3.11+ + FastAPI + SQLAlchemy + asyncpg
-- **Database**: PostgreSQL 15
-- **AI Classification**: Hybrid — Rule-based + optional Ollama LLM
-- **Alerts**: Email (SMTP) + Mock SMS (console logging)
+- Node.js 20+
+- Python 3.11+
+- Docker (for local Postgres)
 
-## Architecture
+## 1. Start Postgres
 
-```
-Internet :80 → bank_frontend (nginx) → serves React SPA at /
-                                      → proxies /api/* to bank_api:8000
-bank_api (uvicorn) → bank_postgres (postgres:15)
-```
-
-## API Endpoints
-
-### Auth
-| Method | Endpoint             | Description        |
-|--------|----------------------|--------------------|
-| POST   | `/api/auth/register` | Create new user    |
-| POST   | `/api/auth/login`    | Login, returns JWT |
-| GET    | `/api/auth/me`       | Get current user   |
-
-### Transactions
-| Method | Endpoint                    | Description                           |
-|--------|-----------------------------|---------------------------------------|
-| POST   | `/api/transactions`         | Ingest new transaction (API key auth) |
-| GET    | `/api/transactions`         | Get user's transactions               |
-| GET    | `/api/transactions/flagged` | Get flagged transactions              |
-
-### Alerts & Card
-| Method | Endpoint          | Description          |
-|--------|-------------------|----------------------|
-| GET    | `/api/alerts`     | Get user's alerts    |
-| POST   | `/api/card/lock`  | Lock card (mock)     |
-| POST   | `/api/card/unlock`| Unlock card (mock)   |
-| GET    | `/api/card/status`| Get card lock status |
-
-## Local Development
+From the repo root:
 
 ```bash
-# 1. Start PostgreSQL
 docker-compose up -d
+```
 
-# 2. Backend
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env  # edit with your settings
-cd ..
+This starts a local Postgres instance on `localhost:5432`.
+
+## 2. Configure Environment
+
+Create a local env file in the repo root:
+
+```bash
+cp .env.example .env
+```
+
+Defaults in `.env.example` are already set for the local Docker Postgres container.
+
+## 3. Backend Setup (FastAPI)
+
+Create a virtual environment and install backend dependencies:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+```
+
+Run database migrations:
+
+```bash
 alembic upgrade head
-uvicorn backend.main:app --reload
+```
 
-# 3. Frontend (new terminal)
+Start the API from the repo root:
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+Backend URLs:
+
+- API: `http://localhost:8000`
+- Docs: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+
+## 4. Frontend Setup (Vite)
+
+In a new terminal, from the repo root:
+
+```bash
 npm install
 npm run dev
-
-# 4. (Optional) Ollama for AI classification
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull phi3
-
-# 5. (Optional) Transaction simulator
-python scripts/simulator.py
 ```
 
-## Environment Variables
+Frontend URL:
 
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/bankspank
-JWT_SECRET=your-secret-key-here
-JWT_ALGORITHM=HS256
-JWT_EXPIRE_MINUTES=60
+- App: `http://localhost:5173`
 
-# Email
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
+## 5. Quick API Smoke Test (Optional)
 
-# SMS (mock by default)
-SMS_MODE=mock  # or "twilio"
-TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=
-TWILIO_PHONE_NUMBER=
-
-# Ollama (optional)
-OLLAMA_ENABLED=true
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=phi3
-```
-
-## Production Deployment
-
-Canonical production deployment is `docker-compose.prod.yml` on EC2. See [`deploy/EC2_DOCKER_DEPLOY.md`](deploy/EC2_DOCKER_DEPLOY.md) for the full guide.
+Register:
 
 ```bash
-# Quick upgrade on EC2
-cd /opt/bankapp
-docker-compose -f docker-compose.prod.yml pull
-docker-compose -f docker-compose.prod.yml up -d --build
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com","password":"password123"}'
 ```
 
-The `deploy/` directory also contains an alternative systemd + nginx deployment path (legacy).
+Login:
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+```
+
+## Common Commands
+
+Stop local Postgres:
+
+```bash
+docker-compose down
+```
+
+Reset local Postgres data:
+
+```bash
+docker-compose down -v
+docker-compose up -d
+alembic upgrade head
+```
+
+## Notes
+
+- `docker-compose.prod.yml` and `deploy/` contain deployment options, but this README is intentionally local-dev only.
+- The frontend is currently a placeholder UI and does not yet implement the full product flows described in `SPEC.md`.
