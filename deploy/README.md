@@ -34,7 +34,7 @@ sudo /opt/bankapp/deploy/ec2-setup.sh
 
 ```bash
 # Create production .env
-sudo cp /opt/bankapp/deploy/.env.production /opt/bankapp/.env
+sudo cp /opt/bankapp/deploy/env.production.template /opt/bankapp/.env
 sudo nano /opt/bankapp/.env
 
 # Update with your RDS endpoint and a secure JWT secret:
