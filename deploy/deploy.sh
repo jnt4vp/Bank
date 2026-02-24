@@ -48,6 +48,9 @@ sudo chown -R bankapp:bankapp /opt/bankapp
 # Install/update dependencies
 sudo -u bankapp /opt/bankapp/venv/bin/pip install -r /opt/bankapp/backend/requirements.txt -q
 
+# Apply database migrations
+sudo -u bankapp /opt/bankapp/venv/bin/alembic -c /opt/bankapp/alembic.ini upgrade head
+
 # Restart service
 sudo systemctl restart bankapp
 

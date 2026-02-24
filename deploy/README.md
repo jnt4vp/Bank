@@ -1,4 +1,7 @@
-# EC2 Deployment Guide
+# EC2 Deployment Guide (Alternative: systemd + nginx)
+
+This guide describes the non-Docker deployment path for the API only.
+Canonical production deployment in this repo is `docker-compose.prod.yml`.
 
 ## Prerequisites
 
@@ -46,6 +49,7 @@ sudo nano /opt/bankapp/.env
 
 ```bash
 sudo -u bankapp /opt/bankapp/venv/bin/pip install -r /opt/bankapp/backend/requirements.txt
+sudo -u bankapp /opt/bankapp/venv/bin/alembic -c /opt/bankapp/alembic.ini upgrade head
 sudo systemctl start bankapp
 sudo systemctl status bankapp
 ```

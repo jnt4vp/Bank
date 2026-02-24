@@ -18,13 +18,21 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./backend
+    # Canonical production deployment path in this repo.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: bank_api
     environment:
+      APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://postgres:${DB_PASSWORD:-changeme123}@postgres:5432/bank
       JWT_SECRET: ${JWT_SECRET}
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 60
+      SQL_ECHO: "false"
+      AUTO_CREATE_TABLES: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://localhost:3000"]}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       postgres:
         condition: service_healthy

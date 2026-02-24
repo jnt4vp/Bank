@@ -1,6 +1,6 @@
 # EC2 Docker Deployment Guide
 
-Deploy the Bank API to AWS EC2 using Docker.
+Deploy the Bank app to AWS EC2 using Docker. This is the canonical production path for this repo.
 
 ## Prerequisites
 

@@ -4,6 +4,13 @@
 
 A mock financial accountability app that detects irresponsible purchases using AI classification and sends alerts to users. Simulates bank integration via external POST requests.
 
+## Current Implementation Status (Repo Snapshot)
+
+- Backend currently implements auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`) with FastAPI + PostgreSQL.
+- Frontend is currently a placeholder Vite/React screen.
+- Canonical production deployment in this repo is Docker Compose (`docker-compose.prod.yml`).
+- The `deploy/` directory documents an alternative systemd + nginx API deployment path.
+
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite + Tailwind CSS + React Router
@@ -509,7 +516,7 @@ python simulator.py
 └─────────────────────────────────────────────────────┘
 ```
 
-### Production Docker Compose
+### Production Docker Compose (Target / Example)
 
 ```yaml
 # docker-compose.prod.yml
@@ -563,7 +570,7 @@ volumes:
   pgdata:
 ```
 
-### Nginx Configuration
+### Nginx Configuration (Target / Example)
 
 ```nginx
 # nginx/nginx.conf
@@ -616,7 +623,7 @@ http {
 }
 ```
 
-### Deployment Script
+### Deployment Script (Target / Example)
 
 ```bash
 #!/bin/bash
