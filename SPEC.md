@@ -1,9 +1,11 @@
 # Bank Spank - Software Specification
 
 ## Overview
+
 A mock financial accountability app that detects irresponsible purchases using AI classification and sends alerts to users. Simulates bank integration via external POST requests.
 
 ## Tech Stack
+
 - **Frontend**: React 19 + Vite + Tailwind CSS + React Router
 - **Backend**: Python 3.11+ + FastAPI
 - **Database**: PostgreSQL 15+
@@ -37,83 +39,93 @@ A mock financial accountability app that detects irresponsible purchases using A
 ## Database Schema
 
 ### `users`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| email | VARCHAR(255) | Unique, for login |
-| password_hash | VARCHAR(255) | bcrypt hashed |
-| phone | VARCHAR(20) | For SMS alerts (nullable) |
-| name | VARCHAR(100) | Display name |
-| card_locked | BOOLEAN | Mock card lock status |
-| created_at | TIMESTAMP | Account creation |
+
+| Column        | Type         | Description               |
+| ------------- | ------------ | ------------------------- |
+| id            | UUID         | Primary key               |
+| email         | VARCHAR(255) | Unique, for login         |
+| password_hash | VARCHAR(255) | bcrypt hashed             |
+| phone         | VARCHAR(20)  | For SMS alerts (nullable) |
+| name          | VARCHAR(100) | Display name              |
+| card_locked   | BOOLEAN      | Mock card lock status     |
+| created_at    | TIMESTAMP    | Account creation          |
 
 ### `transactions`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| user_id | UUID | FK to users |
-| merchant | VARCHAR(255) | Merchant name |
-| category | VARCHAR(100) | Merchant category |
-| amount | DECIMAL(10,2) | Transaction amount |
-| flagged | BOOLEAN | If AI flagged it |
-| flag_reason | TEXT | Why it was flagged |
-| created_at | TIMESTAMP | Transaction time |
+
+| Column      | Type          | Description        |
+| ----------- | ------------- | ------------------ |
+| id          | UUID          | Primary key        |
+| user_id     | UUID          | FK to users        |
+| merchant    | VARCHAR(255)  | Merchant name      |
+| category    | VARCHAR(100)  | Merchant category  |
+| amount      | DECIMAL(10,2) | Transaction amount |
+| flagged     | BOOLEAN       | If AI flagged it   |
+| flag_reason | TEXT          | Why it was flagged |
+| created_at  | TIMESTAMP     | Transaction time   |
 
 ### `alerts`
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| user_id | UUID | FK to users |
-| transaction_id | UUID | FK to transactions |
-| message | TEXT | Alert content |
-| sent_via | VARCHAR(20) | 'email', 'sms' |
-| sent_at | TIMESTAMP | When sent |
+
+| Column         | Type        | Description        |
+| -------------- | ----------- | ------------------ |
+| id             | UUID        | Primary key        |
+| user_id        | UUID        | FK to users        |
+| transaction_id | UUID        | FK to transactions |
+| message        | TEXT        | Alert content      |
+| sent_via       | VARCHAR(20) | 'email', 'sms'     |
+| sent_at        | TIMESTAMP   | When sent          |
 
 ---
 
 ## API Endpoints
 
 ### Auth
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Create new user |
-| POST | `/api/auth/login` | Login, returns JWT |
-| GET | `/api/auth/me` | Get current user |
+
+| Method | Endpoint             | Description        |
+| ------ | -------------------- | ------------------ |
+| POST   | `/api/auth/register` | Create new user    |
+| POST   | `/api/auth/login`    | Login, returns JWT |
+| GET    | `/api/auth/me`       | Get current user   |
 
 ### Transactions (External - for simulator)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/transactions` | Ingest new transaction (API key auth) |
+
+| Method | Endpoint            | Description                           |
+| ------ | ------------------- | ------------------------------------- |
+| POST   | `/api/transactions` | Ingest new transaction (API key auth) |
 
 ### User Dashboard
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/transactions` | Get user's transactions |
-| GET | `/api/transactions/flagged` | Get flagged transactions |
-| GET | `/api/alerts` | Get user's alerts |
-| POST | `/api/card/lock` | Lock card (mock) |
-| POST | `/api/card/unlock` | Unlock card (mock) |
-| GET | `/api/card/status` | Get card lock status |
+
+| Method | Endpoint                    | Description              |
+| ------ | --------------------------- | ------------------------ |
+| GET    | `/api/transactions`         | Get user's transactions  |
+| GET    | `/api/transactions/flagged` | Get flagged transactions |
+| GET    | `/api/alerts`               | Get user's alerts        |
+| POST   | `/api/card/lock`            | Lock card (mock)         |
+| POST   | `/api/card/unlock`          | Unlock card (mock)       |
+| GET    | `/api/card/status`          | Get card lock status     |
 
 ---
 
 ## Frontend Pages
 
 ### 1. Landing Page (`/`)
+
 - Hero section with app name "Bank Spank" and tagline
 - Feature highlights (AI detection, alerts, card lock)
 - CTA buttons: Sign Up / Login
 
 ### 2. Login Page (`/login`)
+
 - Email + password form
 - Link to register
 - JWT stored in localStorage
 
 ### 3. Register Page (`/register`)
+
 - Name, email, password, phone (optional)
 - Redirects to dashboard on success
 
 ### 4. Dashboard (`/dashboard`)
+
 - **Header**: User name, logout button
 - **Card Status Widget**: Shows locked/unlocked, toggle button
 - **Recent Transactions**: List with flagged items highlighted in red
@@ -127,6 +139,7 @@ A mock financial accountability app that detects irresponsible purchases using A
 ### Hybrid Approach (Recommended)
 
 **Layer 1: Rule-Based (Always runs - instant)**
+
 ```python
 FLAGGED_KEYWORDS = {
     "gambling": ["casino", "bet365", "draftkings", "fanduel", "poker", "slots", "lottery", "betting"],
@@ -137,6 +150,7 @@ FLAGGED_KEYWORDS = {
 ```
 
 **Layer 2: Ollama LLM (Optional - for ambiguous cases)**
+
 - Only called if rule-based doesn't catch it AND amount > $50
 - Uses small local model (phi3, gemma:2b, or llama3.2:1b)
 - Gracefully skips if Ollama not installed
@@ -165,6 +179,7 @@ Respond in JSON: {{"flagged": true/false, "reason": "brief explanation"}}"""
 ```
 
 **Classification Flow:**
+
 ```
 Transaction In → Rule-Based Check → Flagged? → YES → Save + Alert
                                   ↓
@@ -186,6 +201,7 @@ Transaction In → Rule-Based Check → Flagged? → YES → Save + Alert
 ## Messaging / Alert System
 
 ### Primary: Email (Free)
+
 - SMTP with Gmail App Password or SendGrid free tier (100/day)
 - Sends HTML email with transaction details and warning
 
@@ -207,6 +223,7 @@ def send_email_alert(user_email: str, transaction: Transaction):
 ```
 
 ### Secondary: Mock SMS (Demo Mode)
+
 - Logs SMS to console instead of actually sending
 - Can swap to real Twilio with one config change
 
@@ -220,6 +237,7 @@ def send_sms_alert(phone: str, message: str):
 ```
 
 ### Alert Triggers
+
 1. **Flagged purchase** → Email + SMS
 2. **Card auto-locked** → Email notification
 3. **Large purchase** (> $500) → Email warning (even if not flagged)
@@ -319,12 +337,12 @@ Bank/
 
 ## Decisions Made
 
-| Decision | Choice |
-|----------|--------|
-| Classification | Hybrid: Rule-based + Ollama (optional) |
-| Messaging | Email (real) + SMS (mock/console) |
+| Decision           | Choice                                                      |
+| ------------------ | ----------------------------------------------------------- |
+| Classification     | Hybrid: Rule-based + Ollama (optional)                      |
+| Messaging          | Email (real) + SMS (mock/console)                           |
 | Flagged categories | Gambling, adult, payday loans, pawn shops, excessive luxury |
-| Card lock behavior | Auto-lock on flagged purchase, manual unlock via dashboard |
+| Card lock behavior | Auto-lock on flagged purchase, manual unlock via dashboard  |
 
 ---
 
@@ -409,7 +427,7 @@ if __name__ == "__main__":
 
 ```yaml
 # docker-compose.yml
-version: '3.8'
+version: "3.8"
 
 services:
   db:
@@ -475,6 +493,7 @@ python simulator.py
 ## AWS EC2 Deployment (Single Instance)
 
 ### Architecture
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │                 EC2 (t3.micro)                      │
@@ -494,7 +513,7 @@ python simulator.py
 
 ```yaml
 # docker-compose.prod.yml
-version: '3.8'
+version: "3.8"
 
 services:
   db:
@@ -663,14 +682,14 @@ ollama pull phi3
 
 ### Cost Estimate
 
-| Resource | Spec | Monthly Cost |
-|----------|------|--------------|
-| EC2 | t3.micro (free tier) | $0-8 |
-| EBS | 20GB gp3 | ~$2 |
-| Domain | Route 53 | $0.50 |
-| **Total** | | **~$3-11/mo** |
+| Resource  | Spec                 | Monthly Cost  |
+| --------- | -------------------- | ------------- |
+| EC2       | t3.micro (free tier) | $0-8          |
+| EBS       | 20GB gp3             | ~$2           |
+| Domain    | Route 53             | $0.50         |
+| **Total** |                      | **~$3-11/mo** |
 
-*Free tier eligible for first 12 months*
+_Free tier eligible for first 12 months_
 
 ---
 
@@ -703,3 +722,5 @@ Bank/
 - Mobile app (React Native)
 - Real bank integration via Plaid
 - Spending analytics and charts
+
+test fix
