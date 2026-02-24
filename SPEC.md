@@ -9,7 +9,7 @@ A mock financial accountability app that detects irresponsible purchases using A
 - Backend currently implements auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`) with FastAPI + PostgreSQL.
 - Frontend is currently a placeholder Vite/React screen.
 - Canonical production deployment in this repo is Docker Compose (`docker-compose.prod.yml`).
-- The `deploy/` directory documents an alternative systemd + nginx API deployment path.
+- Deployment docs are split by strategy under `deploy/docker/` (canonical) and `deploy/systemd-nginx/` (alternative API-only path).
 
 ## Tech Stack
 

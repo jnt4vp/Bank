@@ -47,13 +47,13 @@ sudo chown bankapp:bankapp /var/log/bankapp
 
 # Install systemd service
 echo "Installing systemd service..."
-sudo cp /opt/bankapp/deploy/bankapp.service /etc/systemd/system/
+sudo cp /opt/bankapp/deploy/systemd-nginx/bankapp.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable bankapp
 
 # Install nginx config
 echo "Configuring nginx..."
-sudo cp /opt/bankapp/deploy/nginx.conf /etc/nginx/conf.d/bankapp.conf
+sudo cp /opt/bankapp/deploy/systemd-nginx/nginx.conf /etc/nginx/conf.d/bankapp.conf
 sudo rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
 sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 sudo nginx -t

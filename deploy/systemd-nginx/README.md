@@ -29,15 +29,15 @@ sudo git clone https://github.com/your-repo/bank.git bankapp
 sudo chown -R $USER:$USER /opt/bankapp
 
 # Run setup script
-chmod +x /opt/bankapp/deploy/ec2-setup.sh
-sudo /opt/bankapp/deploy/ec2-setup.sh
+chmod +x /opt/bankapp/deploy/systemd-nginx/ec2-setup.sh
+sudo /opt/bankapp/deploy/systemd-nginx/ec2-setup.sh
 ```
 
 ### 3. Configure Environment
 
 ```bash
 # Create production .env
-sudo cp /opt/bankapp/deploy/env.production.template /opt/bankapp/.env
+sudo cp /opt/bankapp/deploy/systemd-nginx/env.production.template /opt/bankapp/.env
 sudo nano /opt/bankapp/.env
 
 # Update with your RDS endpoint and a secure JWT secret:
@@ -69,7 +69,7 @@ sudo tail -f /var/log/bankapp/app.log
 From your local machine:
 
 ```bash
-cd deploy
+cd deploy/systemd-nginx
 chmod +x deploy.sh
 ./deploy.sh your-ec2-ip ~/.ssh/your-key.pem
 ```

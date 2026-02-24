@@ -180,8 +180,9 @@ alembic upgrade head
 
 ## Notes
 
-- `docker-compose.prod.yml` and `deploy/` contain deployment options, but this README is intentionally local-dev only.
+- `docker-compose.prod.yml` and `deploy/` contain deployment options (organized as `deploy/docker/` and `deploy/systemd-nginx/`), but this README is intentionally local-dev only.
 - The frontend is currently a placeholder UI and does not yet implement the full product flows described in `SPEC.md`.
 - `make dev` leaves the Postgres container running when you stop the frontend/backend. Use `docker compose down` to stop it.
 - `make dev-no-db` skips Docker and assumes Postgres is already running and matches `DATABASE_URL`.
 - The local scripts support both `docker compose` and `docker-compose`.
+- Test convention: backend tests are colocated in `backend/tests`; add frontend tests colocated under `src/` when the UI grows.

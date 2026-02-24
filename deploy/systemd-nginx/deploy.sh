@@ -22,7 +22,7 @@ echo "=== Deploying to $EC2_HOST ==="
 
 # Create tarball of the app (excluding unnecessary files)
 echo "Creating deployment package..."
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 tar --exclude='venv' \
     --exclude='__pycache__' \
     --exclude='.env' \
