@@ -255,27 +255,30 @@ def send_sms_alert(phone: str, message: str):
 
 ```
 Bank/
-├── src/                        # React frontend
-│   ├── main.jsx
-│   ├── App.jsx
-│   ├── index.css
-│   ├── pages/
-│   │   ├── Landing.jsx
-│   │   ├── Login.jsx
-│   │   ├── Register.jsx
-│   │   └── Dashboard.jsx
-│   ├── components/
-│   │   ├── Navbar.jsx
-│   │   ├── TransactionList.jsx
-│   │   ├── CardStatus.jsx
-│   │   ├── AlertsFeed.jsx
-│   │   └── AuthForm.jsx
-│   ├── hooks/
-│   │   └── useAuth.js
-│   ├── api/
-│   │   └── client.js           # Axios/fetch wrapper
-│   └── context/
-│       └── AuthContext.jsx
+├── frontend/                   # React frontend (Vite project)
+│   ├── src/
+│   │   ├── main.jsx
+│   │   ├── App.jsx
+│   │   ├── index.css
+│   │   ├── pages/
+│   │   │   ├── Landing.jsx
+│   │   │   ├── Login.jsx
+│   │   │   ├── Register.jsx
+│   │   │   └── Dashboard.jsx
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── TransactionList.jsx
+│   │   │   ├── CardStatus.jsx
+│   │   │   ├── AlertsFeed.jsx
+│   │   │   └── AuthForm.jsx
+│   │   ├── hooks/
+│   │   │   └── useAuth.js
+│   │   ├── api/
+│   │   │   └── client.js       # Axios/fetch wrapper
+│   │   └── context/
+│   │       └── AuthContext.jsx
+│   ├── public/
+│   └── package.json
 │
 ├── backend/                    # Python FastAPI
 │   ├── main.py                 # FastAPI app entry
@@ -470,6 +473,7 @@ cp .env.example .env      # Edit with your settings
 uvicorn main:app --reload
 
 # 3. Setup frontend (new terminal)
+cd frontend
 npm install
 npm run dev
 
@@ -488,7 +492,7 @@ python simulator.py
 
 1. **Database**: `docker-compose up -d`, verify PostgreSQL is running on port 5432
 2. **Backend**: Run `uvicorn main:app --reload`, visit `http://localhost:8000/docs` for Swagger UI
-3. **Frontend**: Run `npm run dev`, verify landing page loads at `http://localhost:5173`
+3. **Frontend**: Run `cd frontend && npm run dev`, verify landing page loads at `http://localhost:5173`
 4. **Auth Flow**: Register a user, login, verify JWT is stored and dashboard loads
 5. **Simulator**: Run `python scripts/simulator.py`, verify transactions POST successfully
 6. **Classification**: Send a gambling transaction, verify it gets flagged in dashboard
@@ -671,8 +675,8 @@ cp .env.example .env
 nano .env  # Edit with production values
 
 # 6. Build frontend
-cd src && npm ci && npm run build && cd ..
-mkdir -p frontend-dist && cp -r src/dist/* frontend-dist/
+cd frontend && npm ci && npm run build && cd ..
+mkdir -p frontend-dist && cp -r frontend/dist/* frontend-dist/
 
 # 7. Get SSL certificate (replace with your domain)
 docker-compose -f docker-compose.prod.yml run --rm certbot certonly \
@@ -704,7 +708,7 @@ _Free tier eligible for first 12 months_
 
 ```
 Bank/
-├── src/                        # React frontend (Vite)
+├── frontend/                   # React frontend (Vite)
 ├── backend/                    # FastAPI backend
 │   ├── Dockerfile              # Backend container
 │   └── ...
@@ -716,7 +720,8 @@ Bank/
 ├── docker-compose.prod.yml     # Production (all services)
 ├── deploy.sh                   # Deployment script
 ├── .env.example
-└── SPEC.md
+└── docs/
+    └── SPEC.md
 ```
 
 ---

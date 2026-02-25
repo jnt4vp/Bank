@@ -16,4 +16,4 @@ test-backend:
 	fi
 
 test-frontend:
-	npm test
+	npm --prefix frontend test
