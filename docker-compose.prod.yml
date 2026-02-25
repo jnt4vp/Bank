@@ -26,7 +26,8 @@ services:
     environment:
       APP_ENV: production
       DATABASE_URL: postgresql+asyncpg://postgres:${DB_PASSWORD:-changeme123}@postgres:5432/bank
-      JWT_SECRET: ${JWT_SECRET}
+      # Fail fast instead of starting a frontend that returns nginx 502s because the API cannot boot.
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required (if using sudo, run docker-compose with sudo -E)}"
       JWT_ALGORITHM: HS256
       JWT_EXPIRE_MINUTES: 60
       SQL_ECHO: "false"

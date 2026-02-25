@@ -71,6 +71,8 @@ export DB_PASSWORD=$(openssl rand -hex 16)
 sudo -E docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
+If you use `sudo` for any later `docker-compose up` command that recreates containers, keep `-E` so `JWT_SECRET` is preserved.
+
 ## Step 7: Verify Deployment
 
 ```bash
@@ -115,16 +117,16 @@ sudo -E docker-compose -f docker-compose.prod.yml up -d --build
 ```bash
 cd /opt/bankapp
 sudo git pull
-sudo docker-compose -f docker-compose.prod.yml build frontend
-sudo docker-compose -f docker-compose.prod.yml up -d --no-deps frontend
+sudo -E docker-compose -f docker-compose.prod.yml build frontend
+sudo -E docker-compose -f docker-compose.prod.yml up -d --no-deps frontend
 ```
 
 ### Update backend (API) only
 ```bash
 cd /opt/bankapp
 sudo git pull
-sudo docker-compose -f docker-compose.prod.yml build api
-sudo docker-compose -f docker-compose.prod.yml up -d --no-deps api
+sudo -E docker-compose -f docker-compose.prod.yml build api
+sudo -E docker-compose -f docker-compose.prod.yml up -d --no-deps api
 ```
 
 ## Test the API
@@ -161,6 +163,12 @@ curl http://localhost/api/auth/me \
 ```bash
 sudo docker-compose -f docker-compose.prod.yml logs
 ```
+
+If the frontend loads but `/api/*` returns `502`, check API logs first:
+```bash
+sudo docker-compose -f docker-compose.prod.yml logs -f api
+```
+Common causes are missing `JWT_SECRET` (often `sudo` without `-E`) or a failed migration/database connection.
 
 ### Database connection issues
 ```bash
