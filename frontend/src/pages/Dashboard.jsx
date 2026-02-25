@@ -3,22 +3,33 @@ import { useNavigate } from 'react-router-dom'
 
 export default function Dashboard() {
   const [count, setCount] = useState(null)
+  const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const user = localStorage.getItem('user') || 'User'
 
   useEffect(() => {
     fetch('/api/counter')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`API ${r.status}`)
+        return r.json()
+      })
       .then(data => setCount(data.value))
+      .catch(err => setError(err.message))
   }, [])
 
   async function increment() {
     setLoading(true)
-    const res = await fetch('/api/counter/increment', { method: 'POST' })
-    const data = await res.json()
-    setCount(data.value)
-    setLoading(false)
+    try {
+      const res = await fetch('/api/counter/increment', { method: 'POST' })
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const data = await res.json()
+      setCount(data.value)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function logout() {
@@ -48,6 +59,9 @@ export default function Dashboard() {
         <div className="text-8xl font-semibold tabular-nums my-4">
           {count === null ? '—' : count}
         </div>
+        {error && (
+          <p className="text-red-400 text-sm font-mono">Error: {error}</p>
+        )}
         <p className="text-slate-500 text-sm">
           Stored in PostgreSQL · shared across all sessions
         </p>
