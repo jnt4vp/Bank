@@ -2,6 +2,7 @@ import logging
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 
 from ..database import get_db
 from ..repositories.transactions import create_transaction, get_all_transactions
@@ -48,3 +49,9 @@ async def ingest_transaction(
         )
 
     return txn
+
+@router.get("/", response_model=List[TransactionResponse])
+async def list_transactions(
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_all_transactions(db)
