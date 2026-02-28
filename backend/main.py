@@ -1,6 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:  %(name)s  -  %(message)s")
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  # Ensure model metadata is registered for migrations/dev auto-create.
@@ -8,6 +11,7 @@ from .config import get_settings
 from .database import Base, engine
 from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
+from .routers.transactions import router as transactions_router
 
 settings = get_settings()
 
@@ -39,6 +43,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(counter_router, prefix="/api/counter", tags=["counter"])
+app.include_router(transactions_router, prefix="/api/transactions", tags=["transactions"])
 
 
 @app.get("/health")
