@@ -33,10 +33,20 @@ services:
       SQL_ECHO: "false"
       AUTO_CREATE_TABLES: "false"
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://localhost:3000"]}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-true}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
     command: ["sh", "-c", "alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    container_name: bank_ollama
+    volumes:
+      - ollama_data:/root/.ollama
     restart: unless-stopped
 
   frontend:
@@ -52,3 +62,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_data:

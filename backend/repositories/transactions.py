@@ -13,12 +13,18 @@ async def create_transaction(
     merchant: str,
     description: str,
     amount: float,
+    category: str | None = None,
+    flagged: bool = False,
+    flag_reason: str | None = None,
 ) -> Transaction:
     txn = Transaction(
         user_id=user_id,
         merchant=merchant,
         description=description,
         amount=amount,
+        category=category,
+        flagged=flagged,
+        flag_reason=flag_reason,
     )
     db.add(txn)
     await db.commit()

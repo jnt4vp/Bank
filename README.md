@@ -13,6 +13,7 @@ Local development guide for the current repo snapshot.
 - Node.js 20+
 - Python 3.11+
 - Docker Engine + Docker Compose plugin (`docker compose`) for local Postgres
+- Ollama (optional, but required for LLM classification)
 
 On Linux, you may also need Docker socket permissions before `make dev` works:
 
@@ -111,7 +112,35 @@ Backend URLs:
 - Docs: `http://localhost:8000/docs`
 - Health: `http://localhost:8000/health`
 
-## 4. Frontend Setup (Vite)
+## 4. Enable LLM Classification (Ollama, Optional)
+
+The classifier has a rule-based layer and an optional LLM layer. The LLM layer calls Ollama at `http://localhost:11434` using model `llama3.2:1b` by default.
+
+Install and run Ollama locally (Linux):
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sudo sh
+ollama serve
+ollama pull llama3.2:1b
+```
+
+If `ollama serve` is already running as a background service, you only need `ollama pull llama3.2:1b` once.
+
+Optional `.env` overrides:
+
+```bash
+OLLAMA_ENABLED=true
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:1b
+```
+
+To run without Ollama, set:
+
+```bash
+OLLAMA_ENABLED=false
+```
+
+## 5. Frontend Setup (Vite)
 
 In a new terminal, from the repo root:
 
@@ -125,7 +154,7 @@ Frontend URL:
 
 - App: `http://localhost:5173`
 
-## 5. Quick API Smoke Test (Optional)
+## 6. Quick API Smoke Test (Optional)
 
 Register:
 
@@ -143,7 +172,31 @@ curl -X POST http://localhost:8000/api/auth/login \
   -d '{"email":"test@example.com","password":"password123"}'
 ```
 
-## 6. Tests (Beginner Feedback Loop)
+## 7. Transaction Classifier Smoke Test
+
+Send a transaction through the real API classifier:
+
+```bash
+python scripts/send_transaction.py --merchant "DraftKings" --desc "Weekly sports bet" --amount 250
+```
+
+Then check the latest stored transaction:
+
+```bash
+curl http://localhost:8000/api/transactions
+```
+
+You should see classifier fields on each transaction row:
+
+- `flagged` (`true` / `false`)
+- `category` (`gambling`, `adult`, `alcohol`, `drugs`, or `null`)
+- `flag_reason` (rule keyword or `LLM: ...`)
+
+If Ollama is down/unreachable, the backend gracefully skips the LLM step and still stores the transaction unflagged.
+
+More classifier details: `backend/services/CLASSIFIER.md`.
+
+## 8. Tests (Beginner Feedback Loop)
 
 Backend smoke test:
 
@@ -163,7 +216,7 @@ Run both:
 make test
 ```
 
-## Common Commands
+## 9. Common Commands
 
 Stop local Postgres:
 
@@ -179,9 +232,10 @@ docker compose up -d
 alembic upgrade head
 ```
 
-## Notes
+## 10. Notes
 
 - `docker-compose.prod.yml` and `deploy/` contain deployment options (organized as `deploy/docker/` and `deploy/systemd-nginx/`), but this README is intentionally local-dev only.
+- EC2 Docker deployment guide: `deploy/docker/README.md`.
 - The frontend is currently a placeholder UI and does not yet implement the full product flows described in `docs/SPEC.md`.
 - `make dev` leaves the Postgres container running when you stop the frontend/backend. Use `docker compose down` to stop it.
 - `make dev-no-db` skips Docker and assumes Postgres is already running and matches `DATABASE_URL`.

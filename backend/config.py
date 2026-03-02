@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     SQL_ECHO: bool = False
     AUTO_CREATE_TABLES: bool = False
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    OLLAMA_ENABLED: bool = True
+    OLLAMA_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.2:1b"
 
     model_config = SettingsConfigDict(
         env_file=".env",
