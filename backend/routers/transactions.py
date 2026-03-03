@@ -6,8 +6,10 @@ from typing import List
 
 from ..database import get_db
 from ..repositories.transactions import create_transaction, get_all_transactions
+from ..repositories.users import get_user_by_id
 from ..schemas.transaction import TransactionCreate, TransactionResponse
 from ..services.classifier import classify_transaction
+from ..services.email import send_alert_email
 
 logger = logging.getLogger("bank.transactions")
 
@@ -45,6 +47,16 @@ async def ingest_transaction(
         txn.id,
         txn.flagged,
     )
+
+    if txn.flagged:
+        user = await get_user_by_id(db, txn.user_id)
+        send_alert_email(
+            to_email=user.email if user else None,
+            merchant=txn.merchant,
+            amount=float(txn.amount),
+            category=txn.category,
+            flag_reason=txn.flag_reason,
+        )
 
     all_txns = await get_all_transactions(db)
     logger.info("--- All stored transactions (%d total) ---", len(all_txns))

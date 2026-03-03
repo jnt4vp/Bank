@@ -1,9 +1,12 @@
 from functools import lru_cache
 import json
+from pathlib import Path
 from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 INSECURE_DEV_JWT_SECRET = "your-secret-key-change-in-production"
@@ -22,8 +25,13 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2:1b"
 
+    # Gmail SMTP alert emails
+    GMAIL_USER: str = ""
+    GMAIL_APP_PASSWORD: str = ""
+    ALERT_EMAIL: str = ""
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         case_sensitive=True,
         extra="ignore",
     )
