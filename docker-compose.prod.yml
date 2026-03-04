@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: bank_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+      POSTGRES_DB: bank
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    # Canonical production deployment path in this repo.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: bank_api
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+asyncpg://postgres:${DB_PASSWORD:-changeme123}@postgres:5432/bank
+      # Fail fast instead of starting a frontend that returns nginx 502s because the API cannot boot.
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required (if using sudo, run docker-compose with sudo -E)}"
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 60
+      SQL_ECHO: "false"
+      AUTO_CREATE_TABLES: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:5173","http://localhost:3000"]}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-true}
+      OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    container_name: bank_ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: bank_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
