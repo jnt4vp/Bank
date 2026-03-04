@@ -1,10 +1,7 @@
-import { useNavigate } from 'react-router-dom'
 import '../landing.css'
 import Login from './Login'
 
 export default function Landing() {
-  const navigate = useNavigate()
-
   return (
     <>
       <div className="bg">
