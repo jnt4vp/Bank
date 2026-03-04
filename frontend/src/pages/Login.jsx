@@ -1,52 +1,72 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Login() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const navigate = useNavigate()
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-  function handleSubmit(e) {
-    e.preventDefault()
-    if (!username.trim()) return
-    localStorage.setItem('user', username.trim())
-    navigate('/dashboard')
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("http://localhost:8000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail || body?.message || res.statusText || "Sign-in failed");
+      }
+
+      const data = await res.json();
+      if (data.access_token) {
+        localStorage.setItem("token", data.access_token);
+      }
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <button
-          onClick={() => navigate('/')}
-          className="text-slate-400 hover:text-slate-200 text-sm mb-8 transition"
-        >
-          ← Back
-        </button>
-        <h1 className="text-3xl font-semibold mb-2">Sign in</h1>
-        <p className="text-slate-400 text-sm mb-8">Any credentials will work for this demo.</p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form className="login-card" onSubmit={handleSubmit}>
+           <label htmlFor="email" className="form-label">Email</label>
           <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-slate-500 transition"
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="form-input"
           />
+
+          <label htmlFor="password" className="form-label">Password</label>
           <input
+          id="password"
             type="password"
-            placeholder="Password"
             value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-slate-500 transition"
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="form-input"
           />
-          <button
-            type="submit"
-            className="bg-white text-slate-900 py-3 rounded-lg font-medium hover:bg-slate-200 transition mt-2"
-          >
-            Sign In
-          </button>
-        </form>
-      </div>
-    </main>
-  )
+ <a className="forgot" href="#">Forgot password?</a>
+        {error && <div className="text-red-500 text-sm">{error}</div>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="sign-in-btn"
+        >
+          {loading ? "Signing in..." : "Sign In"}
+        </button>
+      </form>
+  );
 }

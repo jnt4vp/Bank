@@ -1,9 +1,7 @@
-import { useNavigate } from 'react-router-dom'
 import '../landing.css'
+import Login from './Login'
 
 export default function Landing() {
-  const navigate = useNavigate()
-
   return (
     <>
       <div className="bg">
@@ -29,17 +27,7 @@ export default function Landing() {
 
           <p className="description">Break your honïls erevring an break their familts. Pay yourself back. urneshing your banking sales and its functions.</p>
 
-          <div className="login-card">
-            <label className="form-label">Email</label>
-            <input className="form-input" type="email" placeholder="Enter your email" />
-
-            <label className="form-label">Password</label>
-            <input className="form-input" type="password" placeholder="Enter your password" />
-
-            <a className="forgot" href="#">Forgot password?</a>
-
-            <button className="sign-in-btn" onClick={() => navigate('/login')}>Sign In</button>
-          </div>
+       <Login/>
         </div>
 
         {/* RIGHT */}
