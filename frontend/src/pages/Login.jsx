@@ -70,33 +70,3 @@ export default function Login() {
       </form>
   );
 }
-
-// import { useState } from 'react'
-// import { useNavigate } from 'react-router-dom'
-
-// export default function Login() {
-//   const [username, setUsername] = useState('')
-//   const [password, setPassword] = useState('')
-//   const navigate = useNavigate()
-
-//   function handleSubmit(e) {
-//     e.preventDefault()
-//     if (!username.trim()) return
-//     localStorage.setItem('user', username.trim())
-//     navigate('/dashboard')
-//   }
-
-//   return (
-//          <div className="login-card">
-//             <label className="form-label">Email</label>
-//             <input className="form-input" type="email" placeholder="Enter your email" />
-
-//             <label className="form-label">Password</label>
-//             <input className="form-input" type="password" placeholder="Enter your password" />
-
-//             <a className="forgot" href="#">Forgot password?</a>
-
-//             <button className="sign-in-btn" onClick={() => navigate('/login')}>Sign In</button>
-//           </div>
-//   )
-// }
