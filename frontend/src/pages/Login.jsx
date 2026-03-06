@@ -26,9 +26,12 @@ export default function Login() {
       }
 
       const data = await res.json();
-      if (data.access_token) {
-        localStorage.setItem("token", data.access_token);
+      if (!data.access_token) {
+        throw new Error("Sign-in failed");
       }
+
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("userEmail", email);
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);

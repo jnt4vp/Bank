@@ -6,7 +6,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 
 function PrivateRoute({ children }) {
-  return localStorage.getItem('user') ? children : <Navigate to="/login" replace />
+  return localStorage.getItem('token') ? children : <Navigate to="/" replace />
 }
 
 export default function App() {

@@ -6,7 +6,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const user = localStorage.getItem('user') || 'User'
+  const user = localStorage.getItem('userEmail') || 'User'
 
   useEffect(() => {
     fetch('/api/counter')
@@ -33,6 +33,8 @@ export default function Dashboard() {
   }
 
   function logout() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('userEmail')
     localStorage.removeItem('user')
     navigate('/')
   }
