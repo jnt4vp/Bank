@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
+
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,7 +58,7 @@ export default function Login() {
             required
             className="form-input"
           />
- <a className="forgot" href="#">Forgot password?</a>
+ <Link to="/forgot-password" className="forgot">Forgot password?</Link>
         {error && <div className="text-red-500 text-sm">{error}</div>}
 
         <button

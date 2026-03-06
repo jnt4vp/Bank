@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     GMAIL_APP_PASSWORD: str = ""
     ALERT_EMAIL: str = ""
 
+    FRONTEND_URL: str = "http://localhost:5173"
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         case_sensitive=True,

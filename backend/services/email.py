@@ -8,6 +8,44 @@ from ..config import get_settings
 logger = logging.getLogger("bank.email")
 
 
+def send_reset_email(*, to_email: str, reset_url: str) -> None:
+    settings = get_settings()
+
+    if not settings.GMAIL_USER or not settings.GMAIL_APP_PASSWORD:
+        logger.warning("Gmail credentials not configured — skipping reset email")
+        return
+
+    subject = "Reset your BankSpank password"
+    body = "\n".join([
+        "Hi,",
+        "",
+        "We received a request to reset your BankSpank password.",
+        "Click the link below to set a new password (expires in 1 hour):",
+        "",
+        f"  {reset_url}",
+        "",
+        "If you didn't request this, you can safely ignore this email.",
+    ])
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = settings.GMAIL_USER
+    msg["To"] = to_email
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(settings.GMAIL_USER, settings.GMAIL_APP_PASSWORD)
+            smtp.sendmail(settings.GMAIL_USER, to_email, msg.as_string())
+        logger.info("Password reset email sent to %s", to_email)
+    except smtplib.SMTPAuthenticationError:
+        logger.error("Gmail authentication failed — check GMAIL_USER and GMAIL_APP_PASSWORD")
+    except smtplib.SMTPException as exc:
+        logger.error("Failed to send reset email: %s", exc)
+
+
 def send_alert_email(
     *,
     to_email: str | None,

@@ -17,6 +17,11 @@ async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_reset_token(db: AsyncSession, token: str) -> User | None:
+    result = await db.execute(select(User).where(User.reset_token == token))
+    return result.scalar_one_or_none()
+
+
 async def create_user(
     db: AsyncSession,
     *,

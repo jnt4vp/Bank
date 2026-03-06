@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -10,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
-from ..repositories.users import create_user, get_user_by_email
+from ..repositories.users import create_user, get_user_by_email, get_user_by_reset_token
 from ..schemas.auth import TokenData
 from ..schemas.user import UserCreate
 
@@ -100,3 +101,38 @@ async def authenticate_user(db: AsyncSession, email: str, password: str):
         raise InvalidCredentialsError
 
     return user
+
+
+async def generate_reset_token(db: AsyncSession, email: str) -> str | None:
+    """Generate a password reset token for the user. Returns None if email not found."""
+    user = await get_user_by_email(db, email)
+    if not user:
+        return None
+
+    token = secrets.token_urlsafe(48)
+    user.reset_token = token
+    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.commit()
+    return token
+
+
+class InvalidResetTokenError(Exception):
+    """Raised when a reset token is invalid or expired."""
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
+    """Validate the reset token and update the user's password."""
+    user = await get_user_by_reset_token(db, token)
+    if not user or not user.reset_token_expires:
+        raise InvalidResetTokenError
+
+    expires = user.reset_token_expires
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if expires < datetime.now(timezone.utc):
+        raise InvalidResetTokenError
+
+    user.password_hash = hash_password(new_password)
+    user.reset_token = None
+    user.reset_token_expires = None
+    await db.commit()
