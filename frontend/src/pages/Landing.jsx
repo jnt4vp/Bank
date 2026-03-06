@@ -5,7 +5,7 @@ export default function Landing() {
   return (
     <>
       <div className="bg">
-        <img src="/sky.jpg" alt="" />
+        <img src="/Untitled design.gif" alt="" />
       </div>
 
       <div className="container">
