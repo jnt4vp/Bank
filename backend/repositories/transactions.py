@@ -32,8 +32,10 @@ async def create_transaction(
     return txn
 
 
-async def get_all_transactions(db: AsyncSession) -> list[Transaction]:
+async def get_transactions_for_user(db: AsyncSession, user_id: UUID) -> list[Transaction]:
     result = await db.execute(
-        select(Transaction).order_by(Transaction.created_at.desc())
+        select(Transaction)
+        .where(Transaction.user_id == user_id)
+        .order_by(Transaction.created_at.desc())
     )
     return list(result.scalars().all())

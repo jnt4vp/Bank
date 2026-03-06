@@ -117,8 +117,9 @@ Classifier check with a known gambling merchant:
 
 ```bash
 curl -sS -X POST http://localhost/api/transactions \
+  -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"00000000-0000-0000-0000-000000000001","merchant":"DraftKings","description":"Weekly sports bet","amount":250}'
+  -d '{"merchant":"DraftKings","description":"Weekly sports bet","amount":250}'
 ```
 
 Expected in the response payload:

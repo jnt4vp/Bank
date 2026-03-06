@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict
 
 
 class TransactionCreate(BaseModel):
-    user_id: UUID
     merchant: str
     description: str
     amount: float

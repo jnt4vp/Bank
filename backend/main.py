@@ -8,10 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  # Ensure model metadata is registered for migrations/dev auto-create.
 from .config import get_settings
-from .database import Base, engine
+from .database import Base, async_session, engine
 from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
 from .routers.transactions import router as transactions_router
+from .services.auth import ensure_dev_seed_user
 
 settings = get_settings()
 
@@ -21,6 +22,8 @@ async def lifespan(app: FastAPI):
     if settings.AUTO_CREATE_TABLES:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+    async with async_session() as session:
+        await ensure_dev_seed_user(session)
     yield
 
 

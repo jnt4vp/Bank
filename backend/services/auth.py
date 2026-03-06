@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import bcrypt
 from fastapi import HTTPException
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +17,7 @@ from ..schemas.auth import TokenData
 from ..schemas.user import UserCreate
 
 settings = get_settings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger("bank.auth")
 
 
 class DuplicateEmailError(Exception):
@@ -36,9 +37,10 @@ def hash_password(password: str) -> str:
 
     bcrypt only supports passwords up to 72 bytes. Enforce this to avoid 500s.
     """
-    if len(password.encode("utf-8")) > 72:
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
         raise HTTPException(status_code=400, detail="Password must be 72 bytes or less.")
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -46,9 +48,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     If the password is longer than bcrypt supports, treat it as invalid rather than crashing.
     """
-    if len(plain_password.encode("utf-8")) > 72:
+    password_bytes = plain_password.encode("utf-8")
+    if len(password_bytes) > 72:
         return False
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return bcrypt.checkpw(password_bytes, hashed_password.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def create_access_token(data: dict) -> str:
@@ -136,3 +142,23 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
     user.reset_token = None
     user.reset_token_expires = None
     await db.commit()
+
+
+async def ensure_dev_seed_user(db: AsyncSession):
+    """Create the documented example user automatically in non-production envs."""
+    if settings.APP_ENV == "production" or not settings.DEV_SEED_EXAMPLE_USER:
+        return None
+
+    existing_user = await get_user_by_email(db, settings.DEV_SEED_EXAMPLE_EMAIL)
+    if existing_user:
+        return existing_user
+
+    user = await create_user(
+        db,
+        email=settings.DEV_SEED_EXAMPLE_EMAIL,
+        password_hash=hash_password(settings.DEV_SEED_EXAMPLE_PASSWORD),
+        name=settings.DEV_SEED_EXAMPLE_NAME,
+        phone=None,
+    )
+    logger.info("Created development seed user: %s", user.email)
+    return user

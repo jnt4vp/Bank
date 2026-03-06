@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from ..database import get_db
-from ..repositories.transactions import create_transaction, get_all_transactions
-from ..repositories.users import get_user_by_id
+from ..dependencies.auth import get_current_user
+from ..models.user import User
+from ..repositories.transactions import create_transaction, get_transactions_for_user
 from ..schemas.transaction import TransactionCreate, TransactionResponse
 from ..services.classifier import classify_transaction
 from ..services.email import send_alert_email
@@ -20,6 +21,7 @@ router = APIRouter()
 async def ingest_transaction(
     payload: TransactionCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     classification = await classify_transaction(
         merchant=payload.merchant,
@@ -29,7 +31,7 @@ async def ingest_transaction(
 
     txn = await create_transaction(
         db,
-        user_id=payload.user_id,
+        user_id=current_user.id,
         merchant=payload.merchant,
         description=payload.description,
         amount=payload.amount,
@@ -49,26 +51,12 @@ async def ingest_transaction(
     )
 
     if txn.flagged:
-        user = await get_user_by_id(db, txn.user_id)
         send_alert_email(
-            to_email=user.email if user else None,
+            to_email=current_user.email,
             merchant=txn.merchant,
             amount=float(txn.amount),
             category=txn.category,
             flag_reason=txn.flag_reason,
-        )
-
-    all_txns = await get_all_transactions(db)
-    logger.info("--- All stored transactions (%d total) ---", len(all_txns))
-    for t in all_txns:
-        logger.info(
-            "  [%s]  %s  $%.2f  \"%s\"  category=%s  flagged=%s",
-            t.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            t.merchant,
-            float(t.amount),
-            t.description,
-            t.category or "-",
-            t.flagged,
         )
 
     return txn
@@ -76,5 +64,6 @@ async def ingest_transaction(
 @router.get("/", response_model=List[TransactionResponse])
 async def list_transactions(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return await get_all_transactions(db)
+    return await get_transactions_for_user(db, current_user.id)

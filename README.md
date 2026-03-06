@@ -156,6 +156,11 @@ Frontend URL:
 
 ## 6. Quick API Smoke Test (Optional)
 
+In development, `make dev` automatically creates this example account unless you disable `DEV_SEED_EXAMPLE_USER` in `.env`:
+
+- Email: `test@example.com`
+- Password: `password123`
+
 Register:
 
 ```bash
@@ -177,13 +182,19 @@ curl -X POST http://localhost:8000/api/auth/login \
 Send a transaction through the real API classifier:
 
 ```bash
-python scripts/send_transaction.py --merchant "DraftKings" --desc "Weekly sports bet" --amount 250
+python scripts/send_transaction.py \
+  --email test@example.com \
+  --password password123 \
+  --merchant "DraftKings" \
+  --desc "Weekly sports bet" \
+  --amount 250
 ```
 
-Then check the latest stored transaction:
+Then check that user's stored transactions:
 
 ```bash
-curl http://localhost:8000/api/transactions
+curl http://localhost:8000/api/transactions \
+  -H "Authorization: Bearer <paste access_token from login response>"
 ```
 
 You should see classifier fields on each transaction row:
