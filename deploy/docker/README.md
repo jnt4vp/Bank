@@ -88,6 +88,8 @@ cd /opt/bankapp
 sudo docker-compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
 
+The production API container runs `alembic upgrade head` automatically before `uvicorn` starts, so schema changes are applied during container startup.
+
 ## Step 8: Pull Ollama Model (One Time)
 
 The LLM classifier uses Ollama model `llama3.2:1b`.
@@ -178,6 +180,8 @@ sudo git pull
 sudo docker-compose --env-file .env.prod -f docker-compose.prod.yml build api
 sudo docker-compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-deps api
 ```
+
+That API restart also reapplies pending Alembic migrations automatically on startup.
 
 ## Access from Browser
 
