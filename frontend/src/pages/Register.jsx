@@ -6,7 +6,7 @@ export default function Register() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [phone, setPhone] = useState("");
-   // TODO/Suggest: If successful & have more time, add a next page for more details (bday, etc)
+    // TODO/Suggest: If successful & have more time, add a next page for more details (bday, etc)
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -14,7 +14,7 @@ export default function Register() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true)
+        setLoading(true);
         setError(null);
 
         try {
@@ -39,7 +39,7 @@ export default function Register() {
             }
             // if successful
             navigate("/");
-        } catch (err) {
+        } catch {
             //setError(err.message);
             setError("Registration backend not connected yet.");
         } finally {
@@ -73,7 +73,7 @@ export default function Register() {
             <input
                 className="form-input"
                 type="password"
-                value={[password]}
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
             />
@@ -82,16 +82,18 @@ export default function Register() {
             <label className="form-label">Phone Number</label>
             <input
                 className="form-input"
-                value={[phone]}
+                value={phone}
                 onChange={(e) => setPhone(e.target.value)}
             />
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
 
-            <button 
-
-                className="sign-in-btn">
-                    Sign Up
+            <button
+                type="submit"
+                className="sign-in-btn"
+                disabled={loading}
+            >
+                {loading ? "Signing Up..." : "Sign Up"}
             </button>
         </form>
     );
