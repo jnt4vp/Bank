@@ -1,98 +1,134 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 export default function Register() {
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [phone, setPhone] = useState("");
-   // TODO/Suggest: If successful & have more time, add a next page for more details (bday, etc)
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-    const navigate = useNavigate();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true)
-        setError(null);
+    if (!name.trim()) {
+      setError("Name is required");
+      setLoading(false);
+      return;
+    }
 
-        try {
-            const res = await fetch("http://localhost:8000/api/auth/register", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                // convert JS object to JSON string
-                body: JSON.stringify({
-                    name,
-                    email,
-                    password,
-                    phone
-                })
-            });
+    if (!email.trim()) {
+      setError("Email is required");
+      setLoading(false);
+      return;
+    }
 
-            if (!res.ok) {
-                //const body = await res.json().catch(() => null);
-                //throw new Error(body?.detail || "Registration failed");
-                throw new Error("Registration is not available yet.");
-            }
-            // if successful
-            navigate("/");
-        } catch (err) {
-            //setError(err.message);
-            setError("Registration backend not connected yet.");
-        } finally {
-            setLoading(false);
-        }
-    };
+    if (!password.trim()) {
+      setError("Password is required");
+      setLoading(false);
+      return;
+    }
 
-    // UI
-    return (
-        <form className="login-card" onSubmit={handleSubmit}>
-            <label className="form-label">Name</label>
-            <input
-                className="form-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-            />
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      setLoading(false);
+      return;
+    }
 
-            {/* email */}
-            <label className="form-label">Email</label>
-            <input
-                className="form-input"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-            />
+    try {
+      const res = await fetch("http://localhost:8000/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          phone,
+        }),
+      });
 
-            {/* password */}
-            <label className="form-label">Password</label>
-            <input
-                className="form-input"
-                type="password"
-                value={[password]}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-            />
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(
+          body?.detail || body?.message || res.statusText || "Registration failed"
+        );
+      }
 
-            {/* phone */}
-            <label className="form-label">Phone Number</label>
-            <input
-                className="form-input"
-                value={[phone]}
-                onChange={(e) => setPhone(e.target.value)}
-            />
+      await res.json().catch(() => null);
+      navigate("/");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            {error && <div className="text-red-500 text-sm">{error}</div>}
+  return (
+    <form className="login-card" onSubmit={handleSubmit}>
+      <label htmlFor="name" className="form-label">
+        Name
+      </label>
+      <input
+        id="name"
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        required
+        className="form-input"
+      />
 
-            <button 
+      <label htmlFor="email" className="form-label">
+        Email
+      </label>
+      <input
+        id="email"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+        className="form-input"
+      />
 
-                className="sign-in-btn">
-                    Sign Up
-            </button>
-        </form>
-    );
+      <label htmlFor="password" className="form-label">
+        Password
+      </label>
+      <input
+        id="password"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+        className="form-input"
+      />
+
+      <label htmlFor="phone" className="form-label">
+        Phone Number
+      </label>
+      <input
+        id="phone"
+        type="text"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        className="form-input"
+      />
+
+      {error && <div className="text-red-500 text-sm">{error}</div>}
+
+      <button
+        type="submit"
+        disabled={loading}
+        className="sign-in-btn"
+      >
+        {loading ? "Creating Account..." : "Sign Up"}
+      </button>
+
+      <p style={{ marginTop: "12px", fontSize: "15px" }}>
+        Already have an account? <Link to="/">Sign In</Link>
+      </p>
+    </form>
+  );
 }

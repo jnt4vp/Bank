@@ -32,6 +32,10 @@ class InvalidTokenError(Exception):
     """Raised when a bearer token cannot be validated."""
 
 
+class InvalidResetTokenError(Exception):
+    """Raised when a reset token is invalid or expired."""
+
+
 def hash_password(password: str) -> str:
     """Hash a plaintext password for storage.
 
@@ -117,13 +121,9 @@ async def generate_reset_token(db: AsyncSession, email: str) -> str | None:
 
     token = secrets.token_urlsafe(48)
     user.reset_token = token
-    user.reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
     await db.commit()
     return token
-
-
-class InvalidResetTokenError(Exception):
-    """Raised when a reset token is invalid or expired."""
 
 
 async def reset_password(db: AsyncSession, token: str, new_password: str) -> None:
@@ -133,10 +133,20 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
         raise InvalidResetTokenError
 
     expires = user.reset_token_expires
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if expires < datetime.now(timezone.utc):
+    if expires < datetime.utcnow():
         raise InvalidResetTokenError
+
+    if not new_password.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Password is required",
+        )
+
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters",
+        )
 
     user.password_hash = hash_password(new_password)
     user.reset_token = None
