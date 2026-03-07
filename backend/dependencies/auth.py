@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models.user import User
 from ..repositories.users import get_user_by_id
-from ..services.auth import InvalidTokenError, decode_access_token_subject
+from ..security import InvalidTokenError, decode_access_token_subject
 
 bearer_scheme = HTTPBearer(auto_error=False)
 

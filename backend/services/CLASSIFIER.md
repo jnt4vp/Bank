@@ -54,7 +54,7 @@ To add new keywords, edit the lists at the top of `classifier.py`.
 
 ## Layer 2: Ollama LLM
 
-Defined in `_llm_classify()`. Only runs when the rule-based layer does not flag.
+Implemented by the Ollama adapter in `backend/infrastructure/classifiers/ollama.py`. It only runs when the rule-based layer does not flag.
 
 - Sends the transaction (merchant, description, amount) to Ollama's `/api/generate` endpoint
 - Uses a structured prompt that instructs the model to return JSON with `{flagged, reason, category}`
@@ -108,4 +108,5 @@ The model is persisted in the `ollama_data` Docker volume.
 
 ## Code Location
 
-All classifier logic lives in `backend/services/classifier.py`.
+- Rule-based orchestration lives in `backend/services/classifier.py`.
+- The external Ollama integration lives in `backend/infrastructure/classifiers/ollama.py`.

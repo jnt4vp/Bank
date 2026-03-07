@@ -1,23 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
+from ..application.auth import (
+    login_account,
+    register_account,
+    reset_account_password,
+    send_password_reset_link,
+)
 from ..database import get_db
 from ..dependencies.auth import get_current_user
+from ..dependencies.integrations import get_notifier
 from ..models.user import User
+from ..ports.notifier import NotifierPort
 from ..schemas.auth import AuthResponse, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, Token
 from ..schemas.user import UserCreate, UserResponse
+from ..security import PasswordValidationError
 from ..services.auth import (
     DuplicateEmailError,
     InvalidCredentialsError,
     InvalidResetTokenError,
-    authenticate_user,
-    create_access_token,
-    generate_reset_token,
-    register_user,
-    reset_password,
 )
-from ..services.email import send_reset_email
 
 router = APIRouter()
 
@@ -25,26 +27,39 @@ router = APIRouter()
 @router.post("/register", response_model=AuthResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     try:
-        user = await register_user(db, user_data)
+        result = await register_account(
+            db,
+            name=user_data.name,
+            email=user_data.email,
+            password=user_data.password,
+            phone=user_data.phone,
+        )
     except DuplicateEmailError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         ) from exc
-
-    access_token = create_access_token(data={"sub": str(user.id)})
+    except PasswordValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
     return AuthResponse(
-        user=UserResponse.model_validate(user),
-        access_token=access_token,
-        token_type="bearer",
+        user=UserResponse.model_validate(result.user),
+        access_token=result.access_token,
+        token_type=result.token_type,
     )
 
 
 @router.post("/login", response_model=Token)
 async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
     try:
-        user = await authenticate_user(db, login_data.email, login_data.password)
+        result = await login_account(
+            db,
+            email=login_data.email,
+            password=login_data.password,
+        )
     except InvalidCredentialsError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,8 +67,10 @@ async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
 
-    access_token = create_access_token(data={"sub": str(user.id)})
-    return Token(access_token=access_token)
+    return Token(
+        access_token=result.access_token,
+        token_type=result.token_type,
+    )
 
 
 @router.get("/me", response_model=UserResponse)
@@ -62,12 +79,12 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    token = await generate_reset_token(db, payload.email)
-    if token:
-        settings = get_settings()
-        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
-        send_reset_email(to_email=payload.email, reset_url=reset_url)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    notifier: NotifierPort = Depends(get_notifier),
+):
+    await send_password_reset_link(db, email=payload.email, notifier=notifier)
     # Always return 200 so we don't leak whether an email exists
     return {"message": "If that email exists, a reset link has been sent."}
 
@@ -75,7 +92,16 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 async def do_reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     try:
-        await reset_password(db, payload.token, payload.new_password)
+        await reset_account_password(
+            db,
+            token=payload.token,
+            new_password=payload.new_password,
+        )
+    except PasswordValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     except InvalidResetTokenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

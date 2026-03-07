@@ -12,7 +12,7 @@ from .database import Base, async_session, engine
 from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
 from .routers.transactions import router as transactions_router
-from .services.auth import ensure_dev_seed_user
+from .application.auth import ensure_dev_seed_user_exists
 
 settings = get_settings()
 
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     async with async_session() as session:
-        await ensure_dev_seed_user(session)
+        await ensure_dev_seed_user_exists(session)
     yield
 
 

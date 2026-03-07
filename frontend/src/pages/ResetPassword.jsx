@@ -1,42 +1,37 @@
-import React, { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import '../landing.css';
+import { useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+
+import { resetPassword } from '../features/auth/api'
+import '../landing.css'
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") || "";
+  const [searchParams] = useSearchParams()
+  const token = searchParams.get('token') || ''
 
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState(null);
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [done, setDone] = useState(false)
+  const [error, setError] = useState(null)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  async function handleSubmit(event) {
+    event.preventDefault()
     if (password !== confirm) {
-      setError("Passwords don't match.");
-      return;
+      setError("Passwords don't match.")
+      return
     }
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
+
     try {
-      const res = await fetch("http://localhost:8000/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, new_password: password }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.detail || "Invalid or expired link. Please request a new one.");
-      }
-      setDone(true);
+      await resetPassword({ token, newPassword: password })
+      setDone(true)
     } catch (err) {
-      setError(err.message);
+      setError(err.message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <>
@@ -94,7 +89,7 @@ export default function ResetPassword() {
               type="password"
               className="form-input"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               required
             />
 
@@ -104,7 +99,7 @@ export default function ResetPassword() {
               type="password"
               className="form-input"
               value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
+              onChange={(event) => setConfirm(event.target.value)}
               required
             />
 
@@ -121,5 +116,5 @@ export default function ResetPassword() {
         )}
       </div>
     </>
-  );
+  )
 }

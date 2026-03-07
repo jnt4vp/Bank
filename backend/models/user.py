@@ -21,4 +21,4 @@ class User(Base):
     card_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reset_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
-    reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -27,8 +27,6 @@ async def create_transaction(
         flag_reason=flag_reason,
     )
     db.add(txn)
-    await db.commit()
-    await db.refresh(txn)
     return txn
 
 

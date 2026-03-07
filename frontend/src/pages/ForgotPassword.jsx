@@ -1,48 +1,37 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import "../landing.css";
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+
+import { requestPasswordReset } from '../features/auth/api'
+import '../landing.css'
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState(null);
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError] = useState(null)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setLoading(true)
+    setError(null)
 
-    const cleanEmail = email.trim().toLowerCase();
-    console.log("Forgot password email being sent:", cleanEmail);
+    const cleanEmail = email.trim().toLowerCase()
 
     if (!cleanEmail) {
-      setError("Email is required.");
-      setLoading(false);
-      return;
+      setError('Email is required.')
+      setLoading(false)
+      return
     }
 
     try {
-      const res = await fetch("http://localhost:8000/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail }),
-      });
-
-      const body = await res.json().catch(() => null);
-      console.log("Forgot password response:", body);
-
-      if (!res.ok) {
-        throw new Error(body?.detail || "Something went wrong. Please try again.");
-      }
-
-      setSubmitted(true);
+      await requestPasswordReset({ email: cleanEmail })
+      setSubmitted(true)
     } catch (err) {
-      setError(err.message || "Something went wrong.");
+      setError(err.message || 'Something went wrong.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <>
@@ -152,7 +141,7 @@ export default function ForgotPassword() {
               type="email"
               className="form-input"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
               required
             />
@@ -176,5 +165,5 @@ export default function ForgotPassword() {
         )}
       </div>
     </>
-  );
+  )
 }

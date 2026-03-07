@@ -1,41 +1,16 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useAuth } from '../features/auth/context'
+import { useCounter } from '../features/transactions/useCounter'
+
 export default function Dashboard() {
-  const [count, setCount] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const user = localStorage.getItem('userEmail') || 'User'
+  const { user, logout } = useAuth()
+  const { count, error, loading, increment } = useCounter()
+  const userLabel = user?.email || user?.name || 'User'
 
-  useEffect(() => {
-    fetch('/api/counter')
-      .then(r => {
-        if (!r.ok) throw new Error(`API ${r.status}`)
-        return r.json()
-      })
-      .then(data => setCount(data.value))
-      .catch(err => setError(err.message))
-  }, [])
-
-  async function increment() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/counter/increment', { method: 'POST' })
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      const data = await res.json()
-      setCount(data.value)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('userEmail')
-    localStorage.removeItem('user')
+  function handleLogout() {
+    logout()
     navigate('/')
   }
 
@@ -44,9 +19,9 @@ export default function Dashboard() {
       <header className="flex justify-between items-center px-8 py-5 border-b border-slate-800">
         <span className="font-semibold">Bank Demo</span>
         <div className="flex items-center gap-6">
-          <span className="text-slate-400 text-sm">{user}</span>
+          <span className="text-slate-400 text-sm">{userLabel}</span>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="text-sm text-slate-400 hover:text-slate-200 transition"
           >
             Sign out

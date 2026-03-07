@@ -10,14 +10,10 @@ async def get_or_create_counter(db: AsyncSession) -> Counter:
     if counter is None:
         counter = Counter(id=1, value=0)
         db.add(counter)
-        await db.commit()
-        await db.refresh(counter)
     return counter
 
 
 async def increment_counter(db: AsyncSession) -> Counter:
     counter = await get_or_create_counter(db)
     counter.value += 1
-    await db.commit()
-    await db.refresh(counter)
     return counter
