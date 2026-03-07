@@ -28,7 +28,7 @@ docker ps
 
 ## Fast Start (One Command)
 
-After completing the one-time setup steps (`cp .env.example .env`, backend deps, `cd frontend && npm install`, and first-run migrations), you can start local development with:
+After completing the one-time setup steps (`cp .env.example .env`, backend deps, and `cd frontend && npm install`), you can start local development with:
 
 ```bash
 make dev
@@ -40,11 +40,7 @@ This starts:
 - FastAPI backend (`:8000`)
 - Vite frontend (`:5173`)
 
-First run only (before `make dev`), initialize the database schema:
-
-```bash
-alembic upgrade head
-```
+`make dev` applies pending Alembic migrations automatically before starting the backend.
 
 If you do not have Docker Compose installed but already have PostgreSQL running locally, use:
 
@@ -92,13 +88,13 @@ source .venv/bin/activate
 pip install -r backend/requirements.txt
 ```
 
-Run database migrations:
+Run database migrations if you are starting the API manually without `make dev`:
 
 ```bash
 alembic upgrade head
 ```
 
-You only need this once on first setup (and again after future migration changes).
+`make dev` already does this step for you on each startup.
 
 Start the API from the repo root:
 
@@ -243,12 +239,16 @@ docker compose up -d
 alembic upgrade head
 ```
 
+If you use `make dev` after the reset, you can skip the manual `alembic upgrade head` because the dev script applies it automatically.
+
 ## 10. Notes
 
 - `docker-compose.prod.yml` and `deploy/` contain deployment options (organized as `deploy/docker/` and `deploy/systemd-nginx/`), but this README is intentionally local-dev only.
 - EC2 Docker deployment guide: `deploy/docker/README.md`.
 - The frontend is currently a placeholder UI and does not yet implement the full product flows described in `docs/SPEC.md`.
 - `make dev` leaves the Postgres container running when you stop the frontend/backend. Use `docker compose down` to stop it.
+- `make dev` applies pending Alembic migrations automatically before launching the backend.
 - `make dev-no-db` skips Docker and assumes Postgres is already running and matches `DATABASE_URL`.
+- `docker-compose.prod.yml` applies `alembic upgrade head` automatically before the production API starts.
 - The local scripts support both `docker compose` and `docker-compose`.
 - Test convention: backend tests are colocated in `backend/tests`; add frontend tests colocated under `frontend/src/` when the UI grows.
