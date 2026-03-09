@@ -34,7 +34,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <>
+    <div className="landing-page">
       <div className="bg">
         <img src="/Untitled design.gif" alt="" />
       </div>
@@ -164,6 +164,6 @@ export default function ForgotPassword() {
           </form>
         )}
       </div>
-    </>
+    </div>
   )
 }

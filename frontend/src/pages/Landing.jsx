@@ -3,7 +3,7 @@ import Login from './Login'
 
 export default function Landing() {
   return (
-    <>
+    <div className="landing-page">
       <div className="bg">
         <img src="/Untitled design.gif" alt="" />
       </div>
@@ -85,6 +85,6 @@ export default function Landing() {
         </div>
 
       </div>
-    </>
+    </div>
   )
 }

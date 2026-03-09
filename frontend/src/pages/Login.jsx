@@ -37,6 +37,7 @@ export default function Login() {
         value={email}
         onChange={(event) => setEmail(event.target.value)}
         required
+        placeholder="Email"
         className="form-input"
       />
 
@@ -47,6 +48,7 @@ export default function Login() {
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         required
+        placeholder="Password"
         className="form-input"
       />
       <Link to="/forgot-password" className="forgot">Forgot password?</Link>
@@ -62,7 +64,7 @@ export default function Login() {
 
         {/* Register Link -- TODO: add class name later */}
         <p style={{ marginTop: "12px", fontSize: "15px"}}>
-          Don't have an account? <Link to="/register">Sign Up</Link>
+          Don't have an account? <Link to="/signup">Sign Up</Link>
         </p>
         
       </form>

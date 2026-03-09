@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  timeout: 30_000,
+  timeout: 15_000,
   expect: { timeout: 5_000 },
   fullyParallel: false,
   retries: 0,
@@ -11,6 +11,7 @@ export default defineConfig({
     baseURL: "http://localhost:5173",
     headless: true,
     screenshot: "only-on-failure",
+    viewport: { width: 1280, height: 720 },
   },
   projects: [
     {

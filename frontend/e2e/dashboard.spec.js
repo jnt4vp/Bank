@@ -17,36 +17,21 @@ async function loginAndGoToDashboard(page) {
 }
 
 test.describe("Dashboard", () => {
-  test("displays user info after login", async ({ page }) => {
+  test("displays welcome message and user info after login", async ({ page }) => {
     await loginAndGoToDashboard(page);
-    await expect(
-      page.getByText(TEST_USER.email).or(page.getByText(/test/i))
-    ).toBeVisible();
+    await expect(page.getByText(/welcome back/i)).toBeVisible();
   });
 
-  test("shows counter value", async ({ page }) => {
+  test("shows financial overview cards", async ({ page }) => {
     await loginAndGoToDashboard(page);
-    // Counter should display a number somewhere
-    await expect(
-      page.getByText(/counter|count/i).or(page.locator("[data-testid='counter']"))
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/balance/i)).toBeVisible();
+    await expect(page.getByText(/savings/i)).toBeVisible();
+    await expect(page.getByText(/discipline score/i)).toBeVisible();
   });
 
-  test("increments counter on button click", async ({ page }) => {
+  test("shows recent activity section", async ({ page }) => {
     await loginAndGoToDashboard(page);
-
-    // Find the increment button
-    const incrementBtn = page.getByRole("button", { name: /increment/i });
-    await expect(incrementBtn).toBeVisible({ timeout: 5_000 });
-
-    // Get initial text content to compare later
-    const counterArea = page.locator("text=/\\d+/").first();
-    const initialText = await counterArea.textContent();
-
-    await incrementBtn.click();
-
-    // Wait for counter to update (value should change or at least the button should be re-enabled)
-    await page.waitForTimeout(1_000);
+    await expect(page.getByText(/recent activity/i)).toBeVisible();
   });
 
   test("logout returns to landing page", async ({ page }) => {
@@ -62,26 +47,63 @@ test.describe("Dashboard", () => {
 
   test("session persists across page reload", async ({ page }) => {
     await loginAndGoToDashboard(page);
-
-    // Reload the page
     await page.reload();
 
-    // Should still be on dashboard (token in localStorage keeps us authenticated)
     await expect(page).toHaveURL(/dashboard/, { timeout: 10_000 });
     await expect(
-      page.getByText(TEST_USER.email).or(page.getByRole("button", { name: /sign out/i }))
+      page.getByRole("button", { name: /sign out/i })
     ).toBeVisible();
   });
 
   test("after logout, dashboard redirects to landing", async ({ page }) => {
     await loginAndGoToDashboard(page);
 
-    // Logout
     await page.getByRole("button", { name: /sign out|log ?out/i }).click();
     await expect(page).not.toHaveURL(/dashboard/);
 
-    // Try to go back to dashboard directly
     await page.goto("/dashboard");
     await expect(page).not.toHaveURL(/dashboard/, { timeout: 5_000 });
+  });
+});
+
+test.describe("Navbar", () => {
+  test("shows navigation links", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await expect(page.getByRole("link", { name: /dashboard/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /settings/i })).toBeVisible();
+  });
+
+  test("navigates to settings page", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await page.getByRole("link", { name: /settings/i }).click();
+    await expect(page).toHaveURL(/settings/);
+    await expect(page.getByText(/settings/i).first()).toBeVisible();
+  });
+
+  test("navigates back to dashboard from settings", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await page.getByRole("link", { name: /settings/i }).click();
+    await expect(page).toHaveURL(/settings/);
+    await page.getByRole("link", { name: /dashboard/i }).click();
+    await expect(page).toHaveURL(/dashboard/);
+  });
+});
+
+test.describe("Settings", () => {
+  test("shows profile information", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await page.getByRole("link", { name: /settings/i }).click();
+    await expect(page).toHaveURL(/settings/);
+
+    await expect(page.getByText(/profile/i)).toBeVisible();
+    await expect(page.getByText(/email/i)).toBeVisible();
+  });
+
+  test("shows placeholder sections", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await page.getByRole("link", { name: /settings/i }).click();
+
+    await expect(page.getByText(/preferences/i)).toBeVisible();
+    await expect(page.getByText(/security/i)).toBeVisible();
   });
 });

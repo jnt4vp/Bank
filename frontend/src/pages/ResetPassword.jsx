@@ -34,7 +34,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <>
+    <div className="landing-page">
       <div className="bg">
         <img src="/Untitled design.gif" alt="" />
       </div>
@@ -115,6 +115,6 @@ export default function ResetPassword() {
           </form>
         )}
       </div>
-    </>
+    </div>
   )
 }
