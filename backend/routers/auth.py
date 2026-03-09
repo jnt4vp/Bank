@@ -13,7 +13,7 @@ from ..dependencies.integrations import get_notifier
 from ..models.user import User
 from ..ports.notifier import NotifierPort
 from ..schemas.auth import AuthResponse, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, Token
-from ..schemas.user import UserCreate, UserResponse
+from ..schemas.user import UserCreate, UserResponse, UserUpdate
 from ..security import PasswordValidationError
 from ..services.auth import (
     DuplicateEmailError,
@@ -75,6 +75,18 @@ async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    current_user.discipline_savings_percentage = payload.discipline_savings_percentage
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 

@@ -78,6 +78,14 @@ export default function AuthProvider({ children }) {
     return nextSession
   }
 
+  async function refreshUser() {
+    if (!session?.token) return
+    const user = await fetchCurrentUser(session.token)
+    const nextSession = { token: session.token, user }
+    persistSession(nextSession)
+    setSession(nextSession)
+  }
+
   function logout() {
     clearStoredSession()
     setSession(null)
@@ -90,6 +98,7 @@ export default function AuthProvider({ children }) {
     isReady,
     login,
     logout,
+    refreshUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

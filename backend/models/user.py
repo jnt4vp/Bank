@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,5 +20,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(100))
     card_locked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    discipline_savings_percentage: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, server_default="0"
+    )
     reset_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
