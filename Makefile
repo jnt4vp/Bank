@@ -1,4 +1,4 @@
-.PHONY: dev dev-no-db test test-backend test-frontend
+.PHONY: dev dev-no-db test test-backend test-frontend test-e2e
 
 dev:
 	./scripts/dev.sh
@@ -17,3 +17,6 @@ test-backend:
 
 test-frontend:
 	npm --prefix frontend test
+
+test-e2e:
+	npm --prefix frontend run test:e2e

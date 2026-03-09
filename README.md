@@ -203,7 +203,7 @@ If Ollama is down/unreachable, the backend gracefully skips the LLM step and sti
 
 More classifier details: `backend/services/CLASSIFIER.md`.
 
-## 8. Tests (Beginner Feedback Loop)
+## 8. Tests
 
 Backend smoke test:
 
@@ -222,6 +222,27 @@ Run both:
 ```bash
 make test
 ```
+
+### End-to-End Tests (Playwright)
+
+E2E tests live in `frontend/e2e/` and use [Playwright](https://playwright.dev/) to drive a real browser against the running app. They cover auth flows (login, register, forgot password, protected routes) and dashboard functionality (counter, logout, session persistence).
+
+Prerequisites:
+
+```bash
+cd frontend
+npm install                    # installs @playwright/test
+npx playwright install chromium
+```
+
+Run the tests (requires `make dev` running in another terminal, or Playwright will auto-start the Vite dev server):
+
+```bash
+make test-e2e                  # headless
+npm --prefix frontend run test:e2e:headed  # with visible browser
+```
+
+The tests use the dev seed account (`test@example.com` / `password123`).
 
 ## 9. Common Commands
 
@@ -251,4 +272,4 @@ If you use `make dev` after the reset, you can skip the manual `alembic upgrade 
 - `make dev-no-db` skips Docker and assumes Postgres is already running and matches `DATABASE_URL`.
 - `docker-compose.prod.yml` applies `alembic upgrade head` automatically before the production API starts.
 - The local scripts support both `docker compose` and `docker-compose`.
-- Test convention: backend tests are colocated in `backend/tests`; add frontend tests colocated under `frontend/src/` when the UI grows.
+- Test convention: backend unit tests live in `backend/tests/`; frontend e2e tests live in `frontend/e2e/`.
