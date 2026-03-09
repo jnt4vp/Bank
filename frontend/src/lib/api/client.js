@@ -18,11 +18,20 @@ function buildUrl(path) {
 }
 
 function getErrorMessage(response, data) {
+  if ([502, 503, 504].includes(response.status)) {
+    return 'Service temporarily unavailable. Please try again in a moment.'
+  }
+
   if (data && typeof data === 'object') {
     return data.detail || data.message || `Request failed (${response.status})`
   }
 
   if (typeof data === 'string' && data.trim()) {
+    const trimmed = data.trim()
+    if (/^<!doctype html/i.test(trimmed) || /^<html/i.test(trimmed)) {
+      return 'Service temporarily unavailable. Please try again in a moment.'
+    }
+
     return data
   }
 

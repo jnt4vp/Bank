@@ -13,7 +13,7 @@ from backend.application.auth import login_account, register_account, send_passw
 from backend.application.counter import get_counter_value, increment_counter_value
 from backend.application.transactions import ingest_user_transaction
 from backend.ports.classifier import ClassificationResult
-from backend.services.auth import reset_password
+from backend.services.auth import ensure_dev_seed_user, reset_password
 
 
 class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
@@ -99,6 +99,41 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
 
 
 class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_ensure_dev_seed_user_runs_in_production(self):
+        user = SimpleNamespace(email="test@example.com")
+
+        with patch(
+            "backend.services.auth.settings",
+            new=SimpleNamespace(
+                APP_ENV="production",
+                DEV_SEED_EXAMPLE_USER=True,
+                DEV_SEED_EXAMPLE_EMAIL="test@example.com",
+                DEV_SEED_EXAMPLE_PASSWORD="password123",
+                DEV_SEED_EXAMPLE_NAME="Test User",
+            ),
+        ), patch(
+            "backend.services.auth.get_user_by_email",
+            new=AsyncMock(return_value=None),
+        ) as get_user_by_email_mock, patch(
+            "backend.services.auth.create_user",
+            new=AsyncMock(return_value=user),
+        ) as create_user_mock, patch(
+            "backend.services.auth.hash_password",
+            return_value="hashed-password",
+        ) as hash_password_mock:
+            result = await ensure_dev_seed_user(object())
+
+        get_user_by_email_mock.assert_awaited_once_with(unittest.mock.ANY, "test@example.com")
+        hash_password_mock.assert_called_once_with("password123")
+        create_user_mock.assert_awaited_once_with(
+            unittest.mock.ANY,
+            email="test@example.com",
+            password_hash="hashed-password",
+            name="Test User",
+            phone=None,
+        )
+        self.assertEqual(result, user)
+
     async def test_reset_password_accepts_legacy_naive_expiry_values(self):
         user = SimpleNamespace(
             reset_token="reset-token",

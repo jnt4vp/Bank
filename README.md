@@ -152,7 +152,7 @@ Frontend URL:
 
 ## 6. Quick API Smoke Test (Optional)
 
-In development, `make dev` automatically creates this example account unless you disable `DEV_SEED_EXAMPLE_USER` in `.env`:
+By default, the app automatically creates this example account unless you disable `DEV_SEED_EXAMPLE_USER` in `.env`:
 
 - Email: `test@example.com`
 - Password: `password123`

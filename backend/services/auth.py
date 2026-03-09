@@ -94,8 +94,8 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
 
 
 async def ensure_dev_seed_user(db: AsyncSession):
-    """Create the documented example user automatically in non-production envs."""
-    if settings.APP_ENV == "production" or not settings.DEV_SEED_EXAMPLE_USER:
+    """Create the documented example user automatically unless explicitly disabled."""
+    if not settings.DEV_SEED_EXAMPLE_USER:
         return None
 
     existing_user = await get_user_by_email(db, settings.DEV_SEED_EXAMPLE_EMAIL)
@@ -109,5 +109,5 @@ async def ensure_dev_seed_user(db: AsyncSession):
         name=settings.DEV_SEED_EXAMPLE_NAME,
         phone=None,
     )
-    logger.info("Created development seed user: %s", user.email)
+    logger.info("Created seed user: %s", user.email)
     return user
