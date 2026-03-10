@@ -4,6 +4,8 @@ import { apiRequest } from '../lib/api/client'
 
 export default function Dashboard() {
   const { user, token } = useAuth()
+  console.log('user from auth:', user)
+  console.log('dashboard user:', user)
   const firstName = user?.name?.split(' ')[0] || 'there'
 
   const [transactions, setTransactions] = useState([])
