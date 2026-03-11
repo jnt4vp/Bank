@@ -74,7 +74,7 @@ export default function Login() {
 
         {/* Register Link -- TODO: add class name later */}
         <p className="register-link">
-          Don't have an account? <Link to="/signup">Sign Up</Link>
+          Don't have an account? <Link to="/register">Sign Up</Link>
         </p>
         
       </form>

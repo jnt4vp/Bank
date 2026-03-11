@@ -7,6 +7,7 @@ import Landing from '../pages/Landing'
 import ResetPassword from '../pages/ResetPassword'
 import Settings from '../pages/Settings'
 import Signup from '../pages/Signup'
+import Register from '../pages/Register'
 import ProtectedRoute from './ProtectedRoute'
 
 export default function AppRouter() {
@@ -14,6 +15,7 @@ export default function AppRouter() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route
