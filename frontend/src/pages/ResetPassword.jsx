@@ -54,7 +54,7 @@ export default function ResetPassword() {
             <path d="M14 32C14 32 14 24 22 24C30 24 30 18 30 18" stroke="#6b4f1d" strokeWidth="4" strokeLinecap="round"/>
             <path d="M14 26C14 26 14 18 22 18C30 18 30 12 30 12" stroke="#a0813a" strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
           </svg>
-          <span className="logo-text">BankSpank</span>
+          <span className="logo-text">PactBank</span>
         </div>
 
         {!token ? (

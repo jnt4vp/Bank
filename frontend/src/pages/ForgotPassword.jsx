@@ -67,7 +67,7 @@ export default function ForgotPassword() {
               opacity="0.7"
             />
           </svg>
-          <span className="logo-text">BankSpank</span>
+          <span className="logo-text">PactBank</span>
         </div>
 
         {submitted ? (

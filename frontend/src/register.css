@@ -1,0 +1,497 @@
+/* ─── register.css ─────────────────────────────────────────────────────────── */
+
+/* ── Override landing container for register ──────────────────────────────── */
+.register-container {
+  align-items: center;
+  gap: 55px;
+}
+
+/* ── Left panel ────────────────────────────────────────────────────────────── */
+.register-left {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  max-width: 540px;
+}
+
+/* ── Visual sits in normal flow under the text ────────────────────────────── */
+.register-visual-small {
+  position: relative;
+  width: 100%;
+  max-width: 550px;
+  margin: 28px 0 0;
+  right: 35px;
+}
+
+.register-visual-small-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  opacity: 0.96;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 220, 140, 0.18))
+    drop-shadow(0 12px 30px rgba(80, 60, 20, 0.08));
+}
+
+.register-visual-small::before {
+  content: "";
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  left: 40%;
+  top: 60%;
+  transform: translate(-50%, -50%);
+  
+  background: radial-gradient(
+    circle,
+    rgba(201,162,78,0.18) 0%,
+    rgba(201,162,78,0.08) 40%,
+    rgba(201,162,78,0) 70%
+  );
+
+  filter: blur(25px);
+  z-index: -1;
+}
+
+/* Floating chips */
+.visual-chip {
+  position: absolute;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  color: #3a2c10;
+  font-family: "DM Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+.chip-goals {
+  left: 2%;
+  bottom: 45%;
+}
+
+.chip-penalties {
+  left: 32%;
+  top: 22%;
+}
+
+.chip-discipline {
+  right: 1%;
+  top: 3%;
+}
+
+/* ── Right panel ───────────────────────────────────────────────────────────── */
+.register-right-panel {
+  flex: 0 0 500px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ── Register card ─────────────────────────────────────────────────────────── */
+.register-card {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  background: rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  border-radius: 28px;
+  padding: 30px 36px 26px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 20px 60px rgba(0, 0, 0, 0.06);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* ── Step indicator ────────────────────────────────────────────────────────── */
+.register-steps {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.register-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+
+.register-step-connector {
+  position: absolute;
+  top: 16px;
+  left: 62%;
+  right: -38%;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(200, 160, 60, 0.18);
+}
+
+.register-step-connector.active {
+  background: linear-gradient(90deg, #b08940, rgba(200, 160, 60, 0.18));
+}
+
+.register-step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Playfair Display", serif;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1.5px solid rgba(200, 160, 60, 0.25);
+  color: #9b8a6e;
+}
+
+.register-step-circle.active {
+  background: linear-gradient(135deg, #c9a24e 0%, #896520 100%);
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(160, 120, 40, 0.3);
+}
+
+.register-step-label {
+  margin-top: 5px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 10px;
+  color: #9b8a6e;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.register-step-label.active {
+  color: #b08940;
+  font-weight: 700;
+}
+
+/* ── Card heading ──────────────────────────────────────────────────────────── */
+.register-card-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1205;
+  margin: 0 0 4px;
+}
+
+.register-card-sub {
+  font-size: 14px;
+  color: #6b5a3e;
+  margin: 0 0 16px;
+}
+
+.register-card-sub .gold {
+  color: #b08940;
+  font-weight: 600;
+}
+
+/* ── Labels ────────────────────────────────────────────────────────────────── */
+.register-field-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2e1f08;
+  margin-bottom: 6px;
+  letter-spacing: 0.1px;
+}
+
+/* ── Input rows ────────────────────────────────────────────────────────────── */
+.register-input-row {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.register-input-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: #9b8a6e;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.register-input-eye {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.register-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px 13px 38px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: "DM Sans", sans-serif;
+  background: rgba(255, 255, 255, 0.55);
+  color: #333;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.register-input::placeholder {
+  color: #aaa;
+}
+
+.register-input:focus {
+  border-color: #b08940;
+  box-shadow: 0 0 0 3px rgba(176, 137, 64, 0.1);
+}
+
+.register-input.has-right {
+  padding-right: 40px;
+}
+
+.register-eye-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  color: #9b8a6e;
+  padding: 4px;
+}
+
+/* ── Error ─────────────────────────────────────────────────────────────────── */
+.register-error {
+  font-size: 13px;
+  color: #c0392b;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: rgba(192, 57, 43, 0.07);
+  border-radius: 8px;
+}
+
+/* ── Continue button ───────────────────────────────────────────────────────── */
+.register-btn-continue {
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: "DM Sans", sans-serif;
+}
+
+.register-btn-continue:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(160, 120, 40, 0.4);
+}
+
+.register-btn-continue:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Back / Continue row ──────────────────────────────────────────────────── */
+.register-action-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.register-action-row .register-btn-continue,
+.register-action-row .register-secondary-btn {
+  flex: 1;
+}
+
+.register-secondary-btn {
+  border: 1px solid rgba(184, 150, 46, 0.3);
+  background: rgba(255, 255, 255, 0.35);
+  color: #5b472b;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.register-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ── Do later button ───────────────────────────────────────────────────────── */
+.register-skip-btn {
+  width: 100%;
+  margin-top: 12px;
+  background: transparent;
+  border: 1px solid rgba(184, 150, 46, 0.35);
+  color: #7b6440;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.register-skip-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* ── Divider ───────────────────────────────────────────────────────────────── */
+.register-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.register-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(200, 160, 60, 0.18);
+}
+
+.register-divider-text {
+  font-size: 13px;
+  color: #9b8a6e;
+}
+
+/* ── Google button ─────────────────────────────────────────────────────────── */
+.register-btn-google {
+  width: 100%;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: #2e1f08;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.register-btn-google:hover {
+  border-color: #b08940;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+/* ── Prototype option cards ───────────────────────────────────────────────── */
+.penalty-prototype-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.prototype-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 15px;
+  color: #3e3120;
+  cursor: pointer;
+}
+
+.prototype-option input {
+  accent-color: #b8962e;
+}
+
+.bank-prototype-box {
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 18px;
+  padding: 18px;
+  margin: 18px 0 20px;
+}
+
+/* ── Sign-in link ──────────────────────────────────────────────────────────── */
+.registerpage-link {
+  text-align: center;
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.register-signin-glow {
+  transition: text-shadow 0.2s, color 0.2s;
+}
+
+.register-signin-glow:hover {
+  opacity: 0.8;
+}
+
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .register-container {
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .register-left {
+    max-width: 100%;
+    text-align: center;
+    align-items: center;
+  }
+
+  .register-visual-small {
+    width: 100%;
+    max-width: 420px;
+    right: 0;
+    margin-top: 20px;
+  }
+
+  .register-right-panel {
+    flex: none;
+    margin-right: 0;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .register-card {
+    width: 100%;
+    max-width: 420px;
+  }
+}
+
+@media (max-width: 640px) {
+  .register-card {
+    padding: 22px 18px 20px;
+    border-radius: 22px;
+  }
+
+  .register-step-label {
+    font-size: 9px;
+  }
+
+  .register-step-connector {
+    left: 64%;
+    right: -34%;
+  }
+
+  .register-action-row {
+    flex-direction: column;
+  }
+}
