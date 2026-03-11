@@ -11,23 +11,34 @@ export default function Landing() {
       <div className="container">
 
         {/* LEFT */}
-        <div className="left">
+        <div className="left brand-left">
+          <div className="left-top">
+            <div className="logo">
+              <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                <path d="M14 32C14 32 14 24 22 24C30 24 30 18 30 18" stroke="#6b4f1d" strokeWidth="4" strokeLinecap="round"/>
+                <path d="M14 26C14 26 14 18 22 18C30 18 30 12 30 12" stroke="#a0813a" strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
+              </svg>
+              <span className="logo-text brand-logo-text">PactBank</span>
+            </div>
 
-          <div className="logo">
-            <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-              <path d="M14 32C14 32 14 24 22 24C30 24 30 18 30 18" stroke="#6b4f1d" strokeWidth="4" strokeLinecap="round"/>
-              <path d="M14 26C14 26 14 18 22 18C30 18 30 12 30 12" stroke="#a0813a" strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
-            </svg>
-            <span className="logo-text">BankSpank</span>
+            <div className="subtitle brand-eyebrow">Accountability Banking</div>
+
+            <h1 className="headline brand-title">Commit to your pact.</h1>
+            <h2 className="landing-subline brand-subtitle">
+              Build discipline. Earn freedom.
+            </h2>
+
+
+
+            <p className="description brand-copy">
+              PactBank helps you stay accountable to your goals.
+              Build habits, enforce discipline, and grow your future.
+            </p>
           </div>
 
-          <div className="subtitle">Accountability Banking</div>
-
-          <h1 className="headline">Break your limits.<br />Pay yourself back.</h1>
-
-          <p className="description">Break your honïls erevring an break their familts. Pay yourself back. urneshing your banking sales and its functions.</p>
-
-       <Login/>
+          <div className="left-bottom">
+            <Login />
+          </div>
         </div>
 
         {/* RIGHT */}

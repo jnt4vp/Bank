@@ -73,7 +73,7 @@ export default function Login() {
         </button>
 
         {/* Register Link -- TODO: add class name later */}
-        <p style={{ marginTop: "12px", fontSize: "15px"}}>
+        <p className="register-link">
           Don't have an account? <Link to="/register">Sign Up</Link>
         </p>
         
