@@ -84,13 +84,16 @@ export default function Register() {
         return;
       }
 
-      if (!password.length < 8){
+      if (!password.length > 8){
         setError("Password must be at least 8 characters.")
+        return;
       }
 
       if (password !== confirm){
         setError("Passwords do not match.");
+        return;
       }
+      //ToDo: do not let user get pass page 1 if errors occur
 
       setLoading(true)
 
