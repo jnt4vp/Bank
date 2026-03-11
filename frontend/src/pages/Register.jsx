@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
 import "../landing.css";
 import "../register.css";
+import { registerAccount } from "../features/auth/api";
 
 const STEPS = [
   { num: 1, label: "Create Account" },
@@ -69,18 +70,45 @@ export default function Register() {
     setError(null);
 
     if (currentStep === 1) {
-      if (password !== confirm) {
-        setError("Passwords do not match.");
+      if (!name.trim()){
+        setError("Name is required.");
+        return;
+      }
+      if (!email.trim()){
+        setError("Email is required.");
         return;
       }
 
-      // Prototype flow only:
-      // When backend is ready, replace this with your actual fetch call.
-      setLoading(true);
-      setTimeout(() => {
-        setLoading(false);
+      if (!password.trim()){
+        setError("Password is required.");
+        return;
+      }
+
+      if (!password.length < 8){
+        setError("Password must be at least 8 characters.")
+      }
+
+      if (password !== confirm){
+        setError("Passwords do not match.");
+      }
+
+      setLoading(true)
+
+      try{
+        await registerAccount({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          phone: phone.trim(),
+        });
+
         setCurrentStep(2);
-      }, 400);
+      } catch (err) {
+        setError(err.message || "Registration failed!");
+      } finally {
+        setLoading(false);
+      }
+
       return;
     }
 
