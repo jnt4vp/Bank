@@ -43,9 +43,9 @@ export default function Landing() {
 
         {/* RIGHT */}
         <div className="right">
-          <div className="dashboard-card">
+          <div className="landing-dashboard-card">
 
-            <div className="progress-ring-wrapper">
+            <div className="landing-progress-ring-wrapper">
               <svg viewBox="0 0 220 220">
                 <defs>
                   <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -63,18 +63,18 @@ export default function Landing() {
                   strokeLinecap="round" strokeDasharray="478" strokeDashoffset="166"
                   transform="rotate(140 110 110)"/>
               </svg>
-              <div className="score-overlay">
-                <div className="score-value">82<span>%</span></div>
-                <div className="score-label">Discipline Score</div>
+              <div className="landing-score-overlay">
+                <div className="landing-score-value">82<span>%</span></div>
+                <div className="landing-score-label">Discipline Score</div>
               </div>
             </div>
 
-            <div className="stats">
-              <div className="stat-row"><strong>$145</strong> automatically<br />transferred to savings</div>
-              <div className="stat-row secondary">3 penalties triggered<br />this month</div>
+            <div className="landing-stats">
+              <div className="landing-stat-row"><strong>$145</strong> automatically<br />transferred to savings</div>
+              <div className="landing-stat-row landing-stat-row-secondary">3 penalties triggered<br />this month</div>
             </div>
 
-            <div className="chart-area">
+            <div className="landing-chart-area">
               <svg viewBox="0 0 400 90" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
