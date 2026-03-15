@@ -8,7 +8,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ENV_FILE = Path(__file__).parent.parent / ".env"
 
-
 INSECURE_DEV_JWT_SECRET = "your-secret-key-change-in-production"
 
 
@@ -20,7 +19,16 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 60
     SQL_ECHO: bool = False
     AUTO_CREATE_TABLES: bool = False
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    CORS_ORIGINS: list[str] = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
     OLLAMA_ENABLED: bool = True
     OLLAMA_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.2:1b"

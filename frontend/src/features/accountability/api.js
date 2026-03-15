@@ -2,11 +2,25 @@ const API_BASE = "http://localhost:8000/api";
 
 function getAuthHeaders() {
   const token = localStorage.getItem("token");
-
-  return {
+  const headers = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
   };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return headers;
+}
+
+async function parseError(response, fallbackMessage) {
+  try {
+    const data = await response.json();
+    return data.detail || fallbackMessage;
+  } catch {
+    const text = await response.text();
+    return text || fallbackMessage;
+  }
 }
 
 export async function saveAccountabilitySettings(payload) {
@@ -17,8 +31,9 @@ export async function saveAccountabilitySettings(payload) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to save accountability settings.");
+    throw new Error(
+      await parseError(response, "Failed to save accountability settings.")
+    );
   }
 
   return response.json();
@@ -31,8 +46,9 @@ export async function getAccountabilitySettings() {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || "Failed to load accountability settings.");
+    throw new Error(
+      await parseError(response, "Failed to load accountability settings.")
+    );
   }
 
   return response.json();

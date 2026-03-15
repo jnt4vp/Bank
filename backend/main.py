@@ -55,6 +55,14 @@ app.include_router(
     tags=["accountability-settings"],
 )
 app.include_router(pact_router, tags=["pacts"])
+@app.middleware("http")
+async def log_options_requests(request, call_next):
+    if request.method == "OPTIONS":
+        print("OPTIONS PATH:", request.url.path)
+        print("Origin:", request.headers.get("origin"))
+        print("Access-Control-Request-Method:", request.headers.get("access-control-request-method"))
+        print("Access-Control-Request-Headers:", request.headers.get("access-control-request-headers"))
+    return await call_next(request)
 
 
 @app.get("/health")
