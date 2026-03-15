@@ -4,7 +4,9 @@ import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
 import "../landing.css";
 import "../register.css";
 import { registerAccount } from "../features/auth/api";
+import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
+
 
 const STEPS = [
   { num: 1, label: "Create Account" },
@@ -74,6 +76,8 @@ export default function Register() {
   const [showPass, setShowPass] = useState(false);
   const [showConf, setShowConf] = useState(false);
   const [phone, setPhone] = useState("");
+
+  const [registeredUser, setRegisteredUser] = useState(null);
 
   const [selectedPactId, setSelectedPactId] = useState("");
   const [pactTitle, setPactTitle] = useState("");
@@ -175,14 +179,20 @@ export default function Register() {
       setLoading(true);
 
       try {
-        await registerAccount({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          password,
-          phone: phone.trim(),
-        });
+        const newUser = await registerAccount({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        phone: phone.trim(),
+      });
+      
+      const createdUser = newUser?.user || newUser?.data || newUser;
+      console.log("REGISTER RESPONSE:", newUser);
+      console.log("CREATED USER:", createdUser);
+      
+      setRegisteredUser(createdUser);
+      setCurrentStep(2);
 
-        setCurrentStep(2);
       } catch (err) {
         setError(err.message || "Registration failed!");
       } finally {
@@ -193,6 +203,11 @@ export default function Register() {
     }
 
     if (currentStep === 2) {
+      if (!registeredUser?.id) {
+        setError("User account was not created correctly. Please restart registration.");
+        return;
+      }
+
       if (!pactTitle.trim()) {
         setError("Please choose a pact.");
         return;
@@ -208,7 +223,25 @@ export default function Register() {
         return;
       }
 
-      goNext();
+      setLoading(true);
+
+      try {
+        await createPact({
+          user_id: registeredUser.id,
+          template_id: selectedPactId || null,
+          title: pactTitle.trim(),
+          reason: pactReason.trim(),
+          goal: pactGoal.trim(),
+          status: "active",
+        });
+
+        goNext();
+      } catch (err) {
+        setError(err.message || "Failed to save pact.");
+      } finally {
+        setLoading(false);
+      }
+
       return;
     }
 
@@ -266,6 +299,7 @@ export default function Register() {
 
     if (currentStep === 4) {
       console.log("Prototype complete:", {
+        registeredUser,
         name,
         email,
         phone,
@@ -593,8 +627,9 @@ export default function Register() {
                     <button
                       type="submit"
                       className="sign-in-btn register-btn-continue"
+                      disabled={loading}
                     >
-                      Continue <span>→</span>
+                      {loading ? "Saving..." : <>Continue <span>→</span></>}
                     </button>
                   </div>
 
@@ -638,7 +673,7 @@ export default function Register() {
                         }
                       />
                       <span>
-                        Redirect part of violating purchases to savings
+                        Send a percentage of violating purchases to savings
                       </span>
                     </label>
 
@@ -760,6 +795,8 @@ export default function Register() {
                       </label>
                     </div>
                   </div>
+
+                  {error && <div className="register-error">{error}</div>}
 
                   <div className="register-action-row">
                     <button

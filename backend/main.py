@@ -14,6 +14,7 @@ from .routers.counter import router as counter_router
 from .routers.transactions import router as transactions_router
 from .application.auth import ensure_dev_seed_user_exists
 from .routers.accountability_settings import router as accountability_settings_router
+from .routers.pact import router as pact_router
 
 settings = get_settings()
 
@@ -53,6 +54,7 @@ app.include_router(
     prefix="/api/accountability-settings",
     tags=["accountability-settings"],
 )
+app.include_router(pact_router, tags=["pacts"])
 
 
 @app.get("/health")
