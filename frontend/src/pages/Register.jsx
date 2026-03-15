@@ -4,12 +4,64 @@ import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
 import "../landing.css";
 import "../register.css";
 import { registerAccount } from "../features/auth/api";
+import { saveAccountabilitySettings } from "../features/accountability/api";
 
 const STEPS = [
   { num: 1, label: "Create Account" },
   { num: 2, label: "Set Your Pact" },
-  { num: 3, label: "Choose Penalties" },
+  { num: 3, label: "Choose Accountability" },
   { num: 4, label: "Connect Bank" },
+];
+
+const PACT_OPTIONS = [
+  {
+    id: "no_eating_out_weekdays",
+    title: "No eating out on weekdays",
+    reason: "Save money and build discipline",
+    goal: "Save $250 this month",
+  },
+  {
+    id: "limit_takeout_once_week",
+    title: "Limit takeout to once per week",
+    reason: "Reduce unnecessary food spending",
+    goal: "Cut takeout costs by $100 this month",
+  },
+  {
+    id: "one_coffee_per_week",
+    title: "Only one coffee shop drink per week",
+    reason: "Lower small daily spending",
+    goal: "Save $40 this month",
+  },
+  {
+    id: "no_online_shopping_month",
+    title: "No online shopping this month",
+    reason: "Avoid impulse purchases",
+    goal: "Save $150 this month",
+  },
+  {
+    id: "weekly_spending_limit",
+    title: "Stay under a weekly spending limit",
+    reason: "Control discretionary spending",
+    goal: "Stay under $75 per week",
+  },
+  {
+    id: "save_fixed_amount",
+    title: "Save a fixed amount this month",
+    reason: "Build savings consistently",
+    goal: "Save $300 this month",
+  },
+  {
+    id: "wait_48_hours",
+    title: "Wait 48 hours before non-essential purchases",
+    reason: "Reduce impulse buying",
+    goal: "Avoid at least 3 impulse purchases this month",
+  },
+  {
+    id: "no_clothing_purchases",
+    title: "No clothing purchases for 30 days",
+    reason: "Pause unnecessary shopping",
+    goal: "Save $100 this month",
+  },
 ];
 
 export default function Register() {
@@ -23,12 +75,14 @@ export default function Register() {
   const [showConf, setShowConf] = useState(false);
   const [phone, setPhone] = useState("");
 
+  const [selectedPactId, setSelectedPactId] = useState("");
   const [pactTitle, setPactTitle] = useState("");
   const [pactReason, setPactReason] = useState("");
   const [pactGoal, setPactGoal] = useState("");
 
-  const [penaltyType, setPenaltyType] = useState("");
-  const [penaltyNote, setPenaltyNote] = useState("");
+  const [accountabilityType, setAccountabilityType] = useState("");
+  const [disciplineSavingsPercent, setDisciplineSavingsPercent] = useState("");
+  const [accountabilityNote, setAccountabilityNote] = useState("");
 
   const [bankChoice, setBankChoice] = useState("");
 
@@ -38,14 +92,32 @@ export default function Register() {
   const navigate = useNavigate();
 
   const EyeBtn = ({ show, onToggle }) => (
-    <button 
-    type="button" 
-    className="register-eye-btn" 
-    onClick={onToggle}
-    aria-label="Toggle password visibility">
+    <button
+      type="button"
+      className="register-eye-btn"
+      onClick={onToggle}
+      aria-label="Toggle password visibility"
+    >
       {show ? <EyeOff size={18} /> : <Eye size={18} />}
     </button>
   );
+
+  const handlePactSelect = (e) => {
+    const selectedId = e.target.value;
+    setSelectedPactId(selectedId);
+
+    const selectedPact = PACT_OPTIONS.find((p) => p.id === selectedId);
+
+    if (selectedPact) {
+      setPactTitle(selectedPact.title);
+      setPactReason(selectedPact.reason);
+      setPactGoal(selectedPact.goal);
+    } else {
+      setPactTitle("");
+      setPactReason("");
+      setPactGoal("");
+    }
+  };
 
   const goNext = () => {
     setError(null);
@@ -70,34 +142,39 @@ export default function Register() {
     setError(null);
 
     if (currentStep === 1) {
-      if (!name.trim()){
+      if (!name.trim()) {
         setError("Name is required.");
         return;
       }
-      if (!email.trim()){
+
+      if (!email.trim()) {
         setError("Email is required.");
         return;
       }
 
-      if (!password.trim()){
+      if (!password.trim()) {
         setError("Password is required.");
         return;
       }
 
-      if (!password.length > 8){
-        setError("Password must be at least 8 characters.")
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters.");
         return;
       }
 
-      if (password !== confirm){
+      if (password !== confirm) {
         setError("Passwords do not match.");
         return;
       }
-      //ToDo: do not let user get pass page 1 if errors occur
 
-      setLoading(true)
+      if (!phone.trim()) {
+        setError("Phone number is required.");
+        return;
+      }
 
-      try{
+      setLoading(true);
+
+      try {
         await registerAccount({
           name: name.trim(),
           email: email.trim().toLowerCase(),
@@ -116,12 +193,74 @@ export default function Register() {
     }
 
     if (currentStep === 2) {
+      if (!pactTitle.trim()) {
+        setError("Please choose a pact.");
+        return;
+      }
+
+      if (!pactReason.trim()) {
+        setError("Please add a reason for your pact.");
+        return;
+      }
+
+      if (!pactGoal.trim()) {
+        setError("Please add a goal for your pact.");
+        return;
+      }
+
       goNext();
       return;
     }
 
     if (currentStep === 3) {
-      goNext();
+      if (!accountabilityType) {
+        setError("Please choose an accountability action.");
+        return;
+      }
+
+      if (
+        (accountabilityType === "savings_percentage" ||
+          accountabilityType === "both") &&
+        !disciplineSavingsPercent.trim()
+      ) {
+        setError("Please enter a discipline savings percentage.");
+        return;
+      }
+
+      const percentValue = Number(disciplineSavingsPercent);
+
+      if (
+        accountabilityType === "savings_percentage" ||
+        accountabilityType === "both"
+      ) {
+        if (Number.isNaN(percentValue) || percentValue <= 0) {
+          setError("Discipline savings percentage must be greater than 0.");
+          return;
+        }
+
+        if (percentValue > 100) {
+          setError("Discipline savings percentage cannot be more than 100.");
+          return;
+        }
+      }
+
+      setLoading(true);
+
+      try {
+        await saveAccountabilitySettings({
+          accountability_type: accountabilityType,
+          discipline_savings_percentage:
+            accountabilityType === "email" ? 0 : percentValue,
+          accountability_note: accountabilityNote.trim(),
+        });
+
+        goNext();
+      } catch (err) {
+        setError(err.message || "Failed to save accountability settings.");
+      } finally {
+        setLoading(false);
+      }
+
       return;
     }
 
@@ -130,11 +269,13 @@ export default function Register() {
         name,
         email,
         phone,
+        selectedPactId,
         pactTitle,
         pactReason,
         pactGoal,
-        penaltyType,
-        penaltyNote,
+        accountabilityType,
+        disciplineSavingsPercent,
+        accountabilityNote,
         bankChoice,
       });
 
@@ -189,8 +330,8 @@ export default function Register() {
               alt="Financial growth illustration"
             />
             <span className="visual-chip chip-goals">Set Goals</span>
-            <span className="visual-chip chip-penalties">Add Penalties</span>
-            <span className="visual-chip chip-discipline">Stay Disciplined</span>
+            <span className="visual-chip chip-penalties">Build Discipline</span>
+            <span className="visual-chip chip-discipline">Save Smarter</span>
           </div>
         </div>
 
@@ -236,7 +377,7 @@ export default function Register() {
                   <label className="register-field-label">Full Name</label>
                   <div className="register-input-row">
                     <span className="register-input-icon">
-                        <User size={16} strokeWidth={1.5} />
+                      <User size={16} strokeWidth={1.5} />
                     </span>
                     <input
                       className="register-input"
@@ -250,7 +391,7 @@ export default function Register() {
                   <label className="register-field-label">Email</label>
                   <div className="register-input-row">
                     <span className="register-input-icon">
-                        <Mail size={16} strokeWidth={1.5} />
+                      <Mail size={16} strokeWidth={1.5} />
                     </span>
                     <input
                       className="register-input"
@@ -265,7 +406,7 @@ export default function Register() {
                   <label className="register-field-label">Password</label>
                   <div className="register-input-row">
                     <span className="register-input-icon">
-                        <Lock size={16} strokeWidth={1.5} />
+                      <Lock size={16} strokeWidth={1.5} />
                     </span>
                     <input
                       className="register-input has-right"
@@ -288,7 +429,7 @@ export default function Register() {
                   </label>
                   <div className="register-input-row">
                     <span className="register-input-icon">
-                        <Lock size={16} strokeWidth={1.5} />
+                      <Lock size={16} strokeWidth={1.5} />
                     </span>
                     <input
                       className="register-input has-right"
@@ -309,7 +450,7 @@ export default function Register() {
                   <label className="register-field-label">Phone Number</label>
                   <div className="register-input-row">
                     <span className="register-input-icon">
-                        <Phone size={16} strokeWidth={1.5} />
+                      <Phone size={16} strokeWidth={1.5} />
                     </span>
                     <input
                       className="register-input"
@@ -359,16 +500,27 @@ export default function Register() {
                     Continue with Google
                   </button>
 
-                <p className="registerpage-link">
-                    <span style={{opacity: 0.6, fontWeight: 500, fontSize: "15px" }}>
-                        Already have an account?{" "}
+                  <p className="registerpage-link">
+                    <span
+                      style={{
+                        opacity: 0.6,
+                        fontWeight: 500,
+                        fontSize: "15px",
+                      }}
+                    >
+                      Already have an account?{" "}
                     </span>
                     <Link
                       to="/"
                       className="register-signin-glow"
-                      style={{color: "#B8962E", fontWeight: 600, textDecoration: "none", fontSize: "15px"}}
+                      style={{
+                        color: "#B8962E",
+                        fontWeight: 600,
+                        textDecoration: "none",
+                        fontSize: "15px",
+                      }}
                     >
-                        Sign In
+                      Sign In
                     </Link>
                   </p>
                 </>
@@ -381,7 +533,23 @@ export default function Register() {
                     Choose a promise you want your money to support.
                   </p>
 
-                  <label className="register-field-label">Demo</label>
+                  <label className="register-field-label">Choose a pact</label>
+                  <div className="register-input-row">
+                    <select
+                      className="register-input"
+                      value={selectedPactId}
+                      onChange={handlePactSelect}
+                    >
+                      <option value="">Select a pact</option>
+                      {PACT_OPTIONS.map((pact) => (
+                        <option key={pact.id} value={pact.id}>
+                          {pact.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <label className="register-field-label">Your pact</label>
                   <div className="register-input-row">
                     <input
                       className="register-input"
@@ -391,7 +559,7 @@ export default function Register() {
                     />
                   </div>
 
-                  <label className="register-field-label">Demo</label>
+                  <label className="register-field-label">Why this pact?</label>
                   <div className="register-input-row">
                     <input
                       className="register-input"
@@ -401,7 +569,7 @@ export default function Register() {
                     />
                   </div>
 
-                  <label className="register-field-label">Demo</label>
+                  <label className="register-field-label">Your goal</label>
                   <div className="register-input-row">
                     <input
                       className="register-input"
@@ -442,52 +610,97 @@ export default function Register() {
 
               {currentStep === 3 && (
                 <>
-                  <h2 className="register-card-title">Choose penalties</h2>
+                  <h2 className="register-card-title">
+                    Choose accountability actions
+                  </h2>
                   <p className="register-card-sub">
-                    Add consequences that keep you accountable.
+                    Set what happens if you break your pact.
                   </p>
 
                   <div className="penalty-prototype-list">
                     <label className="prototype-option">
                       <input
                         type="radio"
-                        name="penalty"
-                        checked={penaltyType === "savings"}
-                        onChange={() => setPenaltyType("savings")}
+                        name="accountability"
+                        checked={accountabilityType === "email"}
+                        onChange={() => setAccountabilityType("email")}
                       />
-                      <span>Demo</span>
+                      <span>Send me an acknowledgment email</span>
                     </label>
 
                     <label className="prototype-option">
                       <input
                         type="radio"
-                        name="penalty"
-                        checked={penaltyType === "fee"}
-                        onChange={() => setPenaltyType("fee")}
+                        name="accountability"
+                        checked={accountabilityType === "savings_percentage"}
+                        onChange={() =>
+                          setAccountabilityType("savings_percentage")
+                        }
                       />
-                      <span>Demo</span>
+                      <span>
+                        Redirect part of violating purchases to savings
+                      </span>
                     </label>
 
                     <label className="prototype-option">
                       <input
                         type="radio"
-                        name="penalty"
-                        checked={penaltyType === "custom"}
-                        onChange={() => setPenaltyType("custom")}
+                        name="accountability"
+                        checked={accountabilityType === "both"}
+                        onChange={() => setAccountabilityType("both")}
                       />
-                      <span>Demo</span>
+                      <span>Send email and redirect to savings</span>
                     </label>
                   </div>
 
-                  <label className="register-field-label">Penalty Note</label>
-                  <div className="register-input-row">
-                    <input
-                      className="register-input"
-                      value={penaltyNote}
-                      onChange={(e) => setPenaltyNote(e.target.value)}
-                      placeholder="Example: Charge $15 after 3 failed attempts"
-                    />
-                  </div>
+                  {(accountabilityType === "savings_percentage" ||
+                    accountabilityType === "both") && (
+                    <>
+                      <label className="register-field-label">
+                        Discipline savings percentage
+                      </label>
+                      <div className="register-input-row">
+                        <input
+                          className="register-input"
+                          type="number"
+                          min="1"
+                          max="100"
+                          step="1"
+                          value={disciplineSavingsPercent}
+                          onChange={(e) =>
+                            setDisciplineSavingsPercent(e.target.value)
+                          }
+                          placeholder="Example: 25"
+                        />
+                      </div>
+                      <p
+                        className="register-card-sub"
+                        style={{ marginTop: "8px" }}
+                      >
+                        If you break your pact, this percentage of the purchase
+                        will be redirected to your savings.
+                      </p>
+                    </>
+                  )}
+
+                  {(accountabilityType === "email" ||
+                    accountabilityType === "both") && (
+                    <>
+                      <label className="register-field-label">
+                        Accountability note
+                      </label>
+                      <div className="register-input-row">
+                        <input
+                          className="register-input"
+                          value={accountabilityNote}
+                          onChange={(e) => setAccountabilityNote(e.target.value)}
+                          placeholder="Example: Remind me why I made this pact"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {error && <div className="register-error">{error}</div>}
 
                   <div className="register-action-row">
                     <button
@@ -501,8 +714,9 @@ export default function Register() {
                     <button
                       type="submit"
                       className="sign-in-btn register-btn-continue"
+                      disabled={loading}
                     >
-                      Continue <span>→</span>
+                      {loading ? "Saving..." : <>Continue <span>→</span></>}
                     </button>
                   </div>
 
@@ -532,7 +746,7 @@ export default function Register() {
                           checked={bankChoice === "plaid"}
                           onChange={() => setBankChoice("plaid")}
                         />
-                    
+                        <span>Connect with Plaid</span>
                       </label>
 
                       <label className="prototype-option">
@@ -542,7 +756,7 @@ export default function Register() {
                           checked={bankChoice === "manual"}
                           onChange={() => setBankChoice("manual")}
                         />
-                    
+                        <span>Set up manually later</span>
                       </label>
                     </div>
                   </div>

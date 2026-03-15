@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..database import Base
 
@@ -23,5 +23,16 @@ class User(Base):
     discipline_savings_percentage: Mapped[float] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"
     )
-    reset_token: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
-    reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reset_token: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, unique=True, index=True
+    )
+    reset_token_expires: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    accountability_settings = relationship(
+        "AccountabilitySettings",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

@@ -13,6 +13,7 @@ from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
 from .routers.transactions import router as transactions_router
 from .application.auth import ensure_dev_seed_user_exists
+from .routers.accountability_settings import router as accountability_settings_router
 
 settings = get_settings()
 
@@ -47,6 +48,11 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(counter_router, prefix="/api/counter", tags=["counter"])
 app.include_router(transactions_router, prefix="/api/transactions", tags=["transactions"])
+app.include_router(
+    accountability_settings_router,
+    prefix="/api/accountability-settings",
+    tags=["accountability-settings"],
+)
 
 
 @app.get("/health")

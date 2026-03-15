@@ -2,22 +2,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import inspect
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings
 from ..models.user import User
 from ..ports.notifier import NotifierPort
-from ..security import create_access_token
+from ..security import (
+    InvalidTokenError,
+    create_access_token,
+    decode_access_token_subject,
+)
 from ..services.auth import (
-    authenticate_user,
     DuplicateEmailError,
+    authenticate_user,
     ensure_dev_seed_user as seed_dev_user,
     generate_reset_token,
     register_user,
     reset_password,
 )
+
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,42 @@ class RegistrationResult:
 class LoginResult:
     access_token: str
     token_type: str = "bearer"
+
+
+async def get_db():
+    from ..database import async_session
+
+    async with async_session() as session:
+        yield session
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise credentials_exception
+
+    token = credentials.credentials
+
+    try:
+        user_id = decode_access_token_subject(token)
+    except InvalidTokenError:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise credentials_exception
+
+    return user
 
 
 async def register_account(
@@ -85,6 +128,8 @@ async def send_password_reset_link(
     except Exception:
         await db.rollback()
         raise
+
+    from ..config import get_settings
 
     settings = get_settings()
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
