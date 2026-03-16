@@ -23,6 +23,7 @@ def upgrade() -> None:
     op.add_column("pacts", sa.Column("custom_category", sa.String(), nullable=True))
     op.add_column("pacts", sa.Column("category", sa.String(), nullable=True))
 
+    # migrate old title into category
     op.execute("UPDATE pacts SET category = title WHERE title IS NOT NULL")
 
     op.alter_column("pacts", "category", nullable=False)

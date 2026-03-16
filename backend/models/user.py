@@ -30,9 +30,8 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    accountability_settings = relationship(
-        "AccountabilitySettings",
+    pacts = relationship(
+        "Pact",
         back_populates="user",
-        uselist=False,
         cascade="all, delete-orphan",
     )

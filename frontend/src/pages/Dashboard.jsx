@@ -11,6 +11,46 @@ const primaryNavItems = [
   { label: 'Analytics', to: '#', disabled: true },
 ]
 
+const CATEGORY_STYLES = {
+  food: 'dot-food',
+  dining: 'dot-food',
+  restaurant: 'dot-food',
+  groceries: 'dot-food',
+  shopping: 'dot-shopping',
+  retail: 'dot-shopping',
+  subscriptions: 'dot-subscriptions',
+  subscription: 'dot-subscriptions',
+  other: 'dot-other',
+}
+
+function formatCurrency(value) {
+  return `$${Number(value || 0).toFixed(2)}`
+}
+
+function isToday(dateString) {
+  if (!dateString) return false
+  const date = new Date(dateString)
+  const now = new Date()
+
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  )
+}
+
+function normalizeCategory(category) {
+  if (!category) return 'Other'
+  return category
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function getCategoryDotClass(category) {
+  const key = String(category || '').toLowerCase()
+  return CATEGORY_STYLES[key] || 'dot-other'
+}
+
 export default function Dashboard() {
   const { user, token, logout } = useAuth()
   const firstName = user?.name?.split(' ')[0] || 'there'
@@ -22,23 +62,57 @@ export default function Dashboard() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setLoading(false)
+      return
+    }
 
     let cancelled = false
 
-    apiRequest('/api/transactions/', { token })
-      .then((data) => {
-        if (cancelled) return
-        setTransactions(Array.isArray(data) ? data : data?.results || [])
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err.message || 'Something went wrong.')
-      })
-      .finally(() => {
-        if (cancelled) return
-        setLoading(false)
-      })
+    async function loadTransactions() {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const data = await apiRequest('/api/transactions/', { token })
+
+        const rawTransactions = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.results)
+            ? data.results
+            : Array.isArray(data?.transactions)
+              ? data.transactions
+              : []
+
+        const normalizedTransactions = rawTransactions
+          .map((tx) => ({
+            id: tx.id,
+            user_id: tx.user_id,
+            merchant: tx.merchant || tx.description || 'Unknown merchant',
+            category: tx.category || 'Other',
+            amount: Number(tx.amount || 0),
+            flagged: Boolean(tx.flagged),
+            flag_reason: tx.flag_reason || '',
+            created_at: tx.created_at,
+            description: tx.description || '',
+          }))
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+        if (!cancelled) {
+          setTransactions(normalizedTransactions)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || 'Something went wrong.')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    }
+
+    loadTransactions()
 
     return () => {
       cancelled = true
@@ -80,8 +154,41 @@ export default function Dashboard() {
     )
   }, [transactions, flaggedCount])
 
-  const recentTransactions = transactions.slice(0, 4)
+  const recentTransactions = useMemo(
+    () => transactions.slice(0, 4),
+    [transactions]
+  )
+
   const bankConnected = transactions.length > 0
+
+  const todayTransactions = useMemo(
+    () => transactions.filter((tx) => isToday(tx.created_at)),
+    [transactions]
+  )
+
+  const todayTotal = useMemo(
+    () => todayTransactions.reduce((sum, tx) => sum + tx.amount, 0),
+    [todayTransactions]
+  )
+
+  const categoryBreakdown = useMemo(() => {
+    if (todayTransactions.length === 0) return []
+
+    const totals = todayTransactions.reduce((acc, tx) => {
+      const category = normalizeCategory(tx.category)
+      acc[category] = (acc[category] || 0) + tx.amount
+      return acc
+    }, {})
+
+    return Object.entries(totals)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+        percent: todayTotal > 0 ? Math.round((amount / todayTotal) * 100) : 0,
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 4)
+  }, [todayTransactions, todayTotal])
 
   return (
     <div className="dashboard-shell">
@@ -180,8 +287,12 @@ export default function Dashboard() {
         </div>
 
         <div className="dashboard-hero-actions">
-          <div className="dashboard-pill">Placeholder</div>
-          <button className="dashboard-pill dashboard-pill-action" type="button">Placeholder View →</button>
+          <div className="dashboard-pill">
+            {loading ? 'Loading activity...' : `${transactions.length} Transactions`}
+          </div>
+          <button className="dashboard-pill dashboard-pill-action" type="button">
+            View Insights →
+          </button>
         </div>
       </section>
 
@@ -202,13 +313,13 @@ export default function Dashboard() {
           ) : (
             <>
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Checking</p>
-                <p className="dashboard-stat">$2,845.12</p>
+                <p className="dashboard-card-label">Transactions</p>
+                <p className="dashboard-stat">{transactions.length}</p>
               </div>
 
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Savings</p>
-                <p className="dashboard-stat">$6,410.55</p>
+                <p className="dashboard-card-label">Flagged Purchases</p>
+                <p className="dashboard-stat">{flaggedCount}</p>
               </div>
             </>
           )}
@@ -221,7 +332,9 @@ export default function Dashboard() {
           <div className="dashboard-card dashboard-score-card dashboard-card-hero-accent">
             <div>
               <p className="dashboard-card-label">Discipline Score</p>
-              <p className="dashboard-score-copy">+4 this week</p>
+              <p className="dashboard-score-copy">
+                {flaggedCount} flagged of {transactions.length} total
+              </p>
             </div>
 
             <div className="dashboard-score-ring">
@@ -236,48 +349,37 @@ export default function Dashboard() {
           <div className="dashboard-card dashboard-panel dashboard-panel-hero">
             <div className="dashboard-panel-header">
               <h2>Today</h2>
-              <span>$365 total</span>
+              <span>{formatCurrency(todayTotal)} total</span>
             </div>
 
             <div className="dashboard-analytics-card">
               <div className="dashboard-donut-wrap">
                 <div className="dashboard-donut">
-                  <div className="dashboard-donut-center">$365</div>
+                  <div className="dashboard-donut-center">
+                    {formatCurrency(todayTotal)}
+                  </div>
                 </div>
               </div>
 
               <div className="dashboard-category-list">
-                <div className="dashboard-category-row">
-                  <span><i className="dot dot-food" />Food</span>
-                  <strong>58%</strong>
-                </div>
-                <div className="dashboard-category-bar">
-                  <span style={{ width: '58%' }} />
-                </div>
-
-                <div className="dashboard-category-row">
-                  <span><i className="dot dot-shopping" />Shopping</span>
-                  <strong>22%</strong>
-                </div>
-                <div className="dashboard-category-bar">
-                  <span style={{ width: '22%' }} />
-                </div>
-
-                <div className="dashboard-category-row">
-                  <span><i className="dot dot-subscriptions" />Subscriptions</span>
-                  <strong>12%</strong>
-                </div>
-                <div className="dashboard-category-bar">
-                  <span style={{ width: '12%' }} />
-                </div>
-
-                <div className="dashboard-category-row">
-                  <span><i className="dot dot-other" />Other</span>
-                  <strong>8%</strong>
-                </div>
-                <div className="dashboard-category-bar">
-                  <span style={{ width: '8%' }} />
-                </div>
+                {categoryBreakdown.length === 0 ? (
+                  <p className="dashboard-empty">No transactions for today yet.</p>
+                ) : (
+                  categoryBreakdown.map((item) => (
+                    <div key={item.category}>
+                      <div className="dashboard-category-row">
+                        <span>
+                          <i className={`dot ${getCategoryDotClass(item.category)}`} />
+                          {item.category}
+                        </span>
+                        <strong>{item.percent}%</strong>
+                      </div>
+                      <div className="dashboard-category-bar">
+                        <span style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -328,7 +430,10 @@ export default function Dashboard() {
                     <div className="dashboard-activity-main">
                       <div className="dashboard-activity-merchant">{tx.merchant}</div>
                       <div className="dashboard-activity-meta">
-                        {new Date(tx.created_at).toLocaleDateString()} · {tx.category || '—'}
+                        {tx.created_at
+                          ? new Date(tx.created_at).toLocaleDateString()
+                          : '—'}{' '}
+                        · {normalizeCategory(tx.category)}
                       </div>
 
                       {tx.flagged && (
@@ -336,10 +441,14 @@ export default function Dashboard() {
                           ⚠ {tx.flag_reason || 'Flagged purchase'}
                         </div>
                       )}
+
+                      {!tx.flagged && tx.description && (
+                        <div className="dashboard-activity-meta">{tx.description}</div>
+                      )}
                     </div>
 
                     <div className={`dashboard-activity-amount ${tx.flagged ? 'is-flagged' : ''}`}>
-                      ${Number(tx.amount).toFixed(2)}
+                      {formatCurrency(tx.amount)}
                     </div>
                   </div>
                 ))}
@@ -354,13 +463,21 @@ export default function Dashboard() {
 
             <div className="dashboard-insight-card">
               <p className="dashboard-insight-copy">
-                You spend <strong>38% more on food after 9PM.</strong>
+                {flaggedCount > 0 ? (
+                  <>
+                    You have <strong>{flaggedCount} flagged purchase{flaggedCount === 1 ? '' : 's'}</strong> in your recent activity.
+                  </>
+                ) : (
+                  <>
+                    No flagged purchases detected <strong>in your recent activity.</strong>
+                  </>
+                )}
               </p>
-              <p className="dashboard-insight-suggestion">
-                Suggestion:
-              </p>
+              <p className="dashboard-insight-suggestion">Suggestion:</p>
               <p className="dashboard-insight-copy">
-                Block food delivery after 8PM.
+                {flaggedCount > 0
+                  ? 'Review the flagged categories and tighten your pact rules around those purchases.'
+                  : 'Keep going. Your current transactions are staying within your pact more consistently.'}
               </p>
 
               <div className="dashboard-insight-chart">

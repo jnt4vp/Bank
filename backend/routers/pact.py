@@ -30,7 +30,6 @@ async def create_pact(payload: PactCreate, db: AsyncSession = Depends(get_db)):
 
     new_pact = Pact(
         user_id=payload.user_id,
-        template_id=payload.template_id,
         preset_category=payload.preset_category,
         custom_category=payload.custom_category,
         category=final_category,
@@ -60,7 +59,7 @@ async def get_user_pacts(user_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Pact)
         .where(Pact.user_id == user_id)
-        .order_by(Pact.created_at.desc())
+        .order_by(Pact.category.asc())
     )
     return result.scalars().all()
 

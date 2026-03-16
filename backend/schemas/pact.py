@@ -1,5 +1,4 @@
 from uuid import UUID
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, model_validator
@@ -7,7 +6,6 @@ from pydantic import BaseModel, model_validator
 
 class PactCreate(BaseModel):
     user_id: UUID
-    template_id: Optional[UUID] = None
     preset_category: Optional[str] = None
     custom_category: Optional[str] = None
     category: Optional[str] = None
@@ -27,7 +25,6 @@ class PactCreate(BaseModel):
 
 
 class PactUpdate(BaseModel):
-    template_id: Optional[UUID] = None
     preset_category: Optional[str] = None
     custom_category: Optional[str] = None
     category: Optional[str] = None
@@ -47,12 +44,10 @@ class PactUpdate(BaseModel):
 class PactResponse(BaseModel):
     id: UUID
     user_id: UUID
-    template_id: Optional[UUID] = None
     preset_category: Optional[str] = None
     custom_category: Optional[str] = None
     category: str
     status: str
-    created_at: datetime
 
     class Config:
         from_attributes = True

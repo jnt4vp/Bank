@@ -39,8 +39,8 @@ export async function saveAccountabilitySettings(payload) {
   return response.json();
 }
 
-export async function getAccountabilitySettings() {
-  const response = await fetch(`${API_BASE}/accountability-settings`, {
+export async function getAccountabilitySettings(pactId) {
+  const response = await fetch(`${API_BASE}/accountability-settings/${pactId}`, {
     method: "GET",
     headers: getAuthHeaders(),
   });

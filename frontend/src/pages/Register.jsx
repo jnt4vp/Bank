@@ -37,6 +37,7 @@ export default function Register() {
   const [phone, setPhone] = useState("");
 
   const [registeredUser, setRegisteredUser] = useState(null);
+  const [createdPact, setCreatedPact] = useState(null);
 
   const [selectedPactId, setSelectedPactId] = useState("");
   const [customPactTitle, setCustomPactTitle] = useState("");
@@ -177,14 +178,23 @@ export default function Register() {
       setLoading(true);
 
       try {
-        await createPact({
+        const pactResponse = await createPact({
           user_id: registeredUser.id,
-          template_id: null,
           preset_category: presetCategory,
           custom_category: customCategory,
           status: "active",
         });
 
+        const pact = pactResponse?.data || pactResponse;
+
+        console.log("PACT CREATE RESPONSE:", pactResponse);
+        console.log("CREATED PACT:", pact);
+
+        if (!pact?.id) {
+          throw new Error("Pact was created but no pact id was returned.");
+        }
+
+        setCreatedPact(pact);
         goNext();
       } catch (err) {
         console.error("PACT CREATE ERROR:", err);
@@ -202,6 +212,11 @@ export default function Register() {
     }
 
     if (currentStep === 3) {
+      if (!createdPact?.id) {
+        setError("Pact was not created correctly. Please go back and try again.");
+        return;
+      }
+
       if (!accountabilityType) {
         setError("Please choose an accountability action.");
         return;
@@ -236,12 +251,18 @@ export default function Register() {
       setLoading(true);
 
       try {
-        await saveAccountabilitySettings({
+        const accountabilityResponse = await saveAccountabilitySettings({
+          pact_id: createdPact.id,
           accountability_type: accountabilityType,
           discipline_savings_percentage:
             accountabilityType === "email" ? 0 : percentValue,
-          accountability_note: accountabilityNote.trim(),
+          accountability_note: accountabilityNote.trim() || null,
         });
+
+        console.log(
+          "ACCOUNTABILITY SETTINGS RESPONSE:",
+          accountabilityResponse
+        );
 
         goNext();
       } catch (err) {
@@ -262,6 +283,7 @@ export default function Register() {
     if (currentStep === 4) {
       console.log("Prototype complete:", {
         registeredUser,
+        createdPact,
         name,
         email,
         phone,

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import async_session
 from ..models.user import User
+from ..models.pact import Pact
 from ..models.accountability_settings import AccountabilitySettings
 from ..schemas.accountability_settings import (
     AccountabilitySettingsCreate,
@@ -26,87 +27,90 @@ async def upsert_accountability_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    user_result = await db.execute(select(User).where(User.id == current_user.id))
-    db_user = user_result.scalar_one_or_none()
+    pact_result = await db.execute(
+        select(Pact).where(
+            Pact.id == payload.pact_id,
+            Pact.user_id == current_user.id,
+        )
+    )
+    pact = pact_result.scalar_one_or_none()
 
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    db_user.discipline_savings_percentage = payload.discipline_savings_percentage
+    if pact is None:
+        raise HTTPException(status_code=404, detail="Pact not found")
 
     result = await db.execute(
         select(AccountabilitySettings).where(
-            AccountabilitySettings.user_id == current_user.id
+            AccountabilitySettings.pact_id == payload.pact_id
         )
     )
     settings = result.scalar_one_or_none()
 
     if settings is None:
         settings = AccountabilitySettings(
-            user_id=current_user.id,
+            pact_id=payload.pact_id,
             accountability_type=payload.accountability_type,
+            discipline_savings_percentage=payload.discipline_savings_percentage,
             accountability_note=payload.accountability_note,
         )
         db.add(settings)
     else:
         settings.accountability_type = payload.accountability_type
+        settings.discipline_savings_percentage = payload.discipline_savings_percentage
         settings.accountability_note = payload.accountability_note
 
     await db.commit()
 
-    # re-query after commit to avoid refresh/session weirdness
     refreshed_result = await db.execute(
         select(AccountabilitySettings).where(
-            AccountabilitySettings.user_id == current_user.id
+            AccountabilitySettings.pact_id == payload.pact_id
         )
     )
     refreshed_settings = refreshed_result.scalar_one()
 
-    refreshed_user_result = await db.execute(
-        select(User).where(User.id == current_user.id)
-    )
-    refreshed_user = refreshed_user_result.scalar_one()
-
     return AccountabilitySettingsOut(
+        id=refreshed_settings.id,
+        pact_id=refreshed_settings.pact_id,
         accountability_type=refreshed_settings.accountability_type,
         accountability_note=refreshed_settings.accountability_note,
         discipline_savings_percentage=float(
-            refreshed_user.discipline_savings_percentage or 0
+            refreshed_settings.discipline_savings_percentage or 0
         ),
     )
 
 
-@router.get("", response_model=AccountabilitySettingsOut)
+@router.get("/{pact_id}", response_model=AccountabilitySettingsOut)
 async def get_accountability_settings(
+    pact_id,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    user_result = await db.execute(select(User).where(User.id == current_user.id))
-    db_user = user_result.scalar_one_or_none()
+    pact_result = await db.execute(
+        select(Pact).where(
+            Pact.id == pact_id,
+            Pact.user_id == current_user.id,
+        )
+    )
+    pact = pact_result.scalar_one_or_none()
 
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    if pact is None:
+        raise HTTPException(status_code=404, detail="Pact not found")
 
     result = await db.execute(
         select(AccountabilitySettings).where(
-            AccountabilitySettings.user_id == current_user.id
+            AccountabilitySettings.pact_id == pact_id
         )
     )
     settings = result.scalar_one_or_none()
 
     if settings is None:
-        return AccountabilitySettingsOut(
-            accountability_type="",
-            accountability_note=None,
-            discipline_savings_percentage=float(
-                db_user.discipline_savings_percentage or 0
-            ),
-        )
+        raise HTTPException(status_code=404, detail="Accountability settings not found")
 
     return AccountabilitySettingsOut(
+        id=settings.id,
+        pact_id=settings.pact_id,
         accountability_type=settings.accountability_type,
         accountability_note=settings.accountability_note,
         discipline_savings_percentage=float(
-            db_user.discipline_savings_percentage or 0
+            settings.discipline_savings_percentage or 0
         ),
     )
