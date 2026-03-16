@@ -14,12 +14,26 @@ router = APIRouter(prefix="/api/pacts", tags=["pacts"])
 
 @router.post("", response_model=PactResponse, status_code=status.HTTP_201_CREATED)
 async def create_pact(payload: PactCreate, db: AsyncSession = Depends(get_db)):
+    final_category = (
+        payload.custom_category.strip()
+        if payload.custom_category and payload.custom_category.strip()
+        else payload.preset_category.strip()
+        if payload.preset_category and payload.preset_category.strip()
+        else None
+    )
+
+    if not final_category:
+        raise HTTPException(
+            status_code=400,
+            detail="A preset category or custom category is required."
+        )
+
     new_pact = Pact(
         user_id=payload.user_id,
         template_id=payload.template_id,
-        title=payload.title,
-        reason=payload.reason,
-        goal=payload.goal,
+        preset_category=payload.preset_category,
+        custom_category=payload.custom_category,
+        category=final_category,
         status=payload.status or "active",
     )
 
@@ -48,7 +62,6 @@ async def get_user_pacts(user_id: UUID, db: AsyncSession = Depends(get_db)):
         .where(Pact.user_id == user_id)
         .order_by(Pact.created_at.desc())
     )
-
     return result.scalars().all()
 
 
@@ -64,6 +77,20 @@ async def update_pact(pact_id: UUID, payload: PactUpdate, db: AsyncSession = Dep
 
     for field, value in update_data.items():
         setattr(pact, field, value)
+
+    pact.category = (
+        pact.custom_category.strip()
+        if pact.custom_category and pact.custom_category.strip()
+        else pact.preset_category.strip()
+        if pact.preset_category and pact.preset_category.strip()
+        else None
+    )
+
+    if not pact.category:
+        raise HTTPException(
+            status_code=400,
+            detail="A preset category or custom category is required."
+        )
 
     await db.commit()
     await db.refresh(pact)

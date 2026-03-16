@@ -7,63 +7,22 @@ import { registerAccount } from "../features/auth/api";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
 
-
 const STEPS = [
   { num: 1, label: "Create Account" },
-  { num: 2, label: "Set Your Pact" },
+  { num: 2, label: "Choose Spending Pact" },
   { num: 3, label: "Choose Accountability" },
   { num: 4, label: "Connect Bank" },
 ];
 
 const PACT_OPTIONS = [
-  {
-    id: "no_eating_out_weekdays",
-    title: "No eating out on weekdays",
-    reason: "Save money and build discipline",
-    goal: "Save $250 this month",
-  },
-  {
-    id: "limit_takeout_once_week",
-    title: "Limit takeout to once per week",
-    reason: "Reduce unnecessary food spending",
-    goal: "Cut takeout costs by $100 this month",
-  },
-  {
-    id: "one_coffee_per_week",
-    title: "Only one coffee shop drink per week",
-    reason: "Lower small daily spending",
-    goal: "Save $40 this month",
-  },
-  {
-    id: "no_online_shopping_month",
-    title: "No online shopping this month",
-    reason: "Avoid impulse purchases",
-    goal: "Save $150 this month",
-  },
-  {
-    id: "weekly_spending_limit",
-    title: "Stay under a weekly spending limit",
-    reason: "Control discretionary spending",
-    goal: "Stay under $75 per week",
-  },
-  {
-    id: "save_fixed_amount",
-    title: "Save a fixed amount this month",
-    reason: "Build savings consistently",
-    goal: "Save $300 this month",
-  },
-  {
-    id: "wait_48_hours",
-    title: "Wait 48 hours before non-essential purchases",
-    reason: "Reduce impulse buying",
-    goal: "Avoid at least 3 impulse purchases this month",
-  },
-  {
-    id: "no_clothing_purchases",
-    title: "No clothing purchases for 30 days",
-    reason: "Pause unnecessary shopping",
-    goal: "Save $100 this month",
-  },
+  { id: "dining_out", title: "Dining out" },
+  { id: "coffee_shops", title: "Coffee shops" },
+  { id: "online_shopping", title: "Online shopping" },
+  { id: "entertainment", title: "Entertainment" },
+  { id: "ride_share", title: "Ride share" },
+  { id: "fast_food", title: "Fast food" },
+  { id: "convenience_store", title: "Convenience stores" },
+  { id: "general_discretionary", title: "Non-essential spending" },
 ];
 
 export default function Register() {
@@ -80,9 +39,7 @@ export default function Register() {
   const [registeredUser, setRegisteredUser] = useState(null);
 
   const [selectedPactId, setSelectedPactId] = useState("");
-  const [pactTitle, setPactTitle] = useState("");
-  const [pactReason, setPactReason] = useState("");
-  const [pactGoal, setPactGoal] = useState("");
+  const [customPactTitle, setCustomPactTitle] = useState("");
 
   const [accountabilityType, setAccountabilityType] = useState("");
   const [disciplineSavingsPercent, setDisciplineSavingsPercent] = useState("");
@@ -107,20 +64,11 @@ export default function Register() {
   );
 
   const handlePactSelect = (e) => {
-    const selectedId = e.target.value;
-    setSelectedPactId(selectedId);
+    setSelectedPactId(e.target.value);
+  };
 
-    const selectedPact = PACT_OPTIONS.find((p) => p.id === selectedId);
-
-    if (selectedPact) {
-      setPactTitle(selectedPact.title);
-      setPactReason(selectedPact.reason);
-      setPactGoal(selectedPact.goal);
-    } else {
-      setPactTitle("");
-      setPactReason("");
-      setPactGoal("");
-    }
+  const handleCustomPactChange = (e) => {
+    setCustomPactTitle(e.target.value);
   };
 
   const goNext = () => {
@@ -180,21 +128,27 @@ export default function Register() {
 
       try {
         const newUser = await registerAccount({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-        phone: phone.trim(),
-      });
-      
-      const createdUser = newUser?.user || newUser?.data || newUser;
-      console.log("REGISTER RESPONSE:", newUser);
-      console.log("CREATED USER:", createdUser);
-      
-      setRegisteredUser(createdUser);
-      setCurrentStep(2);
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          phone: phone.trim(),
+        });
 
+        const createdUser = newUser?.user || newUser?.data || newUser;
+
+        console.log("REGISTER RESPONSE:", newUser);
+        console.log("CREATED USER:", createdUser);
+
+        setRegisteredUser(createdUser);
+        setCurrentStep(2);
       } catch (err) {
-        setError(err.message || "Registration failed!");
+        console.error("REGISTER ERROR:", err);
+        setError(
+          err?.detail ||
+            err?.message ||
+            JSON.stringify(err) ||
+            "Registration failed."
+        );
       } finally {
         setLoading(false);
       }
@@ -204,22 +158,19 @@ export default function Register() {
 
     if (currentStep === 2) {
       if (!registeredUser?.id) {
-        setError("User account was not created correctly. Please restart registration.");
+        setError(
+          "User account was not created correctly. Please restart registration."
+        );
         return;
       }
 
-      if (!pactTitle.trim()) {
-        setError("Please choose a pact.");
-        return;
-      }
+      const selectedPact = PACT_OPTIONS.find((p) => p.id === selectedPactId);
+      const presetCategory = selectedPact?.title || null;
+      const customCategory = customPactTitle.trim() || null;
+      const finalCategory = customCategory || presetCategory;
 
-      if (!pactReason.trim()) {
-        setError("Please add a reason for your pact.");
-        return;
-      }
-
-      if (!pactGoal.trim()) {
-        setError("Please add a goal for your pact.");
+      if (!finalCategory) {
+        setError("Please choose a pact or enter your own category.");
         return;
       }
 
@@ -228,16 +179,21 @@ export default function Register() {
       try {
         await createPact({
           user_id: registeredUser.id,
-          template_id: selectedPactId || null,
-          title: pactTitle.trim(),
-          reason: pactReason.trim(),
-          goal: pactGoal.trim(),
+          template_id: null,
+          preset_category: presetCategory,
+          custom_category: customCategory,
           status: "active",
         });
 
         goNext();
       } catch (err) {
-        setError(err.message || "Failed to save pact.");
+        console.error("PACT CREATE ERROR:", err);
+        setError(
+          err?.detail ||
+            err?.message ||
+            JSON.stringify(err) ||
+            "Failed to save pact."
+        );
       } finally {
         setLoading(false);
       }
@@ -289,7 +245,13 @@ export default function Register() {
 
         goNext();
       } catch (err) {
-        setError(err.message || "Failed to save accountability settings.");
+        console.error("ACCOUNTABILITY ERROR:", err);
+        setError(
+          err?.detail ||
+            err?.message ||
+            JSON.stringify(err) ||
+            "Failed to save accountability settings."
+        );
       } finally {
         setLoading(false);
       }
@@ -304,9 +266,7 @@ export default function Register() {
         email,
         phone,
         selectedPactId,
-        pactTitle,
-        pactReason,
-        pactGoal,
+        customPactTitle,
         accountabilityType,
         disciplineSavingsPercent,
         accountabilityNote,
@@ -562,19 +522,19 @@ export default function Register() {
 
               {currentStep === 2 && (
                 <>
-                  <h2 className="register-card-title">Set your pact</h2>
+                  <h2 className="register-card-title">Choose your pact</h2>
                   <p className="register-card-sub">
-                    Choose a promise you want your money to support.
+                    Pick a preset spending category or create your own.
                   </p>
 
-                  <label className="register-field-label">Choose a pact</label>
+                  <label className="register-field-label">Preset categories</label>
                   <div className="register-input-row">
                     <select
                       className="register-input"
                       value={selectedPactId}
                       onChange={handlePactSelect}
                     >
-                      <option value="">Select a pact</option>
+                      <option value="">Select a spending category</option>
                       {PACT_OPTIONS.map((pact) => (
                         <option key={pact.id} value={pact.id}>
                           {pact.title}
@@ -583,35 +543,22 @@ export default function Register() {
                     </select>
                   </div>
 
-                  <label className="register-field-label">Your pact</label>
+                  <label className="register-field-label">
+                    Or create your own category
+                  </label>
                   <div className="register-input-row">
                     <input
                       className="register-input"
-                      value={pactTitle}
-                      onChange={(e) => setPactTitle(e.target.value)}
-                      placeholder="Example: No eating out on weekdays"
+                      value={customPactTitle}
+                      onChange={handleCustomPactChange}
+                      placeholder="Example: Beauty, Gas, Target, Subscriptions"
                     />
                   </div>
 
-                  <label className="register-field-label">Why this pact?</label>
-                  <div className="register-input-row">
-                    <input
-                      className="register-input"
-                      value={pactReason}
-                      onChange={(e) => setPactReason(e.target.value)}
-                      placeholder="Example: Save money and build discipline"
-                    />
-                  </div>
-
-                  <label className="register-field-label">Your goal</label>
-                  <div className="register-input-row">
-                    <input
-                      className="register-input"
-                      value={pactGoal}
-                      onChange={(e) => setPactGoal(e.target.value)}
-                      placeholder="Example: Save $250 this month"
-                    />
-                  </div>
+                  <p className="register-card-sub" style={{ marginTop: "10px" }}>
+                    Use a broad spending category so AI can match transactions
+                    more accurately.
+                  </p>
 
                   {error && <div className="register-error">{error}</div>}
 

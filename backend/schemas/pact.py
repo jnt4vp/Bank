@@ -1,32 +1,57 @@
 from uuid import UUID
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, model_validator
 
 
-class PactBase(BaseModel):
-    template_id: Optional[str] = Field(default=None, max_length=100)
-    title: str = Field(..., max_length=255)
-    reason: Optional[str] = None
-    goal: Optional[str] = Field(default=None, max_length=255)
-    status: Optional[str] = Field(default="active", max_length=50)
-
-
-class PactCreate(PactBase):
+class PactCreate(BaseModel):
     user_id: UUID
+    template_id: Optional[UUID] = None
+    preset_category: Optional[str] = None
+    custom_category: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[str] = "active"
+
+    @model_validator(mode="after")
+    def set_category(self):
+        preset = self.preset_category.strip() if self.preset_category else None
+        custom = self.custom_category.strip() if self.custom_category else None
+
+        self.category = custom or preset
+
+        if not self.category:
+            raise ValueError("A preset category or custom category is required.")
+
+        return self
 
 
 class PactUpdate(BaseModel):
-    template_id: Optional[str] = Field(default=None, max_length=100)
-    title: Optional[str] = Field(default=None, max_length=255)
-    reason: Optional[str] = None
-    goal: Optional[str] = Field(default=None, max_length=255)
-    status: Optional[str] = Field(default=None, max_length=50)
+    template_id: Optional[UUID] = None
+    preset_category: Optional[str] = None
+    custom_category: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+
+    @model_validator(mode="after")
+    def set_category(self):
+        preset = self.preset_category.strip() if self.preset_category else None
+        custom = self.custom_category.strip() if self.custom_category else None
+
+        if custom or preset:
+            self.category = custom or preset
+
+        return self
 
 
-class PactResponse(PactBase):
+class PactResponse(BaseModel):
     id: UUID
     user_id: UUID
+    template_id: Optional[UUID] = None
+    preset_category: Optional[str] = None
+    custom_category: Optional[str] = None
+    category: str
+    status: str
     created_at: datetime
 
     class Config:
