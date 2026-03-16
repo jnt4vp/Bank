@@ -1,7 +1,7 @@
 """update pact category schema
 
-Revision ID: f857511eed01
-Revises: 20260309_0008
+Revision ID: c17998965152
+Revises: 20260316_0009
 Create Date: 2026-03-16
 """
 
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "f857511eed01"
-down_revision: Union[str, Sequence[str], None] = "20260309_0008"
+revision: str = "c17998965152"
+down_revision: Union[str, Sequence[str], None] = "20260316_0009"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
