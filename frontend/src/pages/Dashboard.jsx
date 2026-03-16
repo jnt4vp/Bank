@@ -20,6 +20,7 @@ const CATEGORY_STYLES = {
   retail: 'dot-shopping',
   subscriptions: 'dot-subscriptions',
   subscription: 'dot-subscriptions',
+  entertainment: 'dot-subscriptions',
   other: 'dot-other',
 }
 
@@ -27,21 +28,9 @@ function formatCurrency(value) {
   return `$${Number(value || 0).toFixed(2)}`
 }
 
-function isToday(dateString) {
-  if (!dateString) return false
-  const date = new Date(dateString)
-  const now = new Date()
-
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  )
-}
-
 function normalizeCategory(category) {
   if (!category) return 'Other'
-  return category
+  return String(category)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
@@ -51,37 +40,74 @@ function getCategoryDotClass(category) {
   return CATEGORY_STYLES[key] || 'dot-other'
 }
 
+function normalizeText(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+}
+
+function accountabilityLabel(type, percent) {
+  if (type === 'email') return 'Acknowledgment email'
+  if (type === 'savings_percentage') return `${Number(percent || 0)}% redirected to savings`
+  if (type === 'both') return `Email + ${Number(percent || 0)}% to savings`
+  return 'Accountability enabled'
+}
+
+function transactionMatchesPact(tx, pact) {
+  const txCategory = normalizeText(tx.category)
+  const txMerchant = normalizeText(tx.merchant)
+  const txDescription = normalizeText(tx.description)
+
+  const pactCategory = normalizeText(
+    pact.custom_category || pact.category || pact.preset_category
+  )
+
+  if (!pactCategory) return false
+
+  return (
+    txCategory.includes(pactCategory) ||
+    pactCategory.includes(txCategory) ||
+    txMerchant.includes(pactCategory) ||
+    txDescription.includes(pactCategory)
+  )
+}
+
 export default function Dashboard() {
   const { user, token, logout } = useAuth()
   const firstName = user?.name?.split(' ')[0] || 'there'
   const userLabel = user?.name || user?.email || 'User'
 
   const [transactions, setTransactions] = useState([])
+  const [pacts, setPacts] = useState([])
+  const [accountabilityByPact, setAccountabilityByPact] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !user?.id) {
       setLoading(false)
       return
     }
 
     let cancelled = false
 
-    async function loadTransactions() {
+    async function loadDashboardData() {
       try {
         setLoading(true)
         setError(null)
 
-        const data = await apiRequest('/api/transactions/', { token })
+        const [transactionsData, pactsData] = await Promise.all([
+          apiRequest('/api/transactions/', { token }),
+          apiRequest(`/api/pacts/user/${user.id}`, { token }),
+        ])
 
-        const rawTransactions = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.results)
-            ? data.results
-            : Array.isArray(data?.transactions)
-              ? data.transactions
+        const rawTransactions = Array.isArray(transactionsData)
+          ? transactionsData
+          : Array.isArray(transactionsData?.results)
+            ? transactionsData.results
+            : Array.isArray(transactionsData?.transactions)
+              ? transactionsData.transactions
               : []
 
         const normalizedTransactions = rawTransactions
@@ -98,8 +124,45 @@ export default function Dashboard() {
           }))
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
+        const rawPacts = Array.isArray(pactsData)
+          ? pactsData
+          : Array.isArray(pactsData?.results)
+            ? pactsData.results
+            : Array.isArray(pactsData?.pacts)
+              ? pactsData.pacts
+              : []
+
+        const normalizedPacts = rawPacts
+          .map((pact) => ({
+            id: pact.id,
+            user_id: pact.user_id,
+            preset_category: pact.preset_category || null,
+            custom_category: pact.custom_category || null,
+            category: pact.category || pact.custom_category || pact.preset_category || 'Uncategorized',
+            status: pact.status || 'active',
+          }))
+          .sort((a, b) => String(a.category).localeCompare(String(b.category)))
+
+        const accountabilityPairs = await Promise.all(
+          normalizedPacts.map(async (pact) => {
+            try {
+              const settings = await apiRequest(
+                `/api/accountability-settings/${pact.id}`,
+                { token }
+              )
+              return [pact.id, settings]
+            } catch {
+              return [pact.id, null]
+            }
+          })
+        )
+
+        const accountabilityMap = Object.fromEntries(accountabilityPairs)
+
         if (!cancelled) {
           setTransactions(normalizedTransactions)
+          setPacts(normalizedPacts)
+          setAccountabilityByPact(accountabilityMap)
         }
       } catch (err) {
         if (!cancelled) {
@@ -112,12 +175,12 @@ export default function Dashboard() {
       }
     }
 
-    loadTransactions()
+    loadDashboardData()
 
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [token, user?.id])
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -141,10 +204,17 @@ export default function Dashboard() {
     }
   }, [])
 
-  const flaggedCount = useMemo(
-    () => transactions.filter((t) => t.flagged).length,
+  const activePacts = useMemo(
+    () => pacts.filter((pact) => String(pact.status).toLowerCase() === 'active'),
+    [pacts]
+  )
+
+  const flaggedTransactions = useMemo(
+    () => transactions.filter((t) => t.flagged),
     [transactions]
   )
+
+  const flaggedCount = flaggedTransactions.length
 
   const disciplineScore = useMemo(() => {
     if (transactions.length === 0) return null
@@ -152,7 +222,7 @@ export default function Dashboard() {
       0,
       Math.round(100 - (flaggedCount / transactions.length) * 100)
     )
-  }, [transactions, flaggedCount])
+  }, [transactions.length, flaggedCount])
 
   const recentTransactions = useMemo(
     () => transactions.slice(0, 4),
@@ -161,20 +231,15 @@ export default function Dashboard() {
 
   const bankConnected = transactions.length > 0
 
-  const todayTransactions = useMemo(
-    () => transactions.filter((tx) => isToday(tx.created_at)),
+  const allTimeTotal = useMemo(
+    () => transactions.reduce((sum, tx) => sum + tx.amount, 0),
     [transactions]
   )
 
-  const todayTotal = useMemo(
-    () => todayTransactions.reduce((sum, tx) => sum + tx.amount, 0),
-    [todayTransactions]
-  )
-
   const categoryBreakdown = useMemo(() => {
-    if (todayTransactions.length === 0) return []
+    if (transactions.length === 0) return []
 
-    const totals = todayTransactions.reduce((acc, tx) => {
+    const totals = transactions.reduce((acc, tx) => {
       const category = normalizeCategory(tx.category)
       acc[category] = (acc[category] || 0) + tx.amount
       return acc
@@ -184,11 +249,94 @@ export default function Dashboard() {
       .map(([category, amount]) => ({
         category,
         amount,
-        percent: todayTotal > 0 ? Math.round((amount / todayTotal) * 100) : 0,
+        percent: allTimeTotal > 0 ? Math.round((amount / allTimeTotal) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 4)
-  }, [todayTransactions, todayTotal])
+  }, [transactions, allTimeTotal])
+
+  const pactSavings = useMemo(() => {
+    if (flaggedTransactions.length === 0 || activePacts.length === 0) return 0
+
+    let total = 0
+
+    activePacts.forEach((pact) => {
+      const settings = accountabilityByPact[pact.id]
+      if (!settings) return
+
+      const type = settings.accountability_type
+      const percent = Number(settings.discipline_savings_percentage || 0)
+
+      if (!(type === 'savings_percentage' || type === 'both') || percent <= 0) {
+        return
+      }
+
+      flaggedTransactions.forEach((tx) => {
+        if (transactionMatchesPact(tx, pact)) {
+          total += tx.amount * (percent / 100)
+        }
+      })
+    })
+
+    return total
+  }, [flaggedTransactions, activePacts, accountabilityByPact])
+
+  const activeRuleCards = useMemo(() => {
+    return activePacts.map((pact) => {
+      const settings = accountabilityByPact[pact.id]
+
+      return {
+        id: pact.id,
+        title: normalizeCategory(
+          pact.custom_category || pact.category || pact.preset_category
+        ),
+        subtitle: settings
+          ? accountabilityLabel(
+              settings.accountability_type,
+              settings.discipline_savings_percentage
+            )
+          : 'No accountability settings saved',
+        note: settings?.accountability_note || '',
+        enabled: String(pact.status).toLowerCase() === 'active',
+      }
+    })
+  }, [activePacts, accountabilityByPact])
+
+  const insightText = useMemo(() => {
+    if (transactions.length === 0) {
+      return {
+        headline: 'No transaction activity yet.',
+        suggestion: 'Connect your bank when ready to start tracking spending patterns and pact performance.',
+      }
+    }
+
+    if (flaggedCount > 0) {
+      const topFlaggedCategory = flaggedTransactions.reduce((acc, tx) => {
+        const key = normalizeCategory(tx.category)
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      }, {})
+
+      const [topCategory] = Object.entries(topFlaggedCategory).sort((a, b) => b[1] - a[1])[0] || []
+
+      return {
+        headline: `You have ${flaggedCount} flagged purchase${flaggedCount === 1 ? '' : 's'}${topCategory ? `, mostly in ${topCategory}` : ''}.`,
+        suggestion: 'Review the flagged categories and keep your active pact rules focused on those spending habits.',
+      }
+    }
+
+    if (activePacts.length > 0) {
+      return {
+        headline: `No flagged purchases across ${transactions.length} tracked transaction${transactions.length === 1 ? '' : 's'}.`,
+        suggestion: `Your ${activePacts.length} active pact rule${activePacts.length === 1 ? '' : 's'} appear to be working well. Stay consistent.`,
+      }
+    }
+
+    return {
+      headline: 'No flagged purchases detected.',
+      suggestion: 'You are spending consistently. Add pact rules to turn that momentum into a measurable habit system.',
+    }
+  }, [transactions.length, flaggedCount, flaggedTransactions, activePacts.length])
 
   return (
     <div className="dashboard-shell">
@@ -326,7 +474,7 @@ export default function Dashboard() {
 
           <div className="dashboard-card">
             <p className="dashboard-card-label">Pact Savings</p>
-            <p className="dashboard-stat">$145.00</p>
+            <p className="dashboard-stat">{formatCurrency(pactSavings)}</p>
           </div>
 
           <div className="dashboard-card dashboard-score-card dashboard-card-hero-accent">
@@ -348,22 +496,22 @@ export default function Dashboard() {
         <section className="dashboard-content-grid">
           <div className="dashboard-card dashboard-panel dashboard-panel-hero">
             <div className="dashboard-panel-header">
-              <h2>Today</h2>
-              <span>{formatCurrency(todayTotal)} total</span>
+              <h2>All Time Spending</h2>
+              <span>{formatCurrency(allTimeTotal)} total</span>
             </div>
 
             <div className="dashboard-analytics-card">
               <div className="dashboard-donut-wrap">
                 <div className="dashboard-donut">
                   <div className="dashboard-donut-center">
-                    {formatCurrency(todayTotal)}
+                    {formatCurrency(allTimeTotal)}
                   </div>
                 </div>
               </div>
 
               <div className="dashboard-category-list">
                 {categoryBreakdown.length === 0 ? (
-                  <p className="dashboard-empty">No transactions for today yet.</p>
+                  <p className="dashboard-empty">No transactions available yet.</p>
                 ) : (
                   categoryBreakdown.map((item) => (
                     <div key={item.category}>
@@ -389,21 +537,25 @@ export default function Dashboard() {
               <h2>Your Pact Rules</h2>
             </div>
 
-            <div className="dashboard-rule-card">
-              <div>
-                <h3>No takeout on weekdays</h3>
-                <p>$10 penalty</p>
-              </div>
-              <button className="dashboard-toggle is-on" aria-label="Toggle rule" type="button" />
-            </div>
+            {loading && <p className="dashboard-empty">Loading pact rules...</p>}
+            {!loading && activeRuleCards.length === 0 && (
+              <p className="dashboard-empty">No active pact rules yet.</p>
+            )}
 
-            <div className="dashboard-rule-card">
-              <div>
-                <h3>$5 auto-save daily</h3>
-                <p>145 / 300 saved</p>
+            {!loading && activeRuleCards.length > 0 && activeRuleCards.map((rule) => (
+              <div className="dashboard-rule-card" key={rule.id}>
+                <div>
+                  <h3>{rule.title}</h3>
+                  <p>{rule.subtitle}</p>
+                  {rule.note ? <p>{rule.note}</p> : null}
+                </div>
+                <button
+                  className={`dashboard-toggle ${rule.enabled ? 'is-on' : ''}`}
+                  aria-label="Rule status"
+                  type="button"
+                />
               </div>
-              <button className="dashboard-toggle is-on" aria-label="Toggle rule" type="button" />
-            </div>
+            ))}
 
             <button className="dashboard-link-button" type="button">Manage Rules →</button>
           </div>
@@ -463,22 +615,10 @@ export default function Dashboard() {
 
             <div className="dashboard-insight-card">
               <p className="dashboard-insight-copy">
-                {flaggedCount > 0 ? (
-                  <>
-                    You have <strong>{flaggedCount} flagged purchase{flaggedCount === 1 ? '' : 's'}</strong> in your recent activity.
-                  </>
-                ) : (
-                  <>
-                    No flagged purchases detected <strong>in your recent activity.</strong>
-                  </>
-                )}
+                <strong>{insightText.headline}</strong>
               </p>
               <p className="dashboard-insight-suggestion">Suggestion:</p>
-              <p className="dashboard-insight-copy">
-                {flaggedCount > 0
-                  ? 'Review the flagged categories and tighten your pact rules around those purchases.'
-                  : 'Keep going. Your current transactions are staying within your pact more consistently.'}
-              </p>
+              <p className="dashboard-insight-copy">{insightText.suggestion}</p>
 
               <div className="dashboard-insight-chart">
                 <div className="dashboard-insight-line" />
