@@ -9,7 +9,7 @@ Use `--manual` to keep the old direct-API behavior.
 
 Examples:
     # Create one Plaid-backed transaction for an existing user
-    python scripts/send_transaction.py --email test@example.com --merchant "DraftKings" --amount 250
+    python scripts/send_transaction.py --email test@example.com --desc "DraftKings" --amount 250
 
     # Create five random Plaid-backed transactions
     python scripts/send_transaction.py --email test@example.com --count 5
@@ -70,11 +70,19 @@ class NoopClassifier:
         return None
 
 
-def random_transaction() -> dict:
+def random_manual_transaction() -> dict:
     merchant = random.choice(MERCHANTS)
     return {
         "merchant": merchant["merchant"],
         "description": merchant["desc"],
+        "amount": round(random.uniform(*merchant["amount_range"]), 2),
+    }
+
+
+def random_plaid_transaction() -> dict:
+    merchant = random.choice(MERCHANTS)
+    return {
+        "description": merchant["merchant"],
         "amount": round(random.uniform(*merchant["amount_range"]), 2),
     }
 
@@ -146,24 +154,16 @@ def parse_date(value: str) -> date:
         raise argparse.ArgumentTypeError("date must be YYYY-MM-DD") from exc
 
 
-def build_plaid_description(merchant: str, description: str) -> str:
-    if not description or description == merchant:
-        return merchant
-    return f"{merchant} | {description}"
-
-
 def build_plaid_transaction(
     *,
-    merchant: str,
     description: str,
     amount: float,
     transaction_date: date,
 ) -> dict:
-    plaid_description = build_plaid_description(merchant, description)
     iso_date = transaction_date.isoformat()
     return {
         "amount": float(amount),
-        "description": plaid_description,
+        "description": description,
         "date_transacted": iso_date,
         "date_posted": iso_date,
     }
@@ -274,6 +274,12 @@ async def run_plaid_mode(args: argparse.Namespace) -> None:
         raise SystemExit("--email is required in Plaid mode")
     if args.count < 1:
         raise SystemExit("--count must be at least 1")
+    if args.merchant:
+        raise SystemExit(
+            "--merchant is only supported with --manual. "
+            "Plaid mode only accepts --desc because Plaid sandbox transaction creation "
+            "does not have a separate merchant field."
+        )
     if not args.merchant and args.count > 10:
         raise SystemExit("Plaid sandbox transaction creation is limited to 10 transactions per call")
 
@@ -287,18 +293,16 @@ async def run_plaid_mode(args: argparse.Namespace) -> None:
 
     existing_ids = await _get_existing_transaction_ids(user.id)
 
-    if args.merchant:
+    if args.desc:
         candidates = [{
-            "merchant": args.merchant,
-            "description": args.desc or "Purchase",
+            "description": args.desc,
             "amount": args.amount or 99.99,
         }]
     else:
-        candidates = [random_transaction() for _ in range(args.count)]
+        candidates = [random_plaid_transaction() for _ in range(args.count)]
 
     plaid_payload = [
         build_plaid_transaction(
-            merchant=txn["merchant"],
             description=txn["description"],
             amount=txn["amount"],
             transaction_date=args.date,
@@ -311,7 +315,7 @@ async def run_plaid_mode(args: argparse.Namespace) -> None:
         f"through item {plaid_item.id}..."
     )
     for txn in candidates:
-        print(f"  -> {txn['merchant']} | ${txn['amount']:.2f} | \"{txn['description']}\"")
+        print(f"  -> \"{txn['description']}\" | ${txn['amount']:.2f}")
 
     create_response = await _create_plaid_transactions(plaid_item.id, plaid_payload)
     counts = {"added": 0, "modified": 0, "removed": 0}
@@ -372,8 +376,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Send transactions to Bank")
     parser.add_argument("--email", help="User email")
     parser.add_argument("--password", help="User password (required only with --manual)")
-    parser.add_argument("--merchant", help="Merchant name (random if omitted)")
-    parser.add_argument("--desc", help="Short description of the purchase")
+    parser.add_argument("--merchant", help="Manual mode merchant name")
+    parser.add_argument(
+        "--desc",
+        help="Plaid mode raw transaction text, or manual mode purchase description",
+    )
     parser.add_argument("--amount", type=float, help="Amount (random if omitted)")
     parser.add_argument("--count", type=int, default=1, help="Number of random transactions to send")
     parser.add_argument(
@@ -421,7 +428,7 @@ def main() -> None:
             return
 
         for index in range(args.count):
-            txn = random_transaction()
+            txn = random_manual_transaction()
             send_manual(
                 args.url,
                 token,
