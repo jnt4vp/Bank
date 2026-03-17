@@ -359,8 +359,6 @@ async def run_plaid_mode(args: argparse.Namespace) -> None:
                     "id": str(txn.id),
                     "merchant": txn.merchant,
                     "description": txn.description,
-                    "plaid_name": txn.plaid_name,
-                    "plaid_merchant_name": txn.plaid_merchant_name,
                     "plaid_original_description": txn.plaid_original_description,
                     "amount": float(txn.amount),
                     "category": txn.category,

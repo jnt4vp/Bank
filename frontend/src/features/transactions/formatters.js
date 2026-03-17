@@ -37,14 +37,12 @@ export function formatTransactionDate(transaction) {
   return parsedDate.toLocaleDateString()
 }
 
-function getSortableTimestamp(transaction) {
-  const rawValue = transaction?.date || transaction?.created_at
-
-  if (!rawValue) {
+function parseSortableDate(value) {
+  if (!value) {
     return Number.NEGATIVE_INFINITY
   }
 
-  const parsedDate = new Date(rawValue)
+  const parsedDate = new Date(value)
 
   if (Number.isNaN(parsedDate.getTime())) {
     return Number.NEGATIVE_INFINITY
@@ -55,10 +53,18 @@ function getSortableTimestamp(transaction) {
 
 export function sortTransactionsByActivityDate(transactions) {
   return [...transactions].sort((left, right) => {
-    const timestampDelta = getSortableTimestamp(right) - getSortableTimestamp(left)
+    const activityDateDelta =
+      parseSortableDate(right?.date) - parseSortableDate(left?.date)
 
-    if (timestampDelta !== 0) {
-      return timestampDelta
+    if (activityDateDelta !== 0) {
+      return activityDateDelta
+    }
+
+    const createdAtDelta =
+      parseSortableDate(right?.created_at) - parseSortableDate(left?.created_at)
+
+    if (createdAtDelta !== 0) {
+      return createdAtDelta
     }
 
     return String(right.id || '').localeCompare(String(left.id || ''))

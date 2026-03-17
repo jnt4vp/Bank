@@ -260,11 +260,9 @@ async def sync_transactions(
                 continue
 
             account_id = await _resolve_account_id(db, txn.account_id)
-            plaid_name = txn.name or None
-            plaid_merchant_name = txn.merchant_name or None
             plaid_original_description = txn.original_description or None
-            merchant = plaid_merchant_name or plaid_name or "Unknown"
-            description = plaid_name or plaid_original_description or ""
+            merchant = txn.merchant_name or txn.name or "Unknown"
+            description = txn.name or plaid_original_description or ""
             amount = float(txn.amount)
 
             # Use Plaid category as default, then override with classifier if available
@@ -304,8 +302,6 @@ async def sync_transactions(
                 flagged=flagged,
                 flag_reason=flag_reason,
                 plaid_transaction_id=txn.transaction_id,
-                plaid_name=plaid_name,
-                plaid_merchant_name=plaid_merchant_name,
                 plaid_original_description=plaid_original_description,
                 account_id=account_id,
                 pending=txn.pending,
@@ -336,17 +332,13 @@ async def sync_transactions(
             )
             existing_txn = result.scalar_one_or_none()
             if existing_txn:
-                plaid_name = txn.name or None
-                plaid_merchant_name = txn.merchant_name or None
                 plaid_original_description = txn.original_description or None
                 existing_txn.merchant = (
-                    plaid_merchant_name or plaid_name or existing_txn.merchant
+                    txn.merchant_name or txn.name or existing_txn.merchant
                 )
                 existing_txn.description = (
-                    plaid_name or plaid_original_description or existing_txn.description
+                    txn.name or plaid_original_description or existing_txn.description
                 )
-                existing_txn.plaid_name = plaid_name
-                existing_txn.plaid_merchant_name = plaid_merchant_name
                 existing_txn.plaid_original_description = plaid_original_description
                 existing_txn.amount = float(txn.amount)
                 existing_txn.pending = txn.pending

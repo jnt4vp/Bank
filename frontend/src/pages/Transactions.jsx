@@ -26,8 +26,6 @@ function matchesQuery(transaction, query) {
   const haystack = [
     transaction.merchant,
     transaction.description,
-    transaction.plaid_name,
-    transaction.plaid_merchant_name,
     transaction.plaid_original_description,
     transaction.category,
     transaction.flag_reason,
@@ -193,16 +191,13 @@ export default function Transactions() {
             {filteredTransactions.map((transaction) => {
               const isPlaidTransaction = Boolean(transaction.plaid_transaction_id)
               const primaryLabel = isPlaidTransaction
-                ? transaction.plaid_name ||
-                  transaction.description ||
+                ? transaction.description ||
                   transaction.plaid_original_description ||
-                  transaction.plaid_merchant_name ||
                   transaction.merchant ||
                   'Unknown transaction'
                 : transaction.merchant || transaction.description || 'Unknown merchant'
               const secondaryLabel = isPlaidTransaction
                 ? [
-                    transaction.plaid_merchant_name,
                     transaction.merchant,
                     transaction.plaid_original_description,
                   ].find(

@@ -35,8 +35,6 @@ class Transaction(Base):
     plaid_transaction_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True
     )
-    plaid_name: Mapped[str | None] = mapped_column(Text, nullable=True)
-    plaid_merchant_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     plaid_original_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     account_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
