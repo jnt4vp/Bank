@@ -18,5 +18,6 @@ class ClassifierPort(Protocol):
         merchant: str,
         description: str,
         amount: float,
+        user_categories: list[str] | None = None,
     ) -> ClassificationResult | None:
         """Return a classification result or None when no decision is available."""

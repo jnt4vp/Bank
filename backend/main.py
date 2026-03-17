@@ -17,6 +17,7 @@ from .application.auth import ensure_dev_seed_user_exists
 from .routers.accountability_settings import router as accountability_settings_router
 from .routers.pact import router as pact_router
 from .models.plaid_item import PlaidItem
+from .models.pact import Pact
 from .services.plaid_poller import start_poller, stop_poller
 from .services.plaid_service import seed_sandbox_plaid_item, sync_transactions
 from .dependencies.integrations import get_classifier, get_notifier
@@ -31,6 +32,32 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
     async with async_session() as session:
         user = await ensure_dev_seed_user_exists(session)
+
+    # Seed default pacts for the dev user so the dashboard has data
+    if user:
+        try:
+            async with async_session() as session:
+                from sqlalchemy import select
+                existing = await session.execute(
+                    select(Pact).where(Pact.user_id == user.id).limit(1)
+                )
+                if not existing.scalar_one_or_none():
+                    session.add(Pact(
+                        user_id=user.id,
+                        preset_category="Coffee Shops",
+                        category="Coffee Shops",
+                        status="active",
+                    ))
+                    session.add(Pact(
+                        user_id=user.id,
+                        preset_category="Fast Food",
+                        category="Fast Food",
+                        status="active",
+                    ))
+                    await session.commit()
+                    logging.getLogger(__name__).info("Seeded 2 default pacts for dev user")
+        except Exception:
+            logging.getLogger(__name__).warning("Failed to seed default pacts", exc_info=True)
 
     # Seed a sandbox Plaid connection for the dev user so login works out-of-the-box
     if user:

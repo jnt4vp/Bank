@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.transaction import Transaction
 from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
+from ..repositories.pacts import get_active_pact_categories
 from ..repositories.transactions import create_transaction
 from ..services.classifier import classify_transaction
 
@@ -25,11 +26,14 @@ async def ingest_user_transaction(
     classifier: ClassifierPort,
     notifier: NotifierPort,
 ) -> Transaction:
+    user_categories = await get_active_pact_categories(db, user_id)
+
     classification = await classify_transaction(
         classifier,
         merchant=merchant,
         description=description,
         amount=amount,
+        user_categories=user_categories or None,
     )
 
     txn = await create_transaction(

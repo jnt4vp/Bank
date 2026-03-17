@@ -10,14 +10,34 @@ from ...ports.classifier import ClassificationResult
 
 logger = logging.getLogger("bank.classifier")
 
-CLASSIFICATION_PROMPT = """You classify bank transactions. You ONLY flag transactions in these 4 categories:
-
-1. "gambling" - casinos, sports betting, lottery, poker
+BASE_CATEGORIES = """1. "gambling" - casinos, sports betting, lottery, poker
 2. "adult" - pornography, adult entertainment, escort services
 3. "alcohol" - liquor stores, bars, alcohol purchases
-4. "drugs" - drug paraphernalia, dispensaries, suspicious drug-related purchases
+4. "drugs" - drug paraphernalia, dispensaries, suspicious drug-related purchases"""
 
-EVERYTHING ELSE IS NOT FLAGGED. Normal purchases like groceries, gas, flowers, clothing, electronics, restaurants, subscriptions, coffee, etc. are NEVER flagged.
+
+def _build_prompt(
+    merchant: str, description: str, amount: float,
+    user_categories: list[str] | None = None,
+) -> str:
+    if user_categories:
+        extra = "\n".join(
+            f'{i}. "{cat}" - spending the user specifically wants to reduce'
+            for i, cat in enumerate(user_categories, start=5)
+        )
+        all_categories = f"{BASE_CATEGORIES}\n{extra}"
+        valid_values = "gambling|adult|alcohol|drugs|" + "|".join(
+            cat.lower() for cat in user_categories
+        ) + "|null"
+    else:
+        all_categories = BASE_CATEGORIES
+        valid_values = "gambling|adult|alcohol|drugs|null"
+
+    return f"""You classify bank transactions. Flag transactions in these categories:
+
+{all_categories}
+
+EVERYTHING ELSE IS NOT FLAGGED. Normal purchases like groceries, gas, flowers, clothing, electronics are NEVER flagged unless they match a category above.
 
 Transaction:
 - Merchant: {merchant}
@@ -25,9 +45,9 @@ Transaction:
 - Amount: ${amount:.2f}
 
 Respond with ONLY valid JSON (no markdown, no extra text):
-{{"flagged": true/false, "reason": "brief explanation", "category": "gambling|adult|alcohol|drugs|null"}}
+{{"flagged": true/false, "reason": "brief explanation", "category": "{valid_values}"}}
 
-If the transaction does not clearly fall into one of the 4 categories above, set flagged to false and category to null."""
+If the transaction does not clearly fall into one of the categories above, set flagged to false and category to null."""
 
 
 class OllamaClassifierAdapter:
@@ -37,16 +57,13 @@ class OllamaClassifierAdapter:
         merchant: str,
         description: str,
         amount: float,
+        user_categories: list[str] | None = None,
     ) -> ClassificationResult | None:
         settings = get_settings()
         if not settings.OLLAMA_ENABLED:
             return None
 
-        prompt = CLASSIFICATION_PROMPT.format(
-            merchant=merchant,
-            description=description,
-            amount=amount,
-        )
+        prompt = _build_prompt(merchant, description, amount, user_categories)
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:

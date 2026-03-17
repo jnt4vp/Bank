@@ -26,6 +26,7 @@ from ..models.transaction import Transaction
 from ..models.user import User
 from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
+from ..repositories.pacts import get_active_pact_categories
 from ..services.classifier import classify_transaction
 from ..services.token_encryption import decrypt_token, encrypt_token
 
@@ -224,6 +225,9 @@ async def sync_transactions(
         )
         user_email = result.scalar_one_or_none()
 
+    # Fetch user's active pact categories once for the entire sync cycle
+    user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
+
     while has_more:
         request = TransactionsSyncRequest(
             access_token=_get_access_token(plaid_item),
@@ -262,6 +266,7 @@ async def sync_transactions(
                         merchant=merchant,
                         description=description,
                         amount=amount,
+                        user_categories=user_categories,
                     )
                     if classification.category:
                         category = classification.category
