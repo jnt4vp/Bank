@@ -26,6 +26,9 @@ function matchesQuery(transaction, query) {
   const haystack = [
     transaction.merchant,
     transaction.description,
+    transaction.plaid_name,
+    transaction.plaid_merchant_name,
+    transaction.plaid_original_description,
     transaction.category,
     transaction.flag_reason,
   ]
@@ -188,10 +191,31 @@ export default function Transactions() {
         {!loading && !error && filteredTransactions.length > 0 && (
           <div className="transactions-ledger">
             {filteredTransactions.map((transaction) => {
-              const showDescription =
-                transaction.description &&
-                transaction.description.trim() &&
-                transaction.description !== transaction.merchant
+              const isPlaidTransaction = Boolean(transaction.plaid_transaction_id)
+              const primaryLabel = isPlaidTransaction
+                ? transaction.plaid_name ||
+                  transaction.description ||
+                  transaction.plaid_original_description ||
+                  transaction.plaid_merchant_name ||
+                  transaction.merchant ||
+                  'Unknown transaction'
+                : transaction.merchant || transaction.description || 'Unknown merchant'
+              const secondaryLabel = isPlaidTransaction
+                ? [
+                    transaction.plaid_merchant_name,
+                    transaction.merchant,
+                    transaction.plaid_original_description,
+                  ].find(
+                    (value) =>
+                      value &&
+                      value.trim() &&
+                      value.trim() !== primaryLabel
+                  )
+                : transaction.description &&
+                    transaction.description.trim() &&
+                    transaction.description !== transaction.merchant
+                  ? transaction.description
+                  : null
 
               return (
                 <article
@@ -203,10 +227,10 @@ export default function Transactions() {
                   <div className="transactions-ledger-main">
                     <div className="transactions-ledger-heading">
                       <div className="transactions-ledger-copy">
-                        <h2>{transaction.merchant}</h2>
-                        {showDescription && (
+                        <h2>{primaryLabel}</h2>
+                        {secondaryLabel && (
                           <p className="transactions-ledger-description">
-                            {transaction.description}
+                            {secondaryLabel}
                           </p>
                         )}
                       </div>

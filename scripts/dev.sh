@@ -69,6 +69,38 @@ require_frontend_deps() {
   fi
 }
 
+port_is_open() {
+  local port="$1"
+
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(0.2)
+    raise SystemExit(0 if sock.connect_ex(("127.0.0.1", port)) == 0 else 1)
+PY
+    return $?
+  fi
+
+  if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+    "$ROOT_DIR/.venv/bin/python" - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(0.2)
+    raise SystemExit(0 if sock.connect_ex(("127.0.0.1", port)) == 0 else 1)
+PY
+    return $?
+  fi
+
+  return 1
+}
+
 ensure_env_file() {
   if [[ ! -f "$ROOT_DIR/.env" && -f "$ROOT_DIR/.env.example" ]]; then
     cp "$ROOT_DIR/.env.example" "$ROOT_DIR/.env"
@@ -169,20 +201,62 @@ until "${ALEMBIC_CMD[@]}" upgrade head; do
   sleep 1
 done
 
-echo "Starting FastAPI backend on http://localhost:8000"
-"${BACKEND_CMD[@]}" &
-BACKEND_PID=$!
+BACKEND_MODE="managed"
+if port_is_open 8000; then
+  BACKEND_MODE="external"
+  cat <<'EOF'
+Backend port 8000 is already in use.
 
-echo "Starting Vite frontend on http://localhost:5173"
+Continuing with the existing backend on http://localhost:8000 instead of starting a new one.
+If that is not the server you want, stop the process using port 8000 and rerun `make dev`.
+EOF
+else
+  echo "Starting FastAPI backend on http://localhost:8000"
+  "${BACKEND_CMD[@]}" &
+  BACKEND_PID=$!
+  sleep 1
+
+  if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+    if port_is_open 8000; then
+      BACKEND_MODE="external"
+      BACKEND_PID=""
+      cat <<'EOF'
+Backend startup raced with an existing process already bound to port 8000.
+
+Continuing with the existing backend on http://localhost:8000 instead of failing `make dev`.
+If that is not the server you want, stop the process using port 8000 and rerun `make dev`.
+EOF
+    else
+      wait "$BACKEND_PID"
+    fi
+  fi
+fi
+
+if port_is_open 5173; then
+  cat <<'EOF'
+Frontend port 5173 is already in use.
+
+Vite will automatically choose the next free port for this session.
+EOF
+fi
+
+echo "Starting Vite frontend (prefers http://localhost:5173)"
 (
   cd "$FRONTEND_DIR"
   npm run dev
 ) &
 FRONTEND_PID=$!
 
-if [[ "$DB_MODE" == "external" ]]; then
-  echo "Dev stack is running (backend + frontend). Press Ctrl-C to stop both."
+if [[ "$DB_MODE" == "external" && "$BACKEND_MODE" == "external" ]]; then
+  echo "Dev stack is running (frontend only managed here). Press Ctrl-C to stop frontend."
   echo "Using the existing PostgreSQL instance referenced by DATABASE_URL."
+  echo "Using the existing backend on http://localhost:8000."
+elif [[ "$DB_MODE" == "external" ]]; then
+  echo "Dev stack is running (backend + frontend). Press Ctrl-C to stop them."
+  echo "Using the existing PostgreSQL instance referenced by DATABASE_URL."
+elif [[ "$BACKEND_MODE" == "external" ]]; then
+  echo "Dev stack is running (Postgres + frontend managed here). Press Ctrl-C to stop frontend."
+  echo "Using the existing backend on http://localhost:8000."
 else
   echo "Dev stack is running (Postgres + backend + frontend). Press Ctrl-C to stop backend/frontend."
 fi
@@ -190,4 +264,17 @@ echo "Database migrations were applied automatically on startup."
 
 trap cleanup EXIT INT TERM
 
-wait_for_first_exit "$BACKEND_PID" "$FRONTEND_PID"
+PIDS=()
+if [[ -n "${BACKEND_PID:-}" ]]; then
+  PIDS+=("$BACKEND_PID")
+fi
+if [[ -n "${FRONTEND_PID:-}" ]]; then
+  PIDS+=("$FRONTEND_PID")
+fi
+
+if (( ${#PIDS[@]} == 0 )); then
+  echo "Nothing was started by scripts/dev.sh." >&2
+  exit 1
+fi
+
+wait_for_first_exit "${PIDS[@]}"

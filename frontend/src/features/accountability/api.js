@@ -1,55 +1,19 @@
-const API_BASE = "http://localhost:8000/api";
+import { apiRequest } from '../../lib/api/client'
 
-function getAuthHeaders() {
-  const token = localStorage.getItem("token");
-  const headers = {
-    "Content-Type": "application/json",
-  };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
-
-  return headers;
-}
-
-async function parseError(response, fallbackMessage) {
-  try {
-    const data = await response.json();
-    return data.detail || fallbackMessage;
-  } catch {
-    const text = await response.text();
-    return text || fallbackMessage;
-  }
+function getToken() {
+  return localStorage.getItem('token') || undefined
 }
 
 export async function saveAccountabilitySettings(payload) {
-  const response = await fetch(`${API_BASE}/accountability-settings`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await parseError(response, "Failed to save accountability settings.")
-    );
-  }
-
-  return response.json();
+  return apiRequest('/api/accountability-settings', {
+    method: 'POST',
+    token: getToken(),
+    body: payload,
+  })
 }
 
 export async function getAccountabilitySettings(pactId) {
-  const response = await fetch(`${API_BASE}/accountability-settings/${pactId}`, {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      await parseError(response, "Failed to load accountability settings.")
-    );
-  }
-
-  return response.json();
+  return apiRequest(`/api/accountability-settings/${pactId}`, {
+    token: getToken(),
+  })
 }

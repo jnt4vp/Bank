@@ -25,6 +25,7 @@ from plaid.model.sandbox_public_token_create_request_options_transactions import
 )
 from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
+from plaid.model.transactions_sync_request_options import TransactionsSyncRequestOptions
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -243,6 +244,7 @@ async def sync_transactions(
     while has_more:
         request = TransactionsSyncRequest(
             access_token=_get_access_token(plaid_item),
+            options=TransactionsSyncRequestOptions(include_original_description=True),
             **({"cursor": cursor} if cursor else {}),
         )
         response = await _call_plaid(client.transactions_sync, request)
@@ -258,8 +260,11 @@ async def sync_transactions(
                 continue
 
             account_id = await _resolve_account_id(db, txn.account_id)
-            merchant = txn.merchant_name or txn.name or "Unknown"
-            description = txn.name or ""
+            plaid_name = txn.name or None
+            plaid_merchant_name = txn.merchant_name or None
+            plaid_original_description = txn.original_description or None
+            merchant = plaid_merchant_name or plaid_name or "Unknown"
+            description = plaid_name or plaid_original_description or ""
             amount = float(txn.amount)
 
             # Use Plaid category as default, then override with classifier if available
@@ -299,6 +304,9 @@ async def sync_transactions(
                 flagged=flagged,
                 flag_reason=flag_reason,
                 plaid_transaction_id=txn.transaction_id,
+                plaid_name=plaid_name,
+                plaid_merchant_name=plaid_merchant_name,
+                plaid_original_description=plaid_original_description,
                 account_id=account_id,
                 pending=txn.pending,
                 date=txn.date,
@@ -328,8 +336,18 @@ async def sync_transactions(
             )
             existing_txn = result.scalar_one_or_none()
             if existing_txn:
-                existing_txn.merchant = txn.merchant_name or txn.name or existing_txn.merchant
-                existing_txn.description = txn.name or existing_txn.description
+                plaid_name = txn.name or None
+                plaid_merchant_name = txn.merchant_name or None
+                plaid_original_description = txn.original_description or None
+                existing_txn.merchant = (
+                    plaid_merchant_name or plaid_name or existing_txn.merchant
+                )
+                existing_txn.description = (
+                    plaid_name or plaid_original_description or existing_txn.description
+                )
+                existing_txn.plaid_name = plaid_name
+                existing_txn.plaid_merchant_name = plaid_merchant_name
+                existing_txn.plaid_original_description = plaid_original_description
                 existing_txn.amount = float(txn.amount)
                 existing_txn.pending = txn.pending
                 existing_txn.date = txn.date
@@ -414,21 +432,33 @@ async def seed_sandbox_plaid_item(
     if settings.PLAID_ENV != "sandbox" or not settings.PLAID_CLIENT_ID or not settings.PLAID_SECRET:
         return None
 
-    # Check if user already has a Plaid item with transactions
+    # Check if user already has Plaid items. Multiple items are valid now
+    # because the dev scripts can create dedicated sandbox items.
     result = await db.execute(
-        select(PlaidItem).where(PlaidItem.user_id == user_id)
+        select(PlaidItem)
+        .where(PlaidItem.user_id == user_id)
+        .order_by(PlaidItem.created_at.desc())
     )
-    existing_item = result.scalar_one_or_none()
-    if existing_item:
-        # Check if it already has transactions — if so, nothing to do
+    existing_items = list(result.scalars().all())
+    if existing_items:
+        existing_item = existing_items[0]
+        # Check if it already has Plaid transactions — if so, nothing to do
         txn_count = await db.execute(
-            select(Transaction.id).where(Transaction.user_id == user_id).limit(1)
+            select(Transaction.id)
+            .where(
+                Transaction.user_id == user_id,
+                Transaction.plaid_transaction_id.is_not(None),
+            )
+            .limit(1)
         )
         if txn_count.scalar_one_or_none():
             logger.info("Seed user already has Plaid transactions — skipping sandbox seed")
             return None
-        # Item exists but no transactions — return it so caller can re-sync
-        logger.info("Seed user has Plaid item but no transactions — will re-sync")
+        # Items exist but no Plaid transactions — return the newest item so caller can re-sync
+        logger.info(
+            "Seed user has %d Plaid item(s) but no Plaid transactions — will re-sync newest item",
+            len(existing_items),
+        )
         return existing_item
 
     from plaid.model.sandbox_item_fire_webhook_request import SandboxItemFireWebhookRequest
