@@ -3,32 +3,27 @@ from ..ports.classifier import ClassificationResult, ClassifierPort
 
 logger = logging.getLogger("bank.classifier")
 
-GAMBLING_KEYWORDS = [
-    "draftkings", "fanduel", "betmgm", "bet365", "caesars sportsbook",
-    "pokerstars", "bovada", "barstool", "wynn", "pointsbet",
-    "roobet", "stake.com", "stake", "mybookie", "betonline",
-    "casino", "poker", "sportsbook", "gambling", "wagering", "betting",
-    "slot", "blackjack", "roulette",
-]
-
-ADULT_KEYWORDS = [
-    "onlyfans", "adult", "xxx", "strip club", "escort",
-    "adult entertainment", "gentlemen's club",
-]
-
-ALCOHOL_KEYWORDS = [
-    "liquor", "liquor store", "wine shop", "beer store", "spirits",
-    "total wine", "abc store", "bevmo", "spec's", "binny's",
-    "bar tab", "pub", "brewery", "distillery", "tavern",
-]
-
-DRUG_KEYWORDS = [
-    "dispensary", "cannabis", "marijuana", "weed", "smoke shop",
-    "head shop", "paraphernalia", "vape shop",
-]
-
-# Keywords for preset pact categories users can choose during signup
 PACT_CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "gambling": [
+        "draftkings", "fanduel", "betmgm", "bet365", "caesars sportsbook",
+        "pokerstars", "bovada", "barstool", "wynn", "pointsbet",
+        "roobet", "stake.com", "stake", "mybookie", "betonline",
+        "casino", "poker", "sportsbook", "gambling", "wagering", "betting",
+        "slot", "blackjack", "roulette",
+    ],
+    "adult": [
+        "onlyfans", "adult", "xxx", "strip club", "escort",
+        "adult entertainment", "gentlemen's club",
+    ],
+    "alcohol": [
+        "liquor", "liquor store", "wine shop", "beer store", "spirits",
+        "total wine", "abc store", "bevmo", "spec's", "binny's",
+        "bar tab", "pub", "brewery", "distillery", "tavern",
+    ],
+    "drugs": [
+        "dispensary", "cannabis", "marijuana", "weed", "smoke shop",
+        "head shop", "paraphernalia", "vape shop",
+    ],
     "dining out": [
         "restaurant", "dining", "dine", "eatery", "bistro", "grill",
         "steakhouse", "sushi", "pizzeria", "trattoria", "brasserie",
@@ -69,6 +64,8 @@ PACT_CATEGORY_KEYWORDS: dict[str, list[str]] = {
     ],
     "non-essential spending": [],  # too broad for keyword matching — handled by LLM
 }
+
+
 def _match_keywords(text: str, keywords: list[str]) -> str | None:
     text_lower = text.lower()
     for kw in keywords:
@@ -77,70 +74,52 @@ def _match_keywords(text: str, keywords: list[str]) -> str | None:
     return None
 
 
-def _rule_based_classify(merchant: str, description: str, amount: float) -> ClassificationResult | None:
-    combined = f"{merchant} {description}"
+def _normalize_user_categories(user_categories: list[str] | None) -> tuple[list[str], dict[str, str]]:
+    normalized: list[str] = []
+    display_names: dict[str, str] = {}
 
-    match = _match_keywords(combined, GAMBLING_KEYWORDS)
-    if match:
-        return ClassificationResult(
-            flagged=True,
-            category="gambling",
-            flag_reason=f"Matched gambling keyword: {match}",
-        )
+    for category in user_categories or []:
+        if not category:
+            continue
+        stripped = category.strip()
+        if not stripped:
+            continue
+        lowered = stripped.lower()
+        if lowered in display_names:
+            continue
+        normalized.append(lowered)
+        display_names[lowered] = stripped
 
-    match = _match_keywords(combined, ADULT_KEYWORDS)
-    if match:
-        return ClassificationResult(
-            flagged=True,
-            category="adult",
-            flag_reason=f"Matched adult content keyword: {match}",
-        )
-
-    match = _match_keywords(combined, ALCOHOL_KEYWORDS)
-    if match:
-        return ClassificationResult(
-            flagged=True,
-            category="alcohol",
-            flag_reason=f"Matched alcohol keyword: {match}",
-        )
-
-    match = _match_keywords(combined, DRUG_KEYWORDS)
-    if match:
-        return ClassificationResult(
-            flagged=True,
-            category="drugs",
-            flag_reason=f"Matched drug keyword: {match}",
-        )
-
-    return None
+    return normalized, display_names
 
 
 def _match_user_pacts(
-    merchant: str, description: str, user_categories: list[str],
+    merchant: str,
+    description: str,
+    user_categories: list[str],
+    display_names: dict[str, str],
 ) -> ClassificationResult | None:
     """Check if a transaction matches any of the user's active pact categories."""
     combined = f"{merchant} {description}".lower()
 
     for cat in user_categories:
-        cat_lower = cat.lower()
-
         # Try preset keyword list first
-        keywords = PACT_CATEGORY_KEYWORDS.get(cat_lower, [])
+        keywords = PACT_CATEGORY_KEYWORDS.get(cat, [])
         if keywords:
             match = _match_keywords(combined, keywords)
             if match:
                 return ClassificationResult(
                     flagged=True,
-                    category=cat_lower,
-                    flag_reason=f"Matched your pact \"{cat}\": keyword \"{match}\"",
+                    category=cat,
+                    flag_reason=f"Matched your pact \"{display_names[cat]}\": keyword \"{match}\"",
                 )
         else:
             # Custom category — substring match against merchant/description
-            if cat_lower in combined:
+            if cat in combined:
                 return ClassificationResult(
                     flagged=True,
-                    category=cat_lower,
-                    flag_reason=f"Matched your pact \"{cat}\"",
+                    category=cat,
+                    flag_reason=f"Matched your pact \"{display_names[cat]}\"",
                 )
 
     return None
@@ -154,37 +133,53 @@ async def classify_transaction(
     amount: float,
     user_categories: list[str] | None = None,
 ) -> ClassificationResult:
-    # 1. Hardcoded rule-based flags (always-flag categories)
-    rule_result = _rule_based_classify(merchant, description, amount)
-    if rule_result is not None:
+    normalized_categories, display_names = _normalize_user_categories(user_categories)
+    if not normalized_categories:
+        return ClassificationResult(flagged=False)
+
+    pact_result = _match_user_pacts(
+        merchant,
+        description,
+        normalized_categories,
+        display_names,
+    )
+    if pact_result is not None:
         logger.info(
-            "Rule-based flag: %s | %s | $%.2f → %s (%s)",
-            merchant, description, amount, rule_result.category, rule_result.flag_reason,
+            "Pact-based flag: %s | %s | $%.2f → %s (%s)",
+            merchant, description, amount, pact_result.category, pact_result.flag_reason,
         )
-        return rule_result
+        return pact_result
 
-    # 2. User pact category matching
-    if user_categories:
-        pact_result = _match_user_pacts(merchant, description, user_categories)
-        if pact_result is not None:
-            logger.info(
-                "Pact-based flag: %s | %s | $%.2f → %s (%s)",
-                merchant, description, amount, pact_result.category, pact_result.flag_reason,
-            )
-            return pact_result
-
-    # 3. LLM classification (also pact-aware)
     llm_result = await classifier.classify_transaction(
         merchant=merchant,
         description=description,
         amount=amount,
-        user_categories=user_categories,
+        user_categories=normalized_categories,
     )
     if llm_result is not None:
+        normalized_category = (
+            llm_result.category.strip().lower()
+            if llm_result.category and llm_result.category.strip()
+            else None
+        )
+        if llm_result.flagged and (
+            normalized_category is None or normalized_category not in normalized_categories
+        ):
+            logger.warning(
+                "Ignoring LLM classification outside active pacts: %s",
+                llm_result.category,
+            )
+            return ClassificationResult(flagged=False)
         logger.info(
             "LLM classification: %s | %s | $%.2f → flagged=%s category=%s",
-            merchant, description, amount, llm_result.flagged, llm_result.category,
+            merchant, description, amount, llm_result.flagged, normalized_category,
         )
-        return llm_result
+        if not llm_result.flagged:
+            return ClassificationResult(flagged=False)
+        return ClassificationResult(
+            flagged=True,
+            category=normalized_category,
+            flag_reason=llm_result.flag_reason,
+        )
 
     return ClassificationResult(flagged=False)

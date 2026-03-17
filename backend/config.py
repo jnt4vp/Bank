@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # Plaid
     PLAID_CLIENT_ID: str = ""
     PLAID_SECRET: str = ""
-    PLAID_ENV: str = "sandbox"  # sandbox | development | production
+    PLAID_ENV: Literal["sandbox", "production"] = "sandbox"  # supported hosts in current Plaid SDK wiring
     PLAID_POLL_INTERVAL_MINUTES: int = 30
     PLAID_TOKEN_KEY: str = ""  # encryption key for access tokens; falls back to JWT_SECRET
 

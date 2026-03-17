@@ -10,34 +10,31 @@ from ...ports.classifier import ClassificationResult
 
 logger = logging.getLogger("bank.classifier")
 
-BASE_CATEGORIES = """1. "gambling" - casinos, sports betting, lottery, poker
-2. "adult" - pornography, adult entertainment, escort services
-3. "alcohol" - liquor stores, bars, alcohol purchases
-4. "drugs" - drug paraphernalia, dispensaries, suspicious drug-related purchases"""
-
-
 def _build_prompt(
     merchant: str, description: str, amount: float,
     user_categories: list[str] | None = None,
 ) -> str:
-    if user_categories:
-        extra = "\n".join(
-            f'{i}. "{cat}" - spending the user specifically wants to reduce'
-            for i, cat in enumerate(user_categories, start=5)
-        )
-        all_categories = f"{BASE_CATEGORIES}\n{extra}"
-        valid_values = "gambling|adult|alcohol|drugs|" + "|".join(
-            cat.lower() for cat in user_categories
-        ) + "|null"
-    else:
-        all_categories = BASE_CATEGORIES
-        valid_values = "gambling|adult|alcohol|drugs|null"
+    normalized_categories = [
+        cat.strip().lower()
+        for cat in (user_categories or [])
+        if cat and cat.strip()
+    ]
+    if not normalized_categories:
+        raise ValueError("user_categories is required for pact-aware classification")
 
-    return f"""You classify bank transactions. Flag transactions in these categories:
+    all_categories = "\n".join(
+        f'{i}. "{cat}" - an active pact category the user explicitly configured'
+        for i, cat in enumerate(normalized_categories, start=1)
+    )
+    valid_values = "|".join(normalized_categories) + "|null"
+
+    return f"""You classify bank transactions for a pact system.
+
+Only flag a transaction if it clearly matches one of the user's active pact categories:
 
 {all_categories}
 
-EVERYTHING ELSE IS NOT FLAGGED. Normal purchases like groceries, gas, flowers, clothing, electronics are NEVER flagged unless they match a category above.
+If the transaction does not match one of those active pact categories, it is not flagged.
 
 Transaction:
 - Merchant: {merchant}
@@ -61,6 +58,8 @@ class OllamaClassifierAdapter:
     ) -> ClassificationResult | None:
         settings = get_settings()
         if not settings.OLLAMA_ENABLED:
+            return None
+        if not user_categories:
             return None
 
         prompt = _build_prompt(merchant, description, amount, user_categories)

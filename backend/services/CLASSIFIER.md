@@ -1,6 +1,6 @@
 # Transaction Classifier
 
-The classifier flags irresponsible transactions before they are stored. It runs as a two-layer pipeline: a fast rule-based layer followed by an optional LLM layer powered by Ollama.
+The classifier flags transactions only when they match one of the user's active pacts. It runs as a pact-aware two-layer pipeline: a fast keyword layer followed by an optional LLM layer powered by Ollama.
 
 ## Pipeline
 
@@ -9,15 +9,15 @@ POST /api/transactions
         │
         ▼
 ┌─────────────────┐
-│  Rule-based      │──▶ keyword match? ──▶ flagged immediately
-│  (instant)       │
+│  Pact keywords    │──▶ keyword match for an active pact? ──▶ flagged immediately
+│  (instant)        │
 └─────────────────┘
         │ no match
         ▼
 ┌─────────────────┐
-│  Ollama LLM      │──▶ LLM says flagged? ──▶ flagged with LLM reason
-│  (optional)      │──▶ LLM says safe?    ──▶ saved unflagged
-│  10s timeout     │──▶ Ollama down/slow? ──▶ saved unflagged (graceful skip)
+│  Ollama LLM      │──▶ LLM matches an active pact? ──▶ flagged with LLM reason
+│  (optional)      │──▶ LLM says safe?              ──▶ saved unflagged
+│  10s timeout     │──▶ Ollama down/slow?           ──▶ saved unflagged
 └─────────────────┘
         │
         ▼
@@ -26,9 +26,11 @@ POST /api/transactions
 
 Every transaction goes through this pipeline in `classify_transaction()` before being persisted. The classification result (category, flagged, flag_reason) is stored on the transaction row.
 
-## Flag Categories
+If the user has no active pacts, the classifier does nothing and the transaction is saved unflagged.
 
-Only these 4 categories will flag a transaction:
+## Pact Categories
+
+Only the user's active pact categories can flag a transaction. Some categories have built-in keyword support:
 
 | Category   | What it catches                                      |
 |------------|------------------------------------------------------|
@@ -37,28 +39,29 @@ Only these 4 categories will flag a transaction:
 | `alcohol`  | Liquor stores, bars, breweries, alcohol purchases    |
 | `drugs`    | Dispensaries, smoke shops, drug paraphernalia         |
 
-Normal purchases (groceries, gas, restaurants, subscriptions, etc.) are never flagged.
+Other preset categories like `coffee shops`, `ride share`, and `online shopping` also have keyword lists. Custom pact categories fall back to simple substring matching first, then the LLM can make a pact-aware decision.
 
-## Layer 1: Rule-Based
+## Layer 1: Pact Keywords
 
-Defined in `_rule_based_classify()`. Matches the merchant name and description against keyword lists:
+Defined in `_match_user_pacts()`. Matches the merchant name and description against keyword lists, but only for categories the user currently has active:
 
 - `GAMBLING_KEYWORDS` — draftkings, fanduel, betmgm, roobet, casino, etc.
 - `ADULT_KEYWORDS` — onlyfans, strip club, escort, etc.
 - `ALCOHOL_KEYWORDS` — liquor, total wine, bevmo, bar tab, pub, etc.
 - `DRUG_KEYWORDS` — dispensary, cannabis, smoke shop, etc.
 
-Matching is case-insensitive substring search against `"{merchant} {description}"`. If a keyword matches, the transaction is flagged instantly without calling the LLM.
+Matching is case-insensitive substring search against `"{merchant} {description}"`. If a keyword matches one of the user's active pact categories, the transaction is flagged instantly without calling the LLM.
 
 To add new keywords, edit the lists at the top of `classifier.py`.
 
 ## Layer 2: Ollama LLM
 
-Implemented by the Ollama adapter in `backend/infrastructure/classifiers/ollama.py`. It only runs when the rule-based layer does not flag.
+Implemented by the Ollama adapter in `backend/infrastructure/classifiers/ollama.py`. It only runs when the keyword layer does not flag and the user has at least one active pact.
 
 - Sends the transaction (merchant, description, amount) to Ollama's `/api/generate` endpoint
-- Uses a structured prompt that instructs the model to return JSON with `{flagged, reason, category}`
+- Uses a structured prompt that only lists the user's active pact categories
 - Parses the JSON response and returns a `ClassificationResult`
+- Ignores any LLM category that is not one of the user's active pacts
 
 ### Failure handling
 

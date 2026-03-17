@@ -81,7 +81,7 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch("backend.application.auth.generate_reset_token", new=AsyncMock(return_value="reset-token")) as generate_reset_token_mock, patch(
-            "backend.application.auth.get_settings",
+            "backend.config.get_settings",
             return_value=SimpleNamespace(FRONTEND_URL="http://localhost:5173"),
         ):
             await send_password_reset_link(
@@ -154,13 +154,66 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
 
 
 class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
-    async def test_ingest_user_transaction_sends_alert_for_flagged_transactions(self):
+    async def test_ingest_user_transaction_does_not_flag_without_active_pacts(self):
+        classifier = SimpleNamespace(classify_transaction=AsyncMock())
+        notifier = SimpleNamespace(send_transaction_alert=AsyncMock())
+        db = SimpleNamespace(
+            commit=AsyncMock(),
+            rollback=AsyncMock(),
+            refresh=AsyncMock(),
+        )
+        transaction = SimpleNamespace(
+            id=uuid4(),
+            user_id=uuid4(),
+            merchant="DraftKings",
+            description="Weekly sports bet",
+            amount=Decimal("250.00"),
+            category=None,
+            flagged=False,
+            flag_reason=None,
+        )
+
+        with patch(
+            "backend.application.transactions.get_active_pact_categories",
+            new=AsyncMock(return_value=[]),
+        ), patch(
+            "backend.application.transactions.create_transaction",
+            new=AsyncMock(return_value=transaction),
+        ) as create_transaction_mock:
+            result = await ingest_user_transaction(
+                db,
+                user_id=transaction.user_id,
+                user_email="test@example.com",
+                merchant="DraftKings",
+                description="Weekly sports bet",
+                amount=250.0,
+                classifier=classifier,
+                notifier=notifier,
+            )
+
+        classifier.classify_transaction.assert_not_awaited()
+        create_transaction_mock.assert_awaited_once_with(
+            unittest.mock.ANY,
+            user_id=transaction.user_id,
+            merchant="DraftKings",
+            description="Weekly sports bet",
+            amount=250.0,
+            category=None,
+            flagged=False,
+            flag_reason=None,
+        )
+        db.commit.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(transaction)
+        notifier.send_transaction_alert.assert_not_awaited()
+        self.assertEqual(result, transaction)
+
+    async def test_ingest_user_transaction_sends_alert_for_flagged_pact_transactions(self):
         classifier = SimpleNamespace(
             classify_transaction=AsyncMock(
                 return_value=ClassificationResult(
                     flagged=True,
-                    category="adult",
-                    flag_reason="LLM: suspicious merchant pattern",
+                    category="non-essential spending",
+                    flag_reason="LLM: matched discretionary spending",
                 )
             )
         )
@@ -173,15 +226,18 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         transaction = SimpleNamespace(
             id=uuid4(),
             user_id=uuid4(),
-            merchant="Mystery Vendor",
-            description="Recurring purchase",
-            amount=Decimal("250.00"),
-            category="adult",
+            merchant="Luxury Boutique",
+            description="Impulse clothing purchase",
+            amount=Decimal("180.00"),
+            category="non-essential spending",
             flagged=True,
-            flag_reason="LLM: suspicious merchant pattern",
+            flag_reason="LLM: matched discretionary spending",
         )
 
         with patch(
+            "backend.application.transactions.get_active_pact_categories",
+            new=AsyncMock(return_value=["non-essential spending"]),
+        ), patch(
             "backend.application.transactions.create_transaction",
             new=AsyncMock(return_value=transaction),
         ) as create_transaction_mock:
@@ -189,36 +245,37 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
                 db,
                 user_id=transaction.user_id,
                 user_email="test@example.com",
-                merchant="Mystery Vendor",
-                description="Recurring purchase",
-                amount=250.0,
+                merchant="Luxury Boutique",
+                description="Impulse clothing purchase",
+                amount=180.0,
                 classifier=classifier,
                 notifier=notifier,
             )
 
         classifier.classify_transaction.assert_awaited_once_with(
-            merchant="Mystery Vendor",
-            description="Recurring purchase",
-            amount=250.0,
+            merchant="Luxury Boutique",
+            description="Impulse clothing purchase",
+            amount=180.0,
+            user_categories=["non-essential spending"],
         )
         create_transaction_mock.assert_awaited_once_with(
             unittest.mock.ANY,
             user_id=transaction.user_id,
-            merchant="Mystery Vendor",
-            description="Recurring purchase",
-            amount=250.0,
-            category="adult",
+            merchant="Luxury Boutique",
+            description="Impulse clothing purchase",
+            amount=180.0,
+            category="non-essential spending",
             flagged=True,
-            flag_reason="LLM: suspicious merchant pattern",
+            flag_reason="LLM: matched discretionary spending",
         )
         db.commit.assert_awaited_once()
         db.refresh.assert_awaited_once_with(transaction)
         notifier.send_transaction_alert.assert_awaited_once_with(
             to_email="test@example.com",
-            merchant="Mystery Vendor",
-            amount=250.0,
-            category="adult",
-            flag_reason="LLM: suspicious merchant pattern",
+            merchant="Luxury Boutique",
+            amount=180.0,
+            category="non-essential spending",
+            flag_reason="LLM: matched discretionary spending",
         )
         self.assertEqual(result, transaction)
 

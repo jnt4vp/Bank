@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from functools import partial
 
+import httpx
 import plaid
 from plaid.api import plaid_api
 from plaid.model.accounts_get_request import AccountsGetRequest
@@ -15,6 +16,14 @@ from plaid.model.item_remove_request import ItemRemoveRequest
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.products import Products
+from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
+from plaid.model.sandbox_public_token_create_request_options import (
+    SandboxPublicTokenCreateRequestOptions,
+)
+from plaid.model.sandbox_public_token_create_request_options_transactions import (
+    SandboxPublicTokenCreateRequestOptionsTransactions,
+)
+from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +50,7 @@ PLAID_ENV_MAP = {
 def _get_plaid_client() -> plaid_api.PlaidApi:
     settings = get_settings()
     configuration = plaid.Configuration(
-        host=PLAID_ENV_MAP.get(settings.PLAID_ENV, plaid.Environment.Sandbox),
+        host=PLAID_ENV_MAP[settings.PLAID_ENV],
         api_key={
             "clientId": settings.PLAID_CLIENT_ID,
             "secret": settings.PLAID_SECRET,
@@ -206,6 +215,9 @@ async def sync_transactions(
 ) -> dict:
     """Run /transactions/sync for a single PlaidItem. Returns counts of added/modified/removed."""
     client = get_plaid_client()
+    is_initial_backfill = (
+        plaid_item.transaction_cursor is None and plaid_item.last_synced_at is None
+    )
 
     # Refresh accounts every sync cycle so balances stay current and
     # transient link-time failures don't leave accounts missing forever.
@@ -293,7 +305,7 @@ async def sync_transactions(
             )
             db.add(new_txn)
 
-            if flagged and notifier:
+            if flagged and notifier and not is_initial_backfill:
                 try:
                     await notifier.send_transaction_alert(
                         to_email=user_email,
@@ -419,7 +431,6 @@ async def seed_sandbox_plaid_item(
         logger.info("Seed user has Plaid item but no transactions — will re-sync")
         return existing_item
 
-    from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
     from plaid.model.sandbox_item_fire_webhook_request import SandboxItemFireWebhookRequest
 
     client = get_plaid_client()
@@ -452,6 +463,82 @@ async def seed_sandbox_plaid_item(
 
     logger.info("Sandbox Plaid item seeded for user %s", user_id)
     return item
+
+
+async def create_sandbox_item(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    institution_name: str = "First Platypus Bank",
+    override_username: str | None = None,
+    override_password: str | None = None,
+    days_requested: int = 30,
+) -> PlaidItem:
+    """Create a sandbox Plaid item without firing any webhook side effects."""
+    settings = get_settings()
+    if settings.PLAID_ENV != "sandbox":
+        raise ValueError("Sandbox item creation is only available when PLAID_ENV=sandbox")
+
+    client = get_plaid_client()
+    options_kwargs: dict = {
+        "transactions": SandboxPublicTokenCreateRequestOptionsTransactions(
+            days_requested=days_requested
+        )
+    }
+    if override_username is not None:
+        options_kwargs["override_username"] = override_username
+    if override_password is not None:
+        options_kwargs["override_password"] = override_password
+
+    request = SandboxPublicTokenCreateRequest(
+        institution_id="ins_109508",
+        initial_products=[Products("transactions")],
+        options=SandboxPublicTokenCreateRequestOptions(**options_kwargs),
+    )
+    response = await _call_plaid(client.sandbox_public_token_create, request)
+    return await exchange_public_token(
+        db,
+        user_id,
+        response.public_token,
+        institution_name=institution_name,
+    )
+
+
+async def create_sandbox_transactions(
+    plaid_item: PlaidItem,
+    *,
+    transactions: list[dict],
+) -> dict:
+    """Create custom sandbox transactions for an existing sandbox item."""
+    settings = get_settings()
+    if settings.PLAID_ENV != "sandbox":
+        raise ValueError(
+            "Sandbox transaction creation is only available when PLAID_ENV=sandbox"
+        )
+    if not settings.PLAID_CLIENT_ID or not settings.PLAID_SECRET:
+        raise ValueError("Plaid credentials are required to create sandbox transactions")
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            f"{PLAID_ENV_MAP[settings.PLAID_ENV]}/sandbox/transactions/create",
+            json={
+                "client_id": settings.PLAID_CLIENT_ID,
+                "secret": settings.PLAID_SECRET,
+                "access_token": _get_access_token(plaid_item),
+                "transactions": transactions,
+            },
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+async def refresh_transactions(plaid_item: PlaidItem):
+    """Request a Plaid transactions refresh for an existing item."""
+    client = get_plaid_client()
+    return await _call_plaid(
+        client.transactions_refresh,
+        TransactionsRefreshRequest(access_token=_get_access_token(plaid_item)),
+    )
 
 
 async def get_user_plaid_items(
