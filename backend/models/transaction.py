@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,3 +30,16 @@ class Transaction(Base):
     flagged: Mapped[bool] = mapped_column(default=False)
     flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Plaid-sourced fields (nullable — null means manually created)
+    plaid_transaction_id: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True
+    )
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    pending: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -11,10 +11,15 @@ from .config import get_settings
 from .database import Base, async_session, engine
 from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
+from .routers.plaid import router as plaid_router
 from .routers.transactions import router as transactions_router
 from .application.auth import ensure_dev_seed_user_exists
 from .routers.accountability_settings import router as accountability_settings_router
 from .routers.pact import router as pact_router
+from .models.plaid_item import PlaidItem
+from .services.plaid_poller import start_poller, stop_poller
+from .services.plaid_service import seed_sandbox_plaid_item, sync_transactions
+from .dependencies.integrations import get_classifier, get_notifier
 
 settings = get_settings()
 
@@ -25,8 +30,32 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
     async with async_session() as session:
-        await ensure_dev_seed_user_exists(session)
+        user = await ensure_dev_seed_user_exists(session)
+
+    # Seed a sandbox Plaid connection for the dev user so login works out-of-the-box
+    if user:
+        try:
+            async with async_session() as session:
+                plaid_item = await seed_sandbox_plaid_item(session, user.id)
+            if plaid_item:
+                async with async_session() as session:
+                    refreshed = await session.get(PlaidItem, plaid_item.id)
+                    if refreshed:
+                        await sync_transactions(
+                            session,
+                            refreshed,
+                            classifier=get_classifier(),
+                            notifier=get_notifier(),
+                        )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Sandbox Plaid seed failed — Plaid credentials may be missing or invalid",
+                exc_info=True,
+            )
+
+    start_poller()
     yield
+    stop_poller()
 
 
 app = FastAPI(
@@ -49,20 +78,13 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(counter_router, prefix="/api/counter", tags=["counter"])
 app.include_router(transactions_router, prefix="/api/transactions", tags=["transactions"])
+app.include_router(plaid_router, prefix="/api/plaid", tags=["plaid"])
 app.include_router(
     accountability_settings_router,
     prefix="/api/accountability-settings",
     tags=["accountability-settings"],
 )
 app.include_router(pact_router, tags=["pacts"])
-@app.middleware("http")
-async def log_options_requests(request, call_next):
-    if request.method == "OPTIONS":
-        print("OPTIONS PATH:", request.url.path)
-        print("Origin:", request.headers.get("origin"))
-        print("Access-Control-Request-Method:", request.headers.get("access-control-request-method"))
-        print("Access-Control-Request-Headers:", request.headers.get("access-control-request-headers"))
-    return await call_next(request)
 
 
 @app.get("/health")

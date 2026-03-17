@@ -4,8 +4,8 @@ import '../dashboard.css'
 
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/transactions', label: 'Transactions' },
   { to: '/settings', label: 'Settings' },
-  { to: '/analytics', label: 'Analytics' }, //later 
 ]
 
 export default function Navbar() {

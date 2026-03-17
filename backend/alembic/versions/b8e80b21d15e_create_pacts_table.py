@@ -1,6 +1,6 @@
 """create pacts table
 
-Revision ID: 20260316_0009
+Revision ID: b8e80b21d15e
 Revises: 20260309_0008
 Create Date: 2026-03-16
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
-revision: str = "20260316_0009"
+revision: str = "b8e80b21d15e"
 down_revision: Union[str, Sequence[str], None] = "20260309_0008"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

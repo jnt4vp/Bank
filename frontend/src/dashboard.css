@@ -596,6 +596,9 @@
 }
 
 .dashboard-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   margin-top: 0.15rem;
   padding: 0;
   border: none;
@@ -603,6 +606,7 @@
   color: #8f6b2f;
   font-size: 0.95rem;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .dashboard-activity-list {

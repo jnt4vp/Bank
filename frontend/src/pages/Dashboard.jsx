@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
-import { apiRequest } from '../lib/api/client'
+import {
+  formatTransactionAmount,
+  formatTransactionCategory,
+  formatTransactionDate,
+  sortTransactionsByActivityDate,
+} from '../features/transactions/formatters'
+import { apiRequest } from '../lib/api'
 import '../dashboard.css'
 
 const primaryNavItems = [
   { label: 'Dashboard', to: '/dashboard', disabled: false },
+  { label: 'Transactions', to: '/transactions', disabled: false },
   { label: 'Goals', to: '#', disabled: true },
   { label: 'Rules', to: '#', disabled: true },
   { label: 'Analytics', to: '#', disabled: true },
@@ -120,9 +127,10 @@ export default function Dashboard() {
             flagged: Boolean(tx.flagged),
             flag_reason: tx.flag_reason || '',
             created_at: tx.created_at,
+            date: tx.date || null,
+            pending: Boolean(tx.pending),
             description: tx.description || '',
           }))
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
         const rawPacts = Array.isArray(pactsData)
           ? pactsData
@@ -160,7 +168,7 @@ export default function Dashboard() {
         const accountabilityMap = Object.fromEntries(accountabilityPairs)
 
         if (!cancelled) {
-          setTransactions(normalizedTransactions)
+          setTransactions(sortTransactionsByActivityDate(normalizedTransactions))
           setPacts(normalizedPacts)
           setAccountabilityByPact(accountabilityMap)
         }
@@ -181,7 +189,7 @@ export default function Dashboard() {
       cancelled = true
     }
   }, [token, user?.id])
-
+  
   useEffect(() => {
     function handlePointerDown(event) {
       if (!event.target.closest('.dashboard-profile-menu')) {
@@ -563,7 +571,9 @@ export default function Dashboard() {
           <div className="dashboard-card dashboard-panel">
             <div className="dashboard-panel-header">
               <h2>Recent Activity</h2>
-              <button className="dashboard-link-button" type="button">See All →</button>
+              <Link className="dashboard-link-button" to="/transactions">
+                See All →
+              </Link>
             </div>
 
             {loading && <p className="dashboard-empty">Loading transactions...</p>}
@@ -582,10 +592,7 @@ export default function Dashboard() {
                     <div className="dashboard-activity-main">
                       <div className="dashboard-activity-merchant">{tx.merchant}</div>
                       <div className="dashboard-activity-meta">
-                        {tx.created_at
-                          ? new Date(tx.created_at).toLocaleDateString()
-                          : '—'}{' '}
-                        · {normalizeCategory(tx.category)}
+                        {formatTransactionDate(tx)} · {formatTransactionCategory(tx.category)}
                       </div>
 
                       {tx.flagged && (
@@ -600,7 +607,7 @@ export default function Dashboard() {
                     </div>
 
                     <div className={`dashboard-activity-amount ${tx.flagged ? 'is-flagged' : ''}`}>
-                      {formatCurrency(tx.amount)}
+                      {formatTransactionAmount(tx.amount)}
                     </div>
                   </div>
                 ))}

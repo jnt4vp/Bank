@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date as date_type, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -20,5 +20,7 @@ class TransactionResponse(BaseModel):
     flagged: bool
     flag_reason: str | None
     created_at: datetime
+    date: date_type | None = None
+    pending: bool = False
 
     model_config = ConfigDict(from_attributes=True)

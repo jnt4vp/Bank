@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     GMAIL_APP_PASSWORD: str = ""
     ALERT_EMAIL: str = ""
 
+    # Plaid
+    PLAID_CLIENT_ID: str = ""
+    PLAID_SECRET: str = ""
+    PLAID_ENV: str = "sandbox"  # sandbox | development | production
+    PLAID_POLL_INTERVAL_MINUTES: int = 30
+    PLAID_TOKEN_KEY: str = ""  # encryption key for access tokens; falls back to JWT_SECRET
+
     FRONTEND_URL: str = "http://localhost:5173"
     DEV_SEED_EXAMPLE_USER: bool = True
     DEV_SEED_EXAMPLE_NAME: str = "Test User"

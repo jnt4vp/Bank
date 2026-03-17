@@ -4,9 +4,10 @@ Local development guide for the current repo snapshot.
 
 ## Current Scope
 
-- Backend: FastAPI auth endpoints (`/api/auth/register`, `/api/auth/login`, `/api/auth/me`)
-- Frontend: Vite + React placeholder app
+- Backend: FastAPI with auth, transactions, Plaid bank sync, pacts, and accountability settings
+- Frontend: Vite + React with registration flow, Plaid Link bank connection, and dashboard
 - Database: PostgreSQL (recommended via Docker for local dev)
+- Plaid integration: sandbox mode by default, background polling for transaction sync
 
 ## Prerequisites
 
@@ -136,7 +137,33 @@ To run without Ollama, set:
 OLLAMA_ENABLED=false
 ```
 
-## 5. Frontend Setup (Vite)
+## 5. Enable Plaid Bank Connection (Optional)
+
+Plaid allows users to connect real bank accounts. In development, use the **sandbox** environment which provides test credentials without real bank access.
+
+1. Sign up for a free Plaid account at [dashboard.plaid.com](https://dashboard.plaid.com)
+2. Get your sandbox credentials from the Plaid dashboard (Keys page)
+3. Add to your `.env`:
+
+```bash
+PLAID_CLIENT_ID=your-client-id
+PLAID_SECRET=your-sandbox-secret
+PLAID_ENV=sandbox
+PLAID_POLL_INTERVAL_MINUTES=30
+PLAID_TOKEN_KEY=          # optional; falls back to JWT_SECRET
+```
+
+With sandbox credentials configured, users can connect test banks during registration using Plaid Link. The backend polls for new transactions every 30 minutes (configurable).
+
+If Plaid credentials are not set, the poller is disabled and the Plaid endpoints return errors — the rest of the app works normally.
+
+### Sandbox Testing
+
+In sandbox mode, Plaid Link shows test institutions. Use these credentials when prompted:
+- Username: `user_good`
+- Password: `pass_good`
+
+## 6. Frontend Setup (Vite)
 
 In a new terminal, from the repo root:
 
@@ -150,7 +177,7 @@ Frontend URL:
 
 - App: `http://localhost:5173`
 
-## 6. Quick API Smoke Test (Optional)
+## 7. Quick API Smoke Test (Optional)
 
 By default, the app automatically creates this example account unless you disable `DEV_SEED_EXAMPLE_USER` in `.env`:
 
@@ -173,7 +200,7 @@ curl -X POST http://localhost:8000/api/auth/login \
   -d '{"email":"test@example.com","password":"password123"}'
 ```
 
-## 7. Transaction Classifier Smoke Test
+## 8. Transaction Classifier Smoke Test
 
 Send a transaction through the real API classifier:
 
@@ -203,7 +230,7 @@ If Ollama is down/unreachable, the backend gracefully skips the LLM step and sti
 
 More classifier details: `backend/services/CLASSIFIER.md`.
 
-## 8. Tests
+## 9. Tests
 
 Backend smoke test:
 
@@ -244,7 +271,7 @@ npm --prefix frontend run test:e2e:headed  # with visible browser
 
 The tests use the dev seed account (`test@example.com` / `password123`).
 
-## 9. Common Commands
+## 10. Common Commands
 
 Stop local Postgres:
 
@@ -262,7 +289,7 @@ alembic upgrade head
 
 If you use `make dev` after the reset, you can skip the manual `alembic upgrade head` because the dev script applies it automatically.
 
-## 10. Notes
+## 11. Notes
 
 - `docker-compose.prod.yml` and `deploy/` contain deployment options (organized as `deploy/docker/` and `deploy/systemd-nginx/`), but this README is intentionally local-dev only.
 - EC2 Docker deployment guide: `deploy/docker/README.md`.

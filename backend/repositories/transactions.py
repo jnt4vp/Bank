@@ -34,6 +34,9 @@ async def get_transactions_for_user(db: AsyncSession, user_id: UUID) -> list[Tra
     result = await db.execute(
         select(Transaction)
         .where(Transaction.user_id == user_id)
-        .order_by(Transaction.created_at.desc())
+        .order_by(
+            Transaction.date.desc().nullslast(),
+            Transaction.created_at.desc(),
+        )
     )
     return list(result.scalars().all())

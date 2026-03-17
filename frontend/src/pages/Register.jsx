@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { usePlaidLink } from "react-plaid-link";
 import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
 import "../landing.css";
 import "../register.css";
 import { registerAccount } from "../features/auth/api";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
+import { createLinkToken, exchangePublicToken } from "../features/plaid/api";
 
 const STEPS = [
   { num: 1, label: "Create Account" },
@@ -46,7 +48,13 @@ export default function Register() {
   const [disciplineSavingsPercent, setDisciplineSavingsPercent] = useState("");
   const [accountabilityNote, setAccountabilityNote] = useState("");
 
-  const [bankChoice, setBankChoice] = useState("");
+  // Auth token from registration (step 1) — needed for Plaid API calls
+  const [authToken, setAuthToken] = useState(null);
+
+  // Plaid Link state
+  const [linkToken, setLinkToken] = useState(null);
+  const [plaidConnected, setPlaidConnected] = useState(false);
+  const [connectedInstitution, setConnectedInstitution] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -89,6 +97,56 @@ export default function Register() {
       navigate("/");
     }
   };
+
+  const onPlaidSuccess = useCallback(
+    async (publicToken, metadata) => {
+      setLoading(true);
+      setError(null);
+      try {
+        await exchangePublicToken({
+          publicToken,
+          institutionName: metadata?.institution?.name || null,
+          token: authToken,
+        });
+        setPlaidConnected(true);
+        setConnectedInstitution(metadata?.institution?.name || "Your bank");
+      } catch (err) {
+        setError(err.message || "Failed to connect bank account.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authToken]
+  );
+
+  const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
+    token: linkToken,
+    onSuccess: onPlaidSuccess,
+  });
+
+  const handleOpenPlaid = async () => {
+    if (!authToken) {
+      setError("Please complete registration first.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const { link_token } = await createLinkToken(authToken);
+      setLinkToken(link_token);
+    } catch (err) {
+      setError(err.message || "Failed to initialize bank connection.");
+      setLoading(false);
+    }
+  };
+
+  // Open Plaid Link once the link token is ready
+  React.useEffect(() => {
+    if (linkToken && plaidReady) {
+      openPlaidLink();
+      setLoading(false);
+    }
+  }, [linkToken, plaidReady, openPlaidLink]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -136,11 +194,8 @@ export default function Register() {
         });
 
         const createdUser = newUser?.user || newUser?.data || newUser;
-
-        console.log("REGISTER RESPONSE:", newUser);
-        console.log("CREATED USER:", createdUser);
-
         setRegisteredUser(createdUser);
+        setAuthToken(newUser?.access_token || null);
         setCurrentStep(2);
       } catch (err) {
         console.error("REGISTER ERROR:", err);
@@ -292,7 +347,6 @@ export default function Register() {
         accountabilityType,
         disciplineSavingsPercent,
         accountabilityNote,
-        bankChoice,
       });
 
       navigate("/");
@@ -741,29 +795,32 @@ export default function Register() {
                     Securely link your account when you’re ready.
                   </p>
 
-                  <div className="bank-prototype-box">
-                    <div className="penalty-prototype-list">
-                      <label className="prototype-option">
-                        <input
-                          type="radio"
-                          name="bank"
-                          checked={bankChoice === "plaid"}
-                          onChange={() => setBankChoice("plaid")}
-                        />
-                        <span>Connect with Plaid</span>
-                      </label>
-
-                      <label className="prototype-option">
-                        <input
-                          type="radio"
-                          name="bank"
-                          checked={bankChoice === "manual"}
-                          onChange={() => setBankChoice("manual")}
-                        />
-                        <span>Set up manually later</span>
-                      </label>
+                  {plaidConnected ? (
+                    <div className="bank-prototype-box" style={{ textAlign: "center", padding: "24px 16px" }}>
+                      <div style={{ fontSize: "32px", marginBottom: "8px" }}>&#10003;</div>
+                      <p style={{ fontWeight: 600, marginBottom: "4px" }}>
+                        {connectedInstitution} connected
+                      </p>
+                      <p style={{ opacity: 0.6, fontSize: "14px" }}>
+                        Your transactions will sync automatically.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="bank-prototype-box" style={{ textAlign: "center", padding: "24px 16px" }}>
+                      <p style={{ marginBottom: "16px", opacity: 0.7 }}>
+                        Connect your bank account to automatically track your spending.
+                      </p>
+                      <button
+                        type="button"
+                        className="sign-in-btn register-btn-continue"
+                        onClick={handleOpenPlaid}
+                        disabled={loading}
+                        style={{ width: "100%" }}
+                      >
+                        {loading ? "Connecting…" : "Connect with Plaid"}
+                      </button>
+                    </div>
+                  )}
 
                   {error && <div className="register-error">{error}</div>}
 

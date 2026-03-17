@@ -1,0 +1,486 @@
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
+from functools import partial
+
+import plaid
+from plaid.api import plaid_api
+from plaid.model.accounts_get_request import AccountsGetRequest
+from plaid.model.country_code import CountryCode
+from plaid.model.item_public_token_exchange_request import (
+    ItemPublicTokenExchangeRequest,
+)
+from plaid.model.item_remove_request import ItemRemoveRequest
+from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+from plaid.model.products import Products
+from plaid.model.transactions_sync_request import TransactionsSyncRequest
+from sqlalchemy import select, update as sa_update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ..config import get_settings
+from ..models.account import Account
+from ..models.plaid_item import PlaidItem
+from ..models.transaction import Transaction
+from ..models.user import User
+from ..ports.classifier import ClassifierPort
+from ..ports.notifier import NotifierPort
+from ..services.classifier import classify_transaction
+from ..services.token_encryption import decrypt_token, encrypt_token
+
+logger = logging.getLogger(__name__)
+
+PLAID_ENV_MAP = {
+    "sandbox": plaid.Environment.Sandbox,
+    "production": plaid.Environment.Production,
+}
+
+
+def _get_plaid_client() -> plaid_api.PlaidApi:
+    settings = get_settings()
+    configuration = plaid.Configuration(
+        host=PLAID_ENV_MAP.get(settings.PLAID_ENV, plaid.Environment.Sandbox),
+        api_key={
+            "clientId": settings.PLAID_CLIENT_ID,
+            "secret": settings.PLAID_SECRET,
+        },
+    )
+    api_client = plaid.ApiClient(configuration)
+    return plaid_api.PlaidApi(api_client)
+
+
+_client: plaid_api.PlaidApi | None = None
+
+
+def get_plaid_client() -> plaid_api.PlaidApi:
+    global _client
+    if _client is None:
+        _client = _get_plaid_client()
+    return _client
+
+
+def _get_access_token(plaid_item: PlaidItem) -> str:
+    """Decrypt the stored access token. Handles both encrypted and legacy plaintext tokens."""
+    try:
+        return decrypt_token(plaid_item.access_token)
+    except Exception:
+        # Legacy plaintext token (pre-encryption migration)
+        return plaid_item.access_token
+
+
+# ---------------------------------------------------------------------------
+# Async wrappers for blocking Plaid SDK calls
+# ---------------------------------------------------------------------------
+
+async def _call_plaid(func, *args, **kwargs):
+    """Run a synchronous Plaid SDK call in a thread so we don't block the event loop."""
+    return await asyncio.to_thread(partial(func, *args, **kwargs))
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+async def create_link_token(user_id: uuid.UUID) -> str:
+    client = get_plaid_client()
+    request = LinkTokenCreateRequest(
+        products=[Products("transactions")],
+        client_name="PactBank",
+        country_codes=[CountryCode("US")],
+        language="en",
+        user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+    )
+    response = await _call_plaid(client.link_token_create, request)
+    return response.link_token
+
+
+async def exchange_public_token(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    public_token: str,
+    institution_name: str | None = None,
+) -> PlaidItem:
+    client = get_plaid_client()
+    response = await _call_plaid(
+        client.item_public_token_exchange,
+        ItemPublicTokenExchangeRequest(public_token=public_token),
+    )
+
+    # Check for an existing item with this item_id (re-link / retry scenario)
+    result = await db.execute(
+        select(PlaidItem).where(PlaidItem.item_id == response.item_id)
+    )
+    plaid_item = result.scalar_one_or_none()
+
+    if plaid_item:
+        # Update existing item with fresh token
+        plaid_item.access_token = encrypt_token(response.access_token)
+        plaid_item.institution_name = institution_name or plaid_item.institution_name
+        logger.info("Plaid item %s re-linked for user %s", plaid_item.id, user_id)
+    else:
+        plaid_item = PlaidItem(
+            user_id=user_id,
+            item_id=response.item_id,
+            access_token=encrypt_token(response.access_token),
+            institution_name=institution_name,
+        )
+        db.add(plaid_item)
+        logger.info("Plaid item created for user %s", user_id)
+
+    await db.commit()
+    await db.refresh(plaid_item)
+
+    # Fetch and store accounts for this item
+    await _sync_accounts(db, plaid_item)
+
+    return plaid_item
+
+
+async def _sync_accounts(db: AsyncSession, plaid_item: PlaidItem) -> None:
+    """Fetch accounts from Plaid and upsert into the accounts table."""
+    client = get_plaid_client()
+
+    try:
+        response = await _call_plaid(
+            client.accounts_get,
+            AccountsGetRequest(access_token=_get_access_token(plaid_item)),
+        )
+    except Exception:
+        logger.exception("Failed to fetch accounts for plaid_item %s", plaid_item.id)
+        return
+
+    for acct in response.accounts:
+        existing = await db.execute(
+            select(Account).where(Account.plaid_account_id == acct.account_id)
+        )
+        existing_acct = existing.scalar_one_or_none()
+
+        balances = acct.balances
+        if existing_acct:
+            existing_acct.current_balance = balances.current
+            existing_acct.available_balance = balances.available
+            existing_acct.iso_currency_code = balances.iso_currency_code
+            existing_acct.name = acct.name
+            existing_acct.official_name = acct.official_name
+        else:
+            db.add(
+                Account(
+                    plaid_item_id=plaid_item.id,
+                    user_id=plaid_item.user_id,
+                    plaid_account_id=acct.account_id,
+                    name=acct.name,
+                    official_name=acct.official_name,
+                    type=acct.type.value if hasattr(acct.type, "value") else str(acct.type),
+                    subtype=acct.subtype.value if acct.subtype and hasattr(acct.subtype, "value") else (str(acct.subtype) if acct.subtype else None),
+                    mask=acct.mask,
+                    current_balance=balances.current,
+                    available_balance=balances.available,
+                    iso_currency_code=balances.iso_currency_code,
+                )
+            )
+
+    await db.commit()
+
+
+async def _resolve_account_id(
+    db: AsyncSession, plaid_account_id: str | None
+) -> uuid.UUID | None:
+    """Look up our internal account UUID from a Plaid account_id string."""
+    if not plaid_account_id:
+        return None
+    result = await db.execute(
+        select(Account.id).where(Account.plaid_account_id == plaid_account_id)
+    )
+    row = result.scalar_one_or_none()
+    return row
+
+
+async def sync_transactions(
+    db: AsyncSession,
+    plaid_item: PlaidItem,
+    *,
+    classifier: ClassifierPort | None = None,
+    notifier: NotifierPort | None = None,
+) -> dict:
+    """Run /transactions/sync for a single PlaidItem. Returns counts of added/modified/removed."""
+    client = get_plaid_client()
+
+    # Refresh accounts every sync cycle so balances stay current and
+    # transient link-time failures don't leave accounts missing forever.
+    await _sync_accounts(db, plaid_item)
+
+    cursor = plaid_item.transaction_cursor
+    added_count = 0
+    modified_count = 0
+    removed_count = 0
+    has_more = True
+
+    # Look up user email once for alert notifications
+    user_email: str | None = None
+    if notifier:
+        result = await db.execute(
+            select(User.email).where(User.id == plaid_item.user_id)
+        )
+        user_email = result.scalar_one_or_none()
+
+    while has_more:
+        request = TransactionsSyncRequest(
+            access_token=_get_access_token(plaid_item),
+            **({"cursor": cursor} if cursor else {}),
+        )
+        response = await _call_plaid(client.transactions_sync, request)
+
+        # Process added transactions
+        for txn in response.added:
+            existing = await db.execute(
+                select(Transaction).where(
+                    Transaction.plaid_transaction_id == txn.transaction_id
+                )
+            )
+            if existing.scalar_one_or_none():
+                continue
+
+            account_id = await _resolve_account_id(db, txn.account_id)
+            merchant = txn.merchant_name or txn.name or "Unknown"
+            description = txn.name or ""
+            amount = float(txn.amount)
+
+            # Use Plaid category as default, then override with classifier if available
+            category = (
+                txn.personal_finance_category.primary
+                if txn.personal_finance_category
+                else (txn.category[0] if txn.category else None)
+            )
+            flagged = False
+            flag_reason = None
+
+            if classifier:
+                try:
+                    classification = await classify_transaction(
+                        classifier,
+                        merchant=merchant,
+                        description=description,
+                        amount=amount,
+                    )
+                    if classification.category:
+                        category = classification.category
+                    flagged = classification.flagged
+                    flag_reason = classification.flag_reason
+                except Exception:
+                    logger.warning(
+                        "Classification failed for plaid txn %s, storing without flag",
+                        txn.transaction_id,
+                    )
+
+            new_txn = Transaction(
+                user_id=plaid_item.user_id,
+                merchant=merchant,
+                description=description,
+                amount=amount,
+                category=category,
+                flagged=flagged,
+                flag_reason=flag_reason,
+                plaid_transaction_id=txn.transaction_id,
+                account_id=account_id,
+                pending=txn.pending,
+                date=txn.date,
+            )
+            db.add(new_txn)
+
+            if flagged and notifier:
+                try:
+                    await notifier.send_transaction_alert(
+                        to_email=user_email,
+                        merchant=merchant,
+                        amount=amount,
+                        category=category,
+                        flag_reason=flag_reason,
+                    )
+                except Exception:
+                    logger.warning("Failed to send alert for plaid txn %s", txn.transaction_id)
+
+            added_count += 1
+
+        # Process modified transactions (pending → posted, amount changes, etc.)
+        for txn in response.modified:
+            result = await db.execute(
+                select(Transaction).where(
+                    Transaction.plaid_transaction_id == txn.transaction_id
+                )
+            )
+            existing_txn = result.scalar_one_or_none()
+            if existing_txn:
+                existing_txn.merchant = txn.merchant_name or txn.name or existing_txn.merchant
+                existing_txn.description = txn.name or existing_txn.description
+                existing_txn.amount = float(txn.amount)
+                existing_txn.pending = txn.pending
+                existing_txn.date = txn.date
+                if txn.personal_finance_category:
+                    existing_txn.category = txn.personal_finance_category.primary
+                # Backfill account_id if it was null (e.g. from a transient accounts_get failure)
+                if existing_txn.account_id is None and txn.account_id:
+                    existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
+                modified_count += 1
+
+        # Process removed transactions
+        for txn in response.removed:
+            result = await db.execute(
+                select(Transaction).where(
+                    Transaction.plaid_transaction_id == txn.transaction_id
+                )
+            )
+            existing_txn = result.scalar_one_or_none()
+            if existing_txn:
+                await db.delete(existing_txn)
+                removed_count += 1
+
+        has_more = response.has_more
+        cursor = response.next_cursor
+
+    # Update cursor and last sync time
+    plaid_item.transaction_cursor = cursor
+    plaid_item.last_synced_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    logger.info(
+        "Synced plaid_item %s: +%d ~%d -%d",
+        plaid_item.id,
+        added_count,
+        modified_count,
+        removed_count,
+    )
+    return {"added": added_count, "modified": modified_count, "removed": removed_count}
+
+
+async def sync_all_items(
+    *,
+    classifier: ClassifierPort | None = None,
+    notifier: NotifierPort | None = None,
+) -> int:
+    """Sync transactions for all PlaidItems. Uses a fresh session per item
+    so one DB failure doesn't break the rest of the cycle."""
+    from ..database import async_session
+
+    async with async_session() as db:
+        result = await db.execute(select(PlaidItem))
+        items = list(result.scalars().all())
+
+    synced = 0
+    for item in items:
+        try:
+            async with async_session() as db:
+                # Re-fetch the item in this session
+                refreshed = await db.get(PlaidItem, item.id)
+                if refreshed is None:
+                    continue
+                await sync_transactions(
+                    db, refreshed, classifier=classifier, notifier=notifier
+                )
+                synced += 1
+        except Exception:
+            logger.exception("Failed to sync plaid_item %s", item.id)
+
+    return synced
+
+
+async def seed_sandbox_plaid_item(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> PlaidItem | None:
+    """Create a sandbox Plaid item programmatically for the dev seed user.
+
+    Uses Plaid's /sandbox/public_token/create endpoint — only works in sandbox env.
+    Skips if the user already has a connected item or Plaid creds are missing.
+    """
+    settings = get_settings()
+    if settings.PLAID_ENV != "sandbox" or not settings.PLAID_CLIENT_ID or not settings.PLAID_SECRET:
+        return None
+
+    # Check if user already has a Plaid item with transactions
+    result = await db.execute(
+        select(PlaidItem).where(PlaidItem.user_id == user_id)
+    )
+    existing_item = result.scalar_one_or_none()
+    if existing_item:
+        # Check if it already has transactions — if so, nothing to do
+        txn_count = await db.execute(
+            select(Transaction.id).where(Transaction.user_id == user_id).limit(1)
+        )
+        if txn_count.scalar_one_or_none():
+            logger.info("Seed user already has Plaid transactions — skipping sandbox seed")
+            return None
+        # Item exists but no transactions — return it so caller can re-sync
+        logger.info("Seed user has Plaid item but no transactions — will re-sync")
+        return existing_item
+
+    from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
+    from plaid.model.sandbox_item_fire_webhook_request import SandboxItemFireWebhookRequest
+
+    client = get_plaid_client()
+
+    # ins_109508 = "First Platypus Bank" (Plaid sandbox test institution)
+    request = SandboxPublicTokenCreateRequest(
+        institution_id="ins_109508",
+        initial_products=[Products("transactions")],
+    )
+    response = await _call_plaid(client.sandbox_public_token_create, request)
+
+    item = await exchange_public_token(
+        db, user_id, response.public_token, institution_name="First Platypus Bank"
+    )
+
+    # Fire DEFAULT_UPDATE webhook so sandbox prepares historical transactions,
+    # then wait briefly for them to become available via /transactions/sync.
+    try:
+        access_token = _get_access_token(item)
+        await _call_plaid(
+            client.sandbox_item_fire_webhook,
+            SandboxItemFireWebhookRequest(
+                access_token=access_token,
+                webhook_code="DEFAULT_UPDATE",
+            ),
+        )
+        await asyncio.sleep(2)
+    except Exception:
+        logger.warning("Failed to fire sandbox webhook — transactions may be empty initially")
+
+    logger.info("Sandbox Plaid item seeded for user %s", user_id)
+    return item
+
+
+async def get_user_plaid_items(
+    db: AsyncSession, user_id: uuid.UUID
+) -> list[PlaidItem]:
+    result = await db.execute(
+        select(PlaidItem).where(PlaidItem.user_id == user_id)
+    )
+    return list(result.scalars().all())
+
+
+async def remove_plaid_item(db: AsyncSession, plaid_item: PlaidItem) -> None:
+    client = get_plaid_client()
+    try:
+        await _call_plaid(
+            client.item_remove,
+            ItemRemoveRequest(access_token=_get_access_token(plaid_item)),
+        )
+    except Exception:
+        logger.warning("Failed to remove item from Plaid API, removing locally anyway")
+
+    # Detach transactions from accounts belonging to this item before deletion.
+    # The DB cascade (plaid_item → accounts ON DELETE CASCADE, accounts → transactions
+    # ON DELETE SET NULL) should handle this, but we do it explicitly to avoid
+    # any ordering issues with the ORM session flush.
+    account_ids = await db.execute(
+        select(Account.id).where(Account.plaid_item_id == plaid_item.id)
+    )
+    for (acct_id,) in account_ids:
+        await db.execute(
+            sa_update(Transaction)
+            .where(Transaction.account_id == acct_id)
+            .values(account_id=None)
+        )
+
+    await db.delete(plaid_item)
+    await db.commit()
