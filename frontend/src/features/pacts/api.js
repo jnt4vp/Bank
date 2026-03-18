@@ -1,9 +1,10 @@
 import { apiRequest } from "../../lib/api";
 
-export function createPact(payload) {
+export function createPact(payload, token) {
   return apiRequest("/api/pacts", {
     method: "POST",
     body: payload,
+    token,
   });
 }
 

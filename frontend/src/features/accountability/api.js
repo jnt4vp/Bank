@@ -1,19 +1,19 @@
 import { apiRequest } from '../../lib/api/client'
 
-function getToken() {
-  return localStorage.getItem('token') || undefined
+function getToken(token) {
+  return token || localStorage.getItem('token') || undefined
 }
 
-export async function saveAccountabilitySettings(payload) {
+export async function saveAccountabilitySettings(payload, token) {
   return apiRequest('/api/accountability-settings', {
     method: 'POST',
-    token: getToken(),
+    token: getToken(token),
     body: payload,
   })
 }
 
-export async function getAccountabilitySettings(pactId) {
+export async function getAccountabilitySettings(pactId, token) {
   return apiRequest(`/api/accountability-settings/${pactId}`, {
-    token: getToken(),
+    token: getToken(token),
   })
 }

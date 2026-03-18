@@ -4,6 +4,7 @@ import { usePlaidLink } from "react-plaid-link";
 import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
 import "../landing.css";
 import "../register.css";
+import { useAuth } from "../features/auth/context";
 import { registerAccount } from "../features/auth/api";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
@@ -48,10 +49,8 @@ export default function Register() {
   const [disciplineSavingsPercent, setDisciplineSavingsPercent] = useState("");
   const [accountabilityNote, setAccountabilityNote] = useState("");
 
-  // Auth token from registration (step 1) — needed for Plaid API calls
   const [authToken, setAuthToken] = useState(null);
 
-  // Plaid Link state
   const [linkToken, setLinkToken] = useState(null);
   const [plaidConnected, setPlaidConnected] = useState(false);
   const [connectedInstitution, setConnectedInstitution] = useState(null);
@@ -60,6 +59,7 @@ export default function Register() {
   const [error, setError] = useState(null);
 
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
 
   const EyeBtn = ({ show, onToggle }) => (
     <button
@@ -94,7 +94,7 @@ export default function Register() {
     if (currentStep < 4) {
       goNext();
     } else {
-      navigate("/");
+      navigate("/dashboard", { replace: true });
     }
   };
 
@@ -129,8 +129,10 @@ export default function Register() {
       setError("Please complete registration first.");
       return;
     }
+
     setLoading(true);
     setError(null);
+
     try {
       const { link_token } = await createLinkToken(authToken);
       setLinkToken(link_token);
@@ -140,7 +142,6 @@ export default function Register() {
     }
   };
 
-  // Open Plaid Link once the link token is ready
   React.useEffect(() => {
     if (linkToken && plaidReady) {
       openPlaidLink();
@@ -193,9 +194,16 @@ export default function Register() {
           phone: phone.trim(),
         });
 
+        const nextToken = newUser?.access_token || null;
         const createdUser = newUser?.user || newUser?.data || newUser;
+
+        if (!nextToken) {
+          throw new Error("Registration succeeded but no access token was returned.");
+        }
+
         setRegisteredUser(createdUser);
-        setAuthToken(newUser?.access_token || null);
+        setAuthToken(nextToken);
+        await refreshUser(nextToken);
         setCurrentStep(2);
       } catch (err) {
         console.error("REGISTER ERROR:", err);
@@ -233,23 +241,58 @@ export default function Register() {
       setLoading(true);
 
       try {
-        const pactResponse = await createPact({
-          user_id: registeredUser.id,
-          preset_category: presetCategory,
-          custom_category: customCategory,
-          status: "active",
-        });
+        let created = null;
 
-        const pact = pactResponse?.data || pactResponse;
+        if (presetCategory && customCategory) {
+          const resp1 = await createPact(
+            {
+              user_id: registeredUser.id,
+              preset_category: presetCategory,
+              custom_category: null,
+              status: "active",
+            },
+            authToken
+          );
 
-        console.log("PACT CREATE RESPONSE:", pactResponse);
-        console.log("CREATED PACT:", pact);
+          const resp2 = await createPact(
+            {
+              user_id: registeredUser.id,
+              preset_category: null,
+              custom_category: customCategory,
+              status: "active",
+            },
+            authToken
+          );
 
-        if (!pact?.id) {
+          const pact1 = resp1?.data || resp1;
+          const pact2 = resp2?.data || resp2;
+
+          if (!pact1?.id || !pact2?.id) {
+            throw new Error("One or more pacts were not created correctly.");
+          }
+
+          created = pact2;
+        } else {
+          const pactResponse = await createPact(
+            {
+              user_id: registeredUser.id,
+              preset_category: presetCategory,
+              custom_category: customCategory,
+              status: "active",
+            },
+            authToken
+          );
+
+          created = pactResponse?.data || pactResponse;
+        }
+
+        console.log("PACT CREATE RESPONSE:", created);
+
+        if (!created?.id) {
           throw new Error("Pact was created but no pact id was returned.");
         }
 
-        setCreatedPact(pact);
+        setCreatedPact(created);
         goNext();
       } catch (err) {
         console.error("PACT CREATE ERROR:", err);
@@ -349,7 +392,7 @@ export default function Register() {
         accountabilityNote,
       });
 
-      navigate("/");
+      navigate("/dashboard", { replace: true });
     }
   };
 
@@ -796,8 +839,13 @@ export default function Register() {
                   </p>
 
                   {plaidConnected ? (
-                    <div className="bank-prototype-box" style={{ textAlign: "center", padding: "24px 16px" }}>
-                      <div style={{ fontSize: "32px", marginBottom: "8px" }}>&#10003;</div>
+                    <div
+                      className="bank-prototype-box"
+                      style={{ textAlign: "center", padding: "24px 16px" }}
+                    >
+                      <div style={{ fontSize: "32px", marginBottom: "8px" }}>
+                        &#10003;
+                      </div>
                       <p style={{ fontWeight: 600, marginBottom: "4px" }}>
                         {connectedInstitution} connected
                       </p>
@@ -806,7 +854,10 @@ export default function Register() {
                       </p>
                     </div>
                   ) : (
-                    <div className="bank-prototype-box" style={{ textAlign: "center", padding: "24px 16px" }}>
+                    <div
+                      className="bank-prototype-box"
+                      style={{ textAlign: "center", padding: "24px 16px" }}
+                    >
                       <p style={{ marginBottom: "16px", opacity: 0.7 }}>
                         Connect your bank account to automatically track your spending.
                       </p>

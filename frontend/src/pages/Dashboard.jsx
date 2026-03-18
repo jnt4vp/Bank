@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import {
@@ -8,13 +8,15 @@ import {
   sortTransactionsByActivityDate,
 } from '../features/transactions/formatters'
 import { apiRequest } from '../lib/api'
+import PlaidConnectButton from '../features/plaid/PlaidConnectButton'
+import { getPlaidItems, syncPlaidItem } from '../features/plaid/api'
 import '../dashboard.css'
 
 const primaryNavItems = [
   { label: 'Dashboard', to: '/dashboard', disabled: false },
   { label: 'Transactions', to: '/transactions', disabled: false },
+  { label: 'Pacts', to: '/pacts', disabled: false },
   { label: 'Goals', to: '#', disabled: true },
-  { label: 'Rules', to: '#', disabled: true },
   { label: 'Analytics', to: '#', disabled: true },
 ]
 
@@ -55,7 +57,9 @@ function normalizeText(value) {
 
 function accountabilityLabel(type, percent) {
   if (type === 'email') return 'Acknowledgment email'
-  if (type === 'savings_percentage') return `${Number(percent || 0)}% redirected to savings`
+  if (type === 'savings_percentage') {
+    return `${Number(percent || 0)}% redirected to savings`
+  }
   if (type === 'both') return `Email + ${Number(percent || 0)}% to savings`
   return 'Accountability enabled'
 }
@@ -86,110 +90,105 @@ export default function Dashboard() {
 
   const [transactions, setTransactions] = useState([])
   const [pacts, setPacts] = useState([])
+  const [plaidItems, setPlaidItems] = useState([])
   const [accountabilityByPact, setAccountabilityByPact] = useState({})
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
 
-  useEffect(() => {
+  const loadDashboardData = useCallback(async () => {
     if (!token || !user?.id) {
       setLoading(false)
       return
     }
 
-    let cancelled = false
+    try {
+      setLoading(true)
+      setError(null)
 
-    async function loadDashboardData() {
-      try {
-        setLoading(true)
-        setError(null)
+      const [transactionsData, pactsData, plaidItemsData] = await Promise.all([
+        apiRequest('/api/transactions/', { token }),
+        apiRequest(`/api/pacts/user/${user.id}`, { token }),
+        getPlaidItems(token),
+      ])
 
-        const [transactionsData, pactsData] = await Promise.all([
-          apiRequest('/api/transactions/', { token }),
-          apiRequest(`/api/pacts/user/${user.id}`, { token }),
-        ])
+      const rawTransactions = Array.isArray(transactionsData)
+        ? transactionsData
+        : Array.isArray(transactionsData?.results)
+          ? transactionsData.results
+          : Array.isArray(transactionsData?.transactions)
+            ? transactionsData.transactions
+            : []
 
-        const rawTransactions = Array.isArray(transactionsData)
-          ? transactionsData
-          : Array.isArray(transactionsData?.results)
-            ? transactionsData.results
-            : Array.isArray(transactionsData?.transactions)
-              ? transactionsData.transactions
-              : []
+      const normalizedTransactions = rawTransactions.map((tx) => ({
+        id: tx.id,
+        user_id: tx.user_id,
+        merchant: tx.merchant || tx.description || 'Unknown merchant',
+        category: tx.category || 'Other',
+        amount: Number(tx.amount || 0),
+        flagged: Boolean(tx.flagged),
+        flag_reason: tx.flag_reason || '',
+        created_at: tx.created_at,
+        date: tx.date || null,
+        pending: Boolean(tx.pending),
+        description: tx.description || '',
+      }))
 
-        const normalizedTransactions = rawTransactions
-          .map((tx) => ({
-            id: tx.id,
-            user_id: tx.user_id,
-            merchant: tx.merchant || tx.description || 'Unknown merchant',
-            category: tx.category || 'Other',
-            amount: Number(tx.amount || 0),
-            flagged: Boolean(tx.flagged),
-            flag_reason: tx.flag_reason || '',
-            created_at: tx.created_at,
-            date: tx.date || null,
-            pending: Boolean(tx.pending),
-            description: tx.description || '',
-          }))
+      const rawPacts = Array.isArray(pactsData)
+        ? pactsData
+        : Array.isArray(pactsData?.results)
+          ? pactsData.results
+          : Array.isArray(pactsData?.pacts)
+            ? pactsData.pacts
+            : []
 
-        const rawPacts = Array.isArray(pactsData)
-          ? pactsData
-          : Array.isArray(pactsData?.results)
-            ? pactsData.results
-            : Array.isArray(pactsData?.pacts)
-              ? pactsData.pacts
-              : []
+      const normalizedPacts = rawPacts
+        .map((pact) => ({
+          id: pact.id,
+          user_id: pact.user_id,
+          preset_category: pact.preset_category || null,
+          custom_category: pact.custom_category || null,
+          category:
+            pact.category ||
+            pact.custom_category ||
+            pact.preset_category ||
+            'Uncategorized',
+          status: pact.status || 'active',
+        }))
+        .sort((a, b) => String(a.category).localeCompare(String(b.category)))
 
-        const normalizedPacts = rawPacts
-          .map((pact) => ({
-            id: pact.id,
-            user_id: pact.user_id,
-            preset_category: pact.preset_category || null,
-            custom_category: pact.custom_category || null,
-            category: pact.category || pact.custom_category || pact.preset_category || 'Uncategorized',
-            status: pact.status || 'active',
-          }))
-          .sort((a, b) => String(a.category).localeCompare(String(b.category)))
+      const accountabilityPairs = await Promise.all(
+        normalizedPacts.map(async (pact) => {
+          try {
+            const settings = await apiRequest(
+              `/api/accountability-settings/${pact.id}`,
+              { token }
+            )
+            return [pact.id, settings]
+          } catch {
+            return [pact.id, null]
+          }
+        })
+      )
 
-        const accountabilityPairs = await Promise.all(
-          normalizedPacts.map(async (pact) => {
-            try {
-              const settings = await apiRequest(
-                `/api/accountability-settings/${pact.id}`,
-                { token }
-              )
-              return [pact.id, settings]
-            } catch {
-              return [pact.id, null]
-            }
-          })
-        )
+      const accountabilityMap = Object.fromEntries(accountabilityPairs)
 
-        const accountabilityMap = Object.fromEntries(accountabilityPairs)
-
-        if (!cancelled) {
-          setTransactions(sortTransactionsByActivityDate(normalizedTransactions))
-          setPacts(normalizedPacts)
-          setAccountabilityByPact(accountabilityMap)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || 'Something went wrong.')
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-
-    loadDashboardData()
-
-    return () => {
-      cancelled = true
+      setTransactions(sortTransactionsByActivityDate(normalizedTransactions))
+      setPacts(normalizedPacts)
+      setPlaidItems(Array.isArray(plaidItemsData) ? plaidItemsData : [])
+      setAccountabilityByPact(accountabilityMap)
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setLoading(false)
     }
   }, [token, user?.id])
-  
+
+  useEffect(() => {
+    loadDashboardData()
+  }, [loadDashboardData])
+
   useEffect(() => {
     function handlePointerDown(event) {
       if (!event.target.closest('.dashboard-profile-menu')) {
@@ -212,6 +211,29 @@ export default function Dashboard() {
     }
   }, [])
 
+  const handlePlaidConnected = useCallback(async () => {
+    await loadDashboardData()
+  }, [loadDashboardData])
+
+  const handleSyncAll = useCallback(async () => {
+    if (!token || plaidItems.length === 0) return
+
+    try {
+      setSyncing(true)
+      setError(null)
+
+      await Promise.all(
+        plaidItems.map((item) => syncPlaidItem({ itemId: item.id, token }))
+      )
+
+      await loadDashboardData()
+    } catch (err) {
+      setError(err.message || 'Failed to sync Plaid transactions.')
+    } finally {
+      setSyncing(false)
+    }
+  }, [plaidItems, token, loadDashboardData])
+
   const activePacts = useMemo(
     () => pacts.filter((pact) => String(pact.status).toLowerCase() === 'active'),
     [pacts]
@@ -232,12 +254,9 @@ export default function Dashboard() {
     )
   }, [transactions.length, flaggedCount])
 
-  const recentTransactions = useMemo(
-    () => transactions.slice(0, 4),
-    [transactions]
-  )
+  const recentTransactions = useMemo(() => transactions.slice(0, 4), [transactions])
 
-  const bankConnected = transactions.length > 0
+  const bankConnected = plaidItems.length > 0
 
   const allTimeTotal = useMemo(
     () => transactions.reduce((sum, tx) => sum + tx.amount, 0),
@@ -314,7 +333,9 @@ export default function Dashboard() {
     if (transactions.length === 0) {
       return {
         headline: 'No transaction activity yet.',
-        suggestion: 'Connect your bank when ready to start tracking spending patterns and pact performance.',
+        suggestion: bankConnected
+          ? 'Your bank is connected. Run a sync to pull the latest sandbox transactions.'
+          : 'Connect your bank when ready to start tracking spending patterns and pact performance.',
       }
     }
 
@@ -325,26 +346,41 @@ export default function Dashboard() {
         return acc
       }, {})
 
-      const [topCategory] = Object.entries(topFlaggedCategory).sort((a, b) => b[1] - a[1])[0] || []
+      const [topCategory] =
+        Object.entries(topFlaggedCategory).sort((a, b) => b[1] - a[1])[0] || []
 
       return {
-        headline: `You have ${flaggedCount} flagged purchase${flaggedCount === 1 ? '' : 's'}${topCategory ? `, mostly in ${topCategory}` : ''}.`,
-        suggestion: 'Review the flagged categories and keep your active pact rules focused on those spending habits.',
+        headline: `You have ${flaggedCount} flagged purchase${flaggedCount === 1 ? '' : 's'}${
+          topCategory ? `, mostly in ${topCategory}` : ''
+        }.`,
+        suggestion:
+          'Review the flagged categories and keep your active pact rules focused on those spending habits.',
       }
     }
 
     if (activePacts.length > 0) {
       return {
-        headline: `No flagged purchases across ${transactions.length} tracked transaction${transactions.length === 1 ? '' : 's'}.`,
-        suggestion: `Your ${activePacts.length} active pact rule${activePacts.length === 1 ? '' : 's'} appear to be working well. Stay consistent.`,
+        headline: `No flagged purchases across ${transactions.length} tracked transaction${
+          transactions.length === 1 ? '' : 's'
+        }.`,
+        suggestion: `Your ${activePacts.length} active pact rule${
+          activePacts.length === 1 ? '' : 's'
+        } appear to be working well. Stay consistent.`,
       }
     }
 
     return {
       headline: 'No flagged purchases detected.',
-      suggestion: 'You are spending consistently. Add pact rules to turn that momentum into a measurable habit system.',
+      suggestion:
+        'You are spending consistently. Add pact rules to turn that momentum into a measurable habit system.',
     }
-  }, [transactions.length, flaggedCount, flaggedTransactions, activePacts.length])
+  }, [
+    transactions.length,
+    flaggedCount,
+    flaggedTransactions,
+    activePacts.length,
+    bankConnected,
+  ])
 
   return (
     <div className="dashboard-shell">
@@ -374,9 +410,13 @@ export default function Dashboard() {
         </div>
 
         <nav className="dashboard-nav" aria-label="Dashboard">
-          {primaryNavItems.map((item) => (
+          {primaryNavItems.map((item) =>
             item.disabled ? (
-              <button key={item.label} type="button" className="dashboard-nav-link dashboard-nav-link-disabled">
+              <button
+                key={item.label}
+                type="button"
+                className="dashboard-nav-link dashboard-nav-link-disabled"
+              >
                 {item.label}
               </button>
             ) : (
@@ -390,7 +430,7 @@ export default function Dashboard() {
                 {item.label}
               </NavLink>
             )
-          ))}
+          )}
         </nav>
 
         <div className="dashboard-topbar-actions">
@@ -415,12 +455,18 @@ export default function Dashboard() {
             >
               <span className="dashboard-avatar">{userLabel.charAt(0).toUpperCase()}</span>
               <span className="dashboard-profile-name">{userLabel}</span>
-              <span className={`dashboard-profile-chevron ${menuOpen ? 'is-open' : ''}`}>⌄</span>
+              <span className={`dashboard-profile-chevron ${menuOpen ? 'is-open' : ''}`}>
+                ⌄
+              </span>
             </button>
 
             {menuOpen && (
               <div className="dashboard-profile-dropdown">
-                <Link to="/settings" className="dashboard-profile-item" onClick={() => setMenuOpen(false)}>
+                <Link
+                  to="/settings"
+                  className="dashboard-profile-item"
+                  onClick={() => setMenuOpen(false)}
+                >
                   Settings
                 </Link>
                 <button type="button" className="dashboard-profile-item" onClick={logout}>
@@ -446,9 +492,25 @@ export default function Dashboard() {
           <div className="dashboard-pill">
             {loading ? 'Loading activity...' : `${transactions.length} Transactions`}
           </div>
-          <button className="dashboard-pill dashboard-pill-action" type="button">
-            View Insights →
-          </button>
+
+          {bankConnected ? (
+            <button
+              className="dashboard-pill dashboard-pill-action"
+              type="button"
+              onClick={handleSyncAll}
+              disabled={syncing}
+            >
+              {syncing ? 'Syncing...' : 'Sync Bank →'}
+            </button>
+          ) : (
+            <PlaidConnectButton
+              token={token}
+              onSuccess={handlePlaidConnected}
+              className="dashboard-pill dashboard-pill-action"
+            >
+              Connect Bank →
+            </PlaidConnectButton>
+          )}
         </div>
       </section>
 
@@ -464,18 +526,18 @@ export default function Dashboard() {
                 Sync checking and savings to view transactions, detect flagged purchases,
                 and power your accountability rules.
               </p>
-              <button className="dashboard-button" type="button">Connect with Plaid</button>
+              <PlaidConnectButton token={token} onSuccess={handlePlaidConnected} />
             </div>
           ) : (
             <>
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Transactions</p>
-                <p className="dashboard-stat">{transactions.length}</p>
+                <p className="dashboard-card-label">Linked Banks</p>
+                <p className="dashboard-stat">{plaidItems.length}</p>
               </div>
 
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Flagged Purchases</p>
-                <p className="dashboard-stat">{flaggedCount}</p>
+                <p className="dashboard-card-label">Transactions</p>
+                <p className="dashboard-stat">{transactions.length}</p>
               </div>
             </>
           )}
@@ -511,9 +573,7 @@ export default function Dashboard() {
             <div className="dashboard-analytics-card">
               <div className="dashboard-donut-wrap">
                 <div className="dashboard-donut">
-                  <div className="dashboard-donut-center">
-                    {formatCurrency(allTimeTotal)}
-                  </div>
+                  <div className="dashboard-donut-center">{formatCurrency(allTimeTotal)}</div>
                 </div>
               </div>
 
@@ -546,26 +606,31 @@ export default function Dashboard() {
             </div>
 
             {loading && <p className="dashboard-empty">Loading pact rules...</p>}
+
             {!loading && activeRuleCards.length === 0 && (
               <p className="dashboard-empty">No active pact rules yet.</p>
             )}
 
-            {!loading && activeRuleCards.length > 0 && activeRuleCards.map((rule) => (
-              <div className="dashboard-rule-card" key={rule.id}>
-                <div>
-                  <h3>{rule.title}</h3>
-                  <p>{rule.subtitle}</p>
-                  {rule.note ? <p>{rule.note}</p> : null}
+            {!loading &&
+              activeRuleCards.length > 0 &&
+              activeRuleCards.map((rule) => (
+                <div className="dashboard-rule-card" key={rule.id}>
+                  <div>
+                    <h3>{rule.title}</h3>
+                    <p>{rule.subtitle}</p>
+                    {rule.note ? <p>{rule.note}</p> : null}
+                  </div>
+                  <button
+                    className={`dashboard-toggle ${rule.enabled ? 'is-on' : ''}`}
+                    aria-label="Rule status"
+                    type="button"
+                  />
                 </div>
-                <button
-                  className={`dashboard-toggle ${rule.enabled ? 'is-on' : ''}`}
-                  aria-label="Rule status"
-                  type="button"
-                />
-              </div>
-            ))}
+              ))}
 
-            <button className="dashboard-link-button" type="button">Manage Rules →</button>
+            <Link className="dashboard-link-button" to="/pacts">
+            Manage Rules →
+            </Link>
           </div>
 
           <div className="dashboard-card dashboard-panel">
@@ -581,7 +646,9 @@ export default function Dashboard() {
 
             {!loading && !error && recentTransactions.length === 0 && (
               <p className="dashboard-empty">
-                No transactions yet. Connect your bank account to start syncing activity.
+                {bankConnected
+                  ? 'Your bank is connected, but no transactions have synced yet. Try Sync Bank.'
+                  : 'No transactions yet. Connect your bank account to start syncing activity.'}
               </p>
             )}
 
@@ -592,7 +659,8 @@ export default function Dashboard() {
                     <div className="dashboard-activity-main">
                       <div className="dashboard-activity-merchant">{tx.merchant}</div>
                       <div className="dashboard-activity-meta">
-                        {formatTransactionDate(tx)} · {formatTransactionCategory(tx.category)}
+                        {formatTransactionDate(tx)} ·{' '}
+                        {formatTransactionCategory(tx.category)}
                       </div>
 
                       {tx.flagged && (
@@ -606,7 +674,11 @@ export default function Dashboard() {
                       )}
                     </div>
 
-                    <div className={`dashboard-activity-amount ${tx.flagged ? 'is-flagged' : ''}`}>
+                    <div
+                      className={`dashboard-activity-amount ${
+                        tx.flagged ? 'is-flagged' : ''
+                      }`}
+                    >
                       {formatTransactionAmount(tx.amount)}
                     </div>
                   </div>

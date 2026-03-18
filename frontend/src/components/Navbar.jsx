@@ -5,6 +5,7 @@ import '../dashboard.css'
 const navLinks = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/transactions', label: 'Transactions' },
+  { to: '/pacts', label: 'Pacts' },
   { to: '/settings', label: 'Settings' },
 ]
 

@@ -1,5 +1,7 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -16,6 +18,7 @@ class Pact(Base):
     custom_category = Column(String, nullable=True)
     category = Column(String, nullable=False)
     status = Column(String, nullable=False, default="active")
+    locked_until = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="pacts")
     accountability_settings = relationship(
