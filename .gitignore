@@ -40,3 +40,4 @@ backend/venv/
 .env
 .env.*
 !**/.env*.example
+bankenv/
