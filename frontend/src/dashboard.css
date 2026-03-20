@@ -1,4 +1,24 @@
 .dashboard-shell {
+  --pb-glass-card-bg: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.56) 0%,
+    rgba(255, 255, 255, 0.38) 100%
+  );
+  --pb-glass-card-bg-strong: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgba(255, 250, 242, 0.42) 100%
+  );
+  --pb-glass-panel-bg: rgba(255, 255, 255, 0.82);
+  --pb-glass-border: rgba(255, 255, 255, 0.5);
+  --pb-glass-shadow:
+    0 18px 46px rgba(95, 77, 45, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -10px 24px rgba(255, 255, 255, 0.05);
+  --pb-accent-color: #8f6b2f;
+  --pb-accent-gradient: linear-gradient(135deg, #d4a24c, #b9832e);
+  --pb-accent-gradient-soft: linear-gradient(90deg, #c9963a, #ebc985);
+  --pb-accent-ring: rgba(201, 150, 58, 0.16);
   width: min(1390px, 100%);
   min-height: calc(100vh - 84px);
   margin: 0 auto;
@@ -16,6 +36,9 @@
   gap: 24px;
   margin-bottom: 20px;
   padding-inline: 0.35rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  line-height: 1.2;
 }
 
 .dashboard-brand {
@@ -62,7 +85,10 @@
   border: none;
   background: transparent;
   padding: 0.65rem 0.85rem 0.9rem;
-  font: inherit;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  line-height: 1.2;
+  font-weight: 500;
   font-size: 1rem;
   color: #605965;
   text-decoration: none;
@@ -71,7 +97,7 @@
 
 .dashboard-nav-link-active {
   color: #2c2730;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .dashboard-nav-link-active::after {
@@ -82,7 +108,7 @@
   bottom: 0.2rem;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #c9963a, #ebc985);
+  background: var(--pb-accent-gradient-soft);
 }
 
 .dashboard-nav-link-disabled {
@@ -128,6 +154,9 @@
   align-items: center;
   gap: 0.7rem;
   color: #2f2932;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .dashboard-avatar {
@@ -144,6 +173,8 @@
 
 .dashboard-profile-name {
   font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .dashboard-profile-chevron {
@@ -267,7 +298,7 @@
 
 .dashboard-pill-action {
   cursor: pointer;
-  color: #8f6b2f;
+  color: var(--pb-accent-color);
 }
 
 .dashboard-top-grid {
@@ -284,19 +315,12 @@
 }
 
 .dashboard-card {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.56) 0%,
-    rgba(255, 255, 255, 0.38) 100%
-  );
+  background: var(--pb-glass-card-bg);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--pb-glass-border);
   border-radius: 2rem;
-  box-shadow:
-    0 18px 46px rgba(95, 77, 45, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62),
-    inset 0 -10px 24px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--pb-glass-shadow);
   padding: 1.3rem 1.45rem;
 }
 
@@ -317,11 +341,7 @@
 }
 
 .dashboard-card-hero-accent {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.62) 0%,
-    rgba(255, 250, 242, 0.42) 100%
-  );
+  background: var(--pb-glass-card-bg-strong);
   box-shadow:
     0 22px 52px rgba(92, 78, 55, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.68);
@@ -588,7 +608,7 @@
 }
 
 .dashboard-toggle.is-on {
-  background: linear-gradient(135deg, #cbbda7, #b9ab96);
+  background: var(--pb-accent-gradient);
 }
 
 .dashboard-toggle.is-on::after {
@@ -603,7 +623,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: #8f6b2f;
+  color: var(--pb-accent-color);
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: none;
@@ -673,7 +693,7 @@
 
 .dashboard-insight-suggestion {
   margin: 0.8rem 0 0.2rem;
-  color: #8f6b2f;
+  color: var(--pb-accent-color);
   font-weight: 700;
 }
 

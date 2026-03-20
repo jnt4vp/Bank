@@ -9,6 +9,7 @@ import {
   sortTransactionsByActivityDate,
 } from '../features/transactions/formatters'
 import { useTransactions } from '../features/transactions/useTransactions'
+import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
 import '../transactions.css'
 
@@ -93,11 +94,10 @@ export default function Transactions() {
 
   return (
     <div className="dashboard-shell transactions-page">
+      <DashboardTopbar navAriaLabel="Primary" />
+
       <section className="transactions-hero">
         <div className="transactions-hero-copy">
-          <Link className="transactions-back-link" to="/dashboard">
-            ← Back to dashboard
-          </Link>
           <h1 className="dashboard-title transactions-title">Transactions</h1>
           <p className="dashboard-subtitle transactions-subtitle">
             Review every synced purchase, deposit, and flagged event in one place.

@@ -4,10 +4,8 @@ import './app-layout.css'
 
 export default function AppLayout() {
   const location = useLocation()
-  const noNavbarRoutes = ['/dashboard', '/transactions', '/pacts']
+  const noNavbarRoutes = ['/dashboard', '/transactions', '/pacts', '/settings']
   const hideNavbar = noNavbarRoutes.some((path) => location.pathname.startsWith(path))
-
-  const isDashboardRoute = location.pathname === '/dashboard'
 
   return (
     <div className="app-shell">
@@ -17,7 +15,7 @@ export default function AppLayout() {
 
       <div className="app-shell-main">
         {!hideNavbar && <Navbar />}
-        <main className={isDashboardRoute ? 'app-shell-dashboard-main' : 'app-shell-page-main'}>
+        <main className="app-shell-page-main">
           <Outlet />
         </main>
       </div>
