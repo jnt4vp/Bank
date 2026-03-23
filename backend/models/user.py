@@ -35,3 +35,9 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    password_history = relationship(
+        "PasswordHistory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="PasswordHistory.created_at.desc()",
+    )

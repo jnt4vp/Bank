@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { resetPassword } from '../features/auth/api'
+import { validatePassword, getPasswordChecks } from '../features/auth/passwordValidation'
 import '../landing.css'
 
 export default function ResetPassword() {
@@ -16,6 +17,11 @@ export default function ResetPassword() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    const passwordError = validatePassword(password)
+    if (passwordError) {
+      setError(passwordError)
+      return
+    }
     if (password !== confirm) {
       setError("Passwords don't match.")
       return
@@ -92,6 +98,16 @@ export default function ResetPassword() {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
+
+            {password && (
+              <ul style={{ margin: "4px 0 12px", padding: 0, listStyle: "none", fontSize: "12px" }}>
+                {getPasswordChecks(password).map((check) => (
+                  <li key={check.label} style={{ color: check.pass ? "#4caf50" : "rgba(60,45,20,0.5)", marginBottom: "2px" }}>
+                    {check.pass ? "✓" : "○"} {check.label}
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <label htmlFor="confirm" className="form-label">Confirm Password</label>
             <input

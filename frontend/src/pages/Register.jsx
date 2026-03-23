@@ -6,6 +6,7 @@ import "../landing.css";
 import "../register.css";
 import { useAuth } from "../features/auth/context";
 import { registerAccount } from "../features/auth/api";
+import { validatePassword, getPasswordChecks } from "../features/auth/passwordValidation";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
 import { createLinkToken, exchangePublicToken } from "../features/plaid/api";
@@ -57,6 +58,21 @@ export default function Register() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [touched, setTouched] = useState({ name: false, email: false, confirm: false, phone: false });
+
+  const touch = (field) => setTouched((t) => ({ ...t, [field]: true }));
+
+  const fieldErrors = {
+    name: !name.trim() ? "Name is required" : null,
+    email: !email.trim() ? "Email is required" : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? "Enter a valid email address" : null,
+    confirm: confirm && password !== confirm ? "Passwords do not match" : !confirm ? "Please confirm your password" : null,
+    phone: !phone.trim() ? "Phone number is required" : null,
+  };
+
+  const InlineError = ({ field }) =>
+    touched[field] && fieldErrors[field] ? (
+      <p style={{ color: "#c0392b", fontSize: "12px", margin: "-8px 0 8px 2px" }}>{fieldErrors[field]}</p>
+    ) : null;
 
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
@@ -164,13 +180,9 @@ export default function Register() {
         return;
       }
 
-      if (!password.trim()) {
-        setError("Password is required.");
-        return;
-      }
-
-      if (password.length < 8) {
-        setError("Password must be at least 8 characters.");
+      const passwordError = validatePassword(password, email.trim());
+      if (passwordError) {
+        setError(passwordError);
         return;
       }
 
@@ -496,10 +508,12 @@ export default function Register() {
                       className="register-input"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      onBlur={() => touch("name")}
                       placeholder="Enter your name"
                       required
                     />
                   </div>
+                  <InlineError field="name" />
 
                   <label className="register-field-label">Email</label>
                   <div className="register-input-row">
@@ -511,10 +525,12 @@ export default function Register() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      onBlur={() => touch("email")}
                       placeholder="Enter your email"
                       required
                     />
                   </div>
+                  <InlineError field="email" />
 
                   <label className="register-field-label">Password</label>
                   <div className="register-input-row">
@@ -537,6 +553,16 @@ export default function Register() {
                     </span>
                   </div>
 
+                  {password && (
+                    <ul style={{ margin: "4px 0 12px", padding: 0, listStyle: "none", fontSize: "12px" }}>
+                      {getPasswordChecks(password).map((check) => (
+                        <li key={check.label} style={{ color: check.pass ? "#4caf50" : "rgba(60,45,20,0.5)", marginBottom: "2px" }}>
+                          {check.pass ? "✓" : "○"} {check.label}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                   <label className="register-field-label">
                     Confirm Password
                   </label>
@@ -549,6 +575,7 @@ export default function Register() {
                       type={showConf ? "text" : "password"}
                       value={confirm}
                       onChange={(e) => setConfirm(e.target.value)}
+                      onBlur={() => touch("confirm")}
                       placeholder="Confirm your password"
                       required
                     />
@@ -559,6 +586,7 @@ export default function Register() {
                       />
                     </span>
                   </div>
+                  <InlineError field="confirm" />
 
                   <label className="register-field-label">Phone Number</label>
                   <div className="register-input-row">
@@ -570,10 +598,12 @@ export default function Register() {
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
+                      onBlur={() => touch("phone")}
                       placeholder="Enter your phone number"
                       required
                     />
                   </div>
+                  <InlineError field="phone" />
 
                   {error && <div className="register-error">{error}</div>}
 

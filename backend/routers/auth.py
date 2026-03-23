@@ -19,6 +19,7 @@ from ..services.auth import (
     DuplicateEmailError,
     InvalidCredentialsError,
     InvalidResetTokenError,
+    PasswordReusedError,
 )
 
 router = APIRouter()
@@ -114,6 +115,11 @@ async def do_reset_password(payload: ResetPasswordRequest, db: AsyncSession = De
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+    except PasswordReusedError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This password was used recently. Please choose a different password.",
+        )
     except InvalidResetTokenError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

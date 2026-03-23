@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -18,7 +19,23 @@ class InvalidTokenError(Exception):
     """Raised when a bearer token cannot be validated."""
 
 
-def validate_password(password: str) -> None:
+_WEAK_PASSWORDS = {
+    "password", "password1", "password123", "password1234",
+    "123456", "1234567", "12345678", "123456789", "1234567890",
+    "qwerty", "qwerty123", "qwertyuiop",
+    "letmein", "welcome", "welcome1", "iloveyou",
+    "admin", "admin123", "admin1234",
+    "monkey", "dragon", "master", "sunshine", "princess",
+    "shadow", "superman", "michael", "football", "baseball",
+    "abc123", "abcdef", "1q2w3e4r", "trustno1", "starwars",
+    "hello123", "batman", "login", "access", "flower",
+    "mustang", "whatever", "test1234", "pass1234", "pass123",
+}
+
+_SPECIAL_CHARS = re.compile(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>/?\\|`~]')
+
+
+def validate_password(password: str, *, email: str | None = None) -> None:
     if not password.strip():
         raise PasswordValidationError("Password is required")
 
@@ -29,9 +46,32 @@ def validate_password(password: str) -> None:
     if len(password_bytes) > 72:
         raise PasswordValidationError("Password must be 72 bytes or less.")
 
+    if not re.search(r"[A-Z]", password):
+        raise PasswordValidationError("Password must contain at least one uppercase letter")
 
-def hash_password(password: str) -> str:
-    validate_password(password)
+    if not re.search(r"[a-z]", password):
+        raise PasswordValidationError("Password must contain at least one lowercase letter")
+
+    if not re.search(r"\d", password):
+        raise PasswordValidationError("Password must contain at least one number")
+
+    if not _SPECIAL_CHARS.search(password):
+        raise PasswordValidationError("Password must contain at least one special character")
+
+    if password.lower() in _WEAK_PASSWORDS:
+        raise PasswordValidationError("This password is too common. Please choose a stronger one")
+
+    if email:
+        password_lower = password.lower()
+        if password_lower == email.lower():
+            raise PasswordValidationError("Password must not be the same as your email")
+        email_local = email.lower().split("@")[0]
+        if len(email_local) >= 4 and email_local in password_lower:
+            raise PasswordValidationError("Password must not contain your email address")
+
+
+def hash_password(password: str, *, email: str | None = None) -> str:
+    validate_password(password, email=email)
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
