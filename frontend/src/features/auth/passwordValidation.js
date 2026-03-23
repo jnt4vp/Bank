@@ -11,7 +11,7 @@ const WEAK_PASSWORDS = new Set([
   "mustang", "whatever", "test1234", "pass1234", "pass123",
 ]);
 
-const SPECIAL = /[!@#$%^&*()\-_=+\[\]{};:'",.<>/?\\|`~]/;
+const SPECIAL = /[!@#$%^&*()\-_=+[\]{};:'",.<>/?\\|`~]/;
 
 export function validatePassword(password, email = "") {
   if (!password) return "Password is required";

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '../features/auth/context'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
@@ -143,7 +143,7 @@ export default function Settings() {
   const { user } = useAuth()
 
   const [isEditingProfile, setIsEditingProfile] = useState(false)
-  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaving, _setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [profileSuccess, setProfileSuccess] = useState('')
 
@@ -153,7 +153,7 @@ export default function Settings() {
     phone: '',
   })
 
-  const [activeTab, setActiveTab] = useState('Profile')
+  const [_activeTab, _setActiveTab] = useState('Profile')
   const [notifications, setNotifications] = useState({
     disciplineAlerts: true,
     weeklyOverview: true,
@@ -165,15 +165,6 @@ export default function Settings() {
   const [dateFormat, setDateFormat] = useState('Month / Day / Year')
   const [currency, setCurrency] = useState('USD ($)')
 
-  useEffect(() => {
-    if (!user) return 
-    
-    setProfileForm({
-      name: user.name || '',
-      email: user.email || '',
-      phone: user.phone || '',
-    })
-  }, [user])
 
   const userLabel = user?.name || user?.email || 'User'
   const firstInitial = userLabel.charAt(0).toUpperCase()
@@ -195,6 +186,11 @@ export default function Settings() {
   }
 
   function handleEditProfile() {
+    setProfileForm({
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+    })
     setProfileError('')
     setProfileSuccess('')
     setIsEditingProfile(true)
