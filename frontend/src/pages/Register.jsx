@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { usePlaidLink } from "react-plaid-link";
-import { User, Mail, Lock, Phone, Eye, EyeOff } from "lucide-react";
+import { User, Mail, Phone } from "lucide-react";
 import "../landing.css";
 import "../register.css";
 import { useAuth } from "../features/auth/context";
 import { registerAccount } from "../features/auth/api";
-import { validatePassword, getPasswordChecks } from "../features/auth/passwordValidation";
+import { validatePassword } from "../features/auth/passwordValidation";
+import PasswordFields from "../features/auth/PasswordFields";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
 import { createLinkToken, exchangePublicToken } from "../features/plaid/api";
@@ -36,8 +37,6 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [showConf, setShowConf] = useState(false);
   const [phone, setPhone] = useState("");
 
   const [registeredUser, setRegisteredUser] = useState(null);
@@ -76,17 +75,6 @@ export default function Register() {
 
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
-
-  const EyeBtn = ({ show, onToggle }) => (
-    <button
-      type="button"
-      className="register-eye-btn"
-      onClick={onToggle}
-      aria-label="Toggle password visibility"
-    >
-      {show ? <EyeOff size={18} /> : <Eye size={18} />}
-    </button>
-  );
 
   const handlePactSelect = (e) => {
     setSelectedPactId(e.target.value);
@@ -532,61 +520,14 @@ export default function Register() {
                   </div>
                   <InlineError field="email" />
 
-                  <label className="register-field-label">Password</label>
-                  <div className="register-input-row">
-                    <span className="register-input-icon">
-                      <Lock size={16} strokeWidth={1.5} />
-                    </span>
-                    <input
-                      className="register-input has-right"
-                      type={showPass ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Create a strong password"
-                      required
-                    />
-                    <span className="register-input-eye">
-                      <EyeBtn
-                        show={showPass}
-                        onToggle={() => setShowPass((p) => !p)}
-                      />
-                    </span>
-                  </div>
-
-                  {password && (
-                    <ul style={{ margin: "4px 0 12px", padding: 0, listStyle: "none", fontSize: "12px" }}>
-                      {getPasswordChecks(password).map((check) => (
-                        <li key={check.label} style={{ color: check.pass ? "#4caf50" : "rgba(60,45,20,0.5)", marginBottom: "2px" }}>
-                          {check.pass ? "✓" : "○"} {check.label}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <label className="register-field-label">
-                    Confirm Password
-                  </label>
-                  <div className="register-input-row">
-                    <span className="register-input-icon">
-                      <Lock size={16} strokeWidth={1.5} />
-                    </span>
-                    <input
-                      className="register-input has-right"
-                      type={showConf ? "text" : "password"}
-                      value={confirm}
-                      onChange={(e) => setConfirm(e.target.value)}
-                      onBlur={() => touch("confirm")}
-                      placeholder="Confirm your password"
-                      required
-                    />
-                    <span className="register-input-eye">
-                      <EyeBtn
-                        show={showConf}
-                        onToggle={() => setShowConf((p) => !p)}
-                      />
-                    </span>
-                  </div>
-                  <InlineError field="confirm" />
+                  <PasswordFields
+                    password={password}
+                    confirm={confirm}
+                    onPasswordChange={setPassword}
+                    onConfirmChange={setConfirm}
+                    confirmTouched={touched.confirm}
+                    onConfirmBlur={() => touch("confirm")}
+                  />
 
                   <label className="register-field-label">Phone Number</label>
                   <div className="register-input-row">
