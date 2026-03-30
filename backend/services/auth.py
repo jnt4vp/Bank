@@ -84,6 +84,8 @@ async def register_user(
 
     new_hash = hash_password(password, email=email)
     user = await create_user(db, email=email, password_hash=new_hash, name=name, phone=phone)
+    # Ensure `user.id` is assigned before writing password history rows.
+    await db.flush()
     await _save_password_history(db, user.id, new_hash)
     return user
 
