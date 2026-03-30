@@ -99,16 +99,39 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
 
 
 class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
-    async def test_ensure_dev_seed_user_runs_in_production(self):
-        user = SimpleNamespace(email="test@example.com")
-
+    async def test_ensure_dev_seed_user_skips_in_production(self):
         with patch(
             "backend.services.auth.settings",
             new=SimpleNamespace(
                 APP_ENV="production",
                 DEV_SEED_EXAMPLE_USER=True,
                 DEV_SEED_EXAMPLE_EMAIL="test@example.com",
-                DEV_SEED_EXAMPLE_PASSWORD="password123",
+                DEV_SEED_EXAMPLE_PASSWORD="Password123!",
+                DEV_SEED_EXAMPLE_NAME="Test User",
+            ),
+        ), patch(
+            "backend.services.auth.get_user_by_email",
+            new=AsyncMock(),
+        ) as get_user_by_email_mock, patch(
+            "backend.services.auth.create_user",
+            new=AsyncMock(),
+        ) as create_user_mock:
+            result = await ensure_dev_seed_user(object())
+
+        get_user_by_email_mock.assert_not_awaited()
+        create_user_mock.assert_not_awaited()
+        self.assertIsNone(result)
+
+    async def test_ensure_dev_seed_user_creates_in_development(self):
+        user = SimpleNamespace(email="test@example.com")
+
+        with patch(
+            "backend.services.auth.settings",
+            new=SimpleNamespace(
+                APP_ENV="development",
+                DEV_SEED_EXAMPLE_USER=True,
+                DEV_SEED_EXAMPLE_EMAIL="test@example.com",
+                DEV_SEED_EXAMPLE_PASSWORD="Password123!",
                 DEV_SEED_EXAMPLE_NAME="Test User",
             ),
         ), patch(
@@ -124,7 +147,7 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
             result = await ensure_dev_seed_user(object())
 
         get_user_by_email_mock.assert_awaited_once_with(unittest.mock.ANY, "test@example.com")
-        hash_password_mock.assert_called_once_with("password123")
+        hash_password_mock.assert_called_once_with("Password123!")
         create_user_mock.assert_awaited_once_with(
             unittest.mock.ANY,
             email="test@example.com",

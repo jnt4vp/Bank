@@ -134,6 +134,10 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
 
 async def ensure_dev_seed_user(db: AsyncSession):
     """Create the documented example user automatically unless explicitly disabled."""
+    if settings.APP_ENV == "production":
+        logger.info("Skipping dev seed user in production")
+        return None
+
     if not settings.DEV_SEED_EXAMPLE_USER:
         return None
 

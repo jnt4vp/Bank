@@ -15,7 +15,7 @@ Examples:
     python scripts/send_transaction.py --email test@example.com --count 5
 
     # Fall back to the old direct POST /api/transactions flow
-    python scripts/send_transaction.py --manual --email test@example.com --password password123 --merchant "DraftKings" --desc "Weekly sports bet" --amount 250
+    python scripts/send_transaction.py --manual --email test@example.com --password Password123! --merchant "DraftKings" --desc "Weekly sports bet" --amount 250
 """
 
 from __future__ import annotations

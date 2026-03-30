@@ -21,5 +21,5 @@ class SecurityTest(unittest.TestCase):
         self.assertEqual(str(exc.exception), "Password must be 72 bytes or less.")
 
     def test_verify_password_returns_false_for_passwords_over_bcrypt_limit(self):
-        hashed = hash_password("password123")
+        hashed = hash_password("Password123!")
         self.assertFalse(verify_password("x" * 73, hashed))

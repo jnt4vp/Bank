@@ -1,7 +1,9 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import Navbar from './Navbar'
 import { useAuth } from '../features/auth/context'
-import { ThemeProvider, useTheme, DEV_LABELS } from '../features/theme/ThemeContext.jsx'
+import { ThemeProvider } from '../features/theme/ThemeContext.jsx'
+import { DEV_LABELS } from '../features/theme/themeConstants.js'
+import { useTheme } from '../features/theme/useTheme.js'
 import './app-layout.css'
 
 const BG_VIDEOS = {

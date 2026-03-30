@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 const TEST_USER = {
   email: "test@example.com",
-  password: "password123",
+  password: "Password123!",
 };
 
 test.describe("Landing page", () => {
@@ -77,7 +77,7 @@ test.describe("Signup", () => {
     await page.goto("/signup");
     await page.getByLabel(/^name$/i).fill(`E2E User ${unique}`);
     await page.getByLabel(/email/i).fill(`e2e-${unique}@test.com`);
-    await page.getByLabel(/password/i).fill("testpassword123");
+    await page.getByLabel(/password/i).fill("Testpassword123!");
     await page.getByRole("button", { name: /sign up/i }).click();
 
     // After registration, should redirect to landing
@@ -88,7 +88,7 @@ test.describe("Signup", () => {
     await page.goto("/signup");
     await page.getByLabel(/^name$/i).fill("Duplicate User");
     await page.getByLabel(/email/i).fill(TEST_USER.email);
-    await page.getByLabel(/password/i).fill("testpassword123");
+    await page.getByLabel(/password/i).fill("Testpassword123!");
     await page.getByRole("button", { name: /sign up/i }).click();
 
     await expect(page.getByText(/already|exists|duplicate|registered/i)).toBeVisible({ timeout: 5_000 });

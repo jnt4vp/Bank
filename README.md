@@ -182,14 +182,14 @@ Frontend URL:
 By default, the app automatically creates this example account unless you disable `DEV_SEED_EXAMPLE_USER` in `.env`:
 
 - Email: `test@example.com`
-- Password: `password123`
+- Password: `Password123!`
 
 Register:
 
 ```bash
 curl -X POST http://localhost:8000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@example.com","password":"password123"}'
+  -d '{"name":"Test User","email":"test@example.com","password":"Password123!"}'
 ```
 
 Login:
@@ -197,7 +197,7 @@ Login:
 ```bash
 curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
+  -d '{"email":"test@example.com","password":"Password123!"}'
 ```
 
 ## 8. Transaction Classifier Smoke Test
@@ -207,7 +207,7 @@ Send a transaction through the real API classifier:
 ```bash
 python scripts/send_transaction.py \
   --email test@example.com \
-  --password password123 \
+  --password Password123! \
   --merchant "DraftKings" \
   --desc "Weekly sports bet" \
   --amount 250
@@ -269,7 +269,7 @@ make test-e2e                  # headless
 npm --prefix frontend run test:e2e:headed  # with visible browser
 ```
 
-The tests use the dev seed account (`test@example.com` / `password123`).
+The tests use the dev seed account (`test@example.com` / `Password123!`).
 
 ## 10. Common Commands
 

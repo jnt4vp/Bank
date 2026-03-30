@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTheme } from '../features/theme/ThemeContext.jsx'
+import { useTheme } from '../features/theme/useTheme.js'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import {

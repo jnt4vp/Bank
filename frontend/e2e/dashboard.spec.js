@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 const TEST_USER = {
   email: "test@example.com",
-  password: "password123",
+  password: "Password123!",
 };
 
 /**

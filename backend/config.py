@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     DEV_SEED_EXAMPLE_USER: bool = True
     DEV_SEED_EXAMPLE_NAME: str = "Test User"
     DEV_SEED_EXAMPLE_EMAIL: str = "test@example.com"
-    DEV_SEED_EXAMPLE_PASSWORD: str = "password123"
+    DEV_SEED_EXAMPLE_PASSWORD: str = "Password123!"
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),

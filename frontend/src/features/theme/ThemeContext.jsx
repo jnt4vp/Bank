@@ -1,17 +1,8 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiRequest } from '../../lib/api'
 
-const ThemeContext = createContext('sky')
-
-const DEV_MODES = ['sky', 'money', 'sunny', 'stormy', 'red']
-
-export const DEV_LABELS = {
-  sky: 'Sky (no pacts)',
-  money: 'Money (1 pact kept)',
-  sunny: 'Sunny (all pacts kept)',
-  stormy: 'Stormy (1 broken)',
-  red: 'Red (2+ broken)',
-}
+import { DEV_MODES } from './themeConstants'
+import { ThemeContext } from './themeContextValue.js'
 
 function usePactBackground(token, userId) {
   const [bg, setBg] = useState('sky')
@@ -65,8 +56,4 @@ export function ThemeProvider({ token, userId, children }) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  return useContext(ThemeContext)
 }
