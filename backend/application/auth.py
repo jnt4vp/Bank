@@ -27,6 +27,11 @@ from ..services.auth import (
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+def _is_duplicate_email_integrity_error(exc: IntegrityError) -> bool:
+    message = str(getattr(exc, "orig", exc)).lower()
+    return "email" in message and ("unique" in message or "duplicate key" in message)
+
+
 @dataclass(frozen=True)
 class RegistrationResult:
     user: User
@@ -95,7 +100,9 @@ async def register_account(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        raise DuplicateEmailError from exc
+        if _is_duplicate_email_integrity_error(exc):
+            raise DuplicateEmailError from exc
+        raise
 
     await db.refresh(user)
     access_token = create_access_token(data={"sub": str(user.id)})
