@@ -5,6 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..models.transaction import Transaction
 from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
@@ -13,6 +14,18 @@ from ..repositories.transactions import create_transaction
 from ..services.classifier import classify_transaction
 
 logger = logging.getLogger("bank.transactions")
+
+
+def _format_active_pacts(user_categories: list[str] | None) -> str:
+    categories = [category.strip() for category in (user_categories or []) if category and category.strip()]
+    return ", ".join(categories) if categories else "-"
+
+
+def _format_ai_model() -> str:
+    settings = get_settings()
+    if not settings.OLLAMA_ENABLED:
+        return "disabled"
+    return f"ollama:{settings.OLLAMA_MODEL}@{settings.OLLAMA_URL}"
 
 
 async def ingest_user_transaction(
@@ -27,6 +40,15 @@ async def ingest_user_transaction(
     notifier: NotifierPort,
 ) -> Transaction:
     user_categories = await get_active_pact_categories(db, user_id)
+    logger.info(
+        "CLASSIFICATION CHECK  |  user=%s  |  merchant=%s  |  description=%s  |  amount=$%.2f  |  active_pacts=%s  |  ai=%s",
+        user_id,
+        merchant,
+        description,
+        amount,
+        _format_active_pacts(user_categories),
+        _format_ai_model(),
+    )
 
     classification = await classify_transaction(
         classifier,
@@ -34,6 +56,12 @@ async def ingest_user_transaction(
         description=description,
         amount=amount,
         user_categories=user_categories or None,
+    )
+    logger.info(
+        "CLASSIFICATION RESULT  |  flagged=%s  |  category=%s  |  reason=%s",
+        classification.flagged,
+        classification.category or "-",
+        classification.flag_reason or "-",
     )
 
     txn = await create_transaction(
@@ -56,13 +84,14 @@ async def ingest_user_transaction(
     await db.refresh(txn)
 
     logger.info(
-        "NEW TRANSACTION  |  %s  |  %s  |  $%.2f  |  \"%s\"  |  id=%s  |  flagged=%s",
+        "ADDED TRANSACTION  |  merchant=%s  |  description=%s  |  amount=$%.2f  |  flagged=%s  |  category=%s  |  reason=%s  |  id=%s",
         txn.merchant,
-        txn.user_id,
-        float(txn.amount),
         txn.description,
-        txn.id,
+        float(txn.amount),
         txn.flagged,
+        txn.category or "-",
+        txn.flag_reason or "-",
+        txn.id,
     )
 
     if txn.flagged:

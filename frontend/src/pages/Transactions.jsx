@@ -6,7 +6,7 @@ import {
   formatTransactionAmount,
   formatTransactionCategory,
   formatTransactionDate,
-  sortTransactionsByActivityDate,
+  sortTransactionsByCreatedTime,
 } from '../features/transactions/formatters'
 import { useTransactions } from '../features/transactions/useTransactions'
 import DashboardTopbar from '../components/DashboardTopbar'
@@ -61,7 +61,7 @@ export default function Transactions() {
   const filteredTransactions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
-    return sortTransactionsByActivityDate(
+    return sortTransactionsByCreatedTime(
       transactions.filter((transaction) => {
         if (statusFilter === 'flagged' && !transaction.flagged) {
           return false

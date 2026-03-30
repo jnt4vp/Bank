@@ -4,6 +4,10 @@ import {
   createLinkToken,
   exchangePublicToken,
 } from './api'
+import {
+  PLAID_BROWSER_TAB_ERROR,
+  isEmbeddedBrowserContext,
+} from './browserContext'
 
 export default function PlaidConnectButton({
   token,
@@ -15,6 +19,8 @@ export default function PlaidConnectButton({
   const [linkToken, setLinkToken] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [launchRequested, setLaunchRequested] = useState(false)
+  const embeddedBrowser = isEmbeddedBrowserContext()
 
   useEffect(() => {
     let cancelled = false
@@ -54,6 +60,7 @@ export default function PlaidConnectButton({
       try {
         setLoading(true)
         setError(null)
+        setLaunchRequested(false)
 
         await exchangePublicToken({
           publicToken,
@@ -74,6 +81,7 @@ export default function PlaidConnectButton({
       }
     },
     onExit: (err) => {
+      setLaunchRequested(false)
       if (err) {
         setError(err.display_message || err.error_message || 'Plaid was closed before completion.')
       }
@@ -82,18 +90,54 @@ export default function PlaidConnectButton({
 
   const { open, ready } = usePlaidLink(plaidConfig)
 
+  useEffect(() => {
+    if (!launchRequested || embeddedBrowser || !linkToken || !ready) {
+      return
+    }
+
+    setLaunchRequested(false)
+    open()
+  }, [embeddedBrowser, launchRequested, linkToken, open, ready])
+
   return (
     <div>
       <button
         type="button"
         className={className}
-        onClick={() => open()}
-        disabled={disabled || !ready || !linkToken || loading}
+        onClick={async () => {
+          if (embeddedBrowser) {
+            setError(PLAID_BROWSER_TAB_ERROR)
+            return
+          }
+
+          if (!linkToken) {
+            try {
+              setLoading(true)
+              setError(null)
+              setLaunchRequested(true)
+              const data = await createLinkToken(token)
+              setLinkToken(data.link_token)
+            } catch (err) {
+              setLaunchRequested(false)
+              setError(err.message || 'Failed to initialize Plaid.')
+            } finally {
+              setLoading(false)
+            }
+            return
+          }
+
+          open()
+        }}
+        disabled={disabled || embeddedBrowser || loading || (!linkToken && !error) || (Boolean(linkToken) && !ready)}
       >
         {loading ? 'Connecting...' : children}
       </button>
 
-      {error ? <p className="dashboard-error">{error}</p> : null}
+      {embeddedBrowser ? (
+        <p className="dashboard-error">{PLAID_BROWSER_TAB_ERROR}</p>
+      ) : error ? (
+        <p className="dashboard-error">{error}</p>
+      ) : null}
     </div>
   )
 }

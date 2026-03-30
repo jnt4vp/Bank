@@ -11,6 +11,10 @@ import PasswordFields from "../features/auth/PasswordFields";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
 import { createLinkToken, exchangePublicToken } from "../features/plaid/api";
+import {
+  PLAID_BROWSER_TAB_ERROR,
+  isEmbeddedBrowserContext,
+} from "../features/plaid/browserContext";
 
 const STEPS = [
   { num: 1, label: "Create Account" },
@@ -54,10 +58,13 @@ export default function Register() {
   const [linkToken, setLinkToken] = useState(null);
   const [plaidConnected, setPlaidConnected] = useState(false);
   const [connectedInstitution, setConnectedInstitution] = useState(null);
+  const [plaidTokenLoading, setPlaidTokenLoading] = useState(false);
+  const [plaidLaunchRequested, setPlaidLaunchRequested] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [touched, setTouched] = useState({ name: false, email: false, confirm: false, phone: false });
+  const embeddedBrowser = isEmbeddedBrowserContext();
 
   const touch = (field) => setTouched((t) => ({ ...t, [field]: true }));
 
@@ -106,6 +113,7 @@ export default function Register() {
     async (publicToken, metadata) => {
       setLoading(true);
       setError(null);
+      setPlaidLaunchRequested(false);
       try {
         await exchangePublicToken({
           publicToken,
@@ -126,32 +134,113 @@ export default function Register() {
   const { open: openPlaidLink, ready: plaidReady } = usePlaidLink({
     token: linkToken,
     onSuccess: onPlaidSuccess,
+    onExit: (err) => {
+      setPlaidLaunchRequested(false);
+      if (err) {
+        setError(
+          err.display_message ||
+            err.error_message ||
+            "Plaid was closed before completion."
+        );
+      }
+    },
   });
 
+  React.useEffect(() => {
+    if (currentStep !== 4 || !authToken || linkToken || plaidConnected) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function primePlaidLink() {
+      setPlaidTokenLoading(true);
+
+      try {
+        const { link_token } = await createLinkToken(authToken);
+
+        if (!cancelled) {
+          setLinkToken(link_token);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to initialize bank connection.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPlaidTokenLoading(false);
+        }
+      }
+    }
+
+    primePlaidLink();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, currentStep, linkToken, plaidConnected]);
+
+  React.useEffect(() => {
+    if (
+      !plaidLaunchRequested ||
+      embeddedBrowser ||
+      !linkToken ||
+      !plaidReady
+    ) {
+      return;
+    }
+
+    setPlaidLaunchRequested(false);
+    setError(null);
+    openPlaidLink();
+  }, [
+    embeddedBrowser,
+    linkToken,
+    openPlaidLink,
+    plaidLaunchRequested,
+    plaidReady,
+  ]);
+
   const handleOpenPlaid = async () => {
+    if (embeddedBrowser) {
+      setError(PLAID_BROWSER_TAB_ERROR);
+      return;
+    }
+
     if (!authToken) {
       setError("Please complete registration first.");
       return;
     }
 
-    setLoading(true);
+    if (!linkToken) {
+      setPlaidLaunchRequested(true);
+      setPlaidTokenLoading(true);
+
+      try {
+        const { link_token } = await createLinkToken(authToken);
+        setLinkToken(link_token);
+        setError(null);
+      } catch (err) {
+        setPlaidLaunchRequested(false);
+        setError(err.message || "Failed to initialize bank connection.");
+      } finally {
+        setPlaidTokenLoading(false);
+      }
+
+      return;
+    }
+
+    if (!plaidReady) {
+      setPlaidLaunchRequested(true);
+      setError("Secure bank connection is still loading. It will open automatically when ready.");
+      return;
+    }
+
+    setPlaidLaunchRequested(false);
     setError(null);
-
-    try {
-      const { link_token } = await createLinkToken(authToken);
-      setLinkToken(link_token);
-    } catch (err) {
-      setError(err.message || "Failed to initialize bank connection.");
-      setLoading(false);
-    }
+    openPlaidLink();
   };
-
-  React.useEffect(() => {
-    if (linkToken && plaidReady) {
-      openPlaidLink();
-      setLoading(false);
-    }
-  }, [linkToken, plaidReady, openPlaidLink]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -832,14 +921,36 @@ export default function Register() {
                       <p style={{ marginBottom: "16px", opacity: 0.7 }}>
                         Connect your bank account to automatically track your spending.
                       </p>
+                      {embeddedBrowser ? (
+                        <p
+                          className="register-card-sub"
+                          style={{ marginBottom: "16px" }}
+                        >
+                          {PLAID_BROWSER_TAB_ERROR}
+                        </p>
+                      ) : null}
                       <button
                         type="button"
                         className="sign-in-btn register-btn-continue"
                         onClick={handleOpenPlaid}
-                        disabled={loading}
+                        disabled={
+                          loading ||
+                          plaidTokenLoading ||
+                          embeddedBrowser ||
+                          (!linkToken && !error) ||
+                          (Boolean(linkToken) && !plaidReady)
+                        }
                         style={{ width: "100%" }}
                       >
-                        {loading ? "Connecting…" : "Connect with Plaid"}
+                        {loading
+                          ? "Connecting…"
+                          : plaidTokenLoading || (!linkToken && !error)
+                            ? "Preparing secure connect…"
+                            : linkToken && !plaidReady
+                              ? "Loading Plaid…"
+                              : error && !linkToken
+                                ? "Retry secure connect"
+                                : "Connect with Plaid"}
                       </button>
                     </div>
                   )}

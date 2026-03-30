@@ -370,13 +370,16 @@ async def sync_transactions(
     plaid_item.last_synced_at = datetime.now(timezone.utc)
     await db.commit()
 
-    logger.info(
-        "Synced plaid_item %s: +%d ~%d -%d",
-        plaid_item.id,
-        added_count,
-        modified_count,
-        removed_count,
-    )
+    if added_count or modified_count or removed_count:
+        logger.info(
+            "Plaid sync  |  item=%s  |  added=%d  |  modified=%d  |  removed=%d",
+            plaid_item.id,
+            added_count,
+            modified_count,
+            removed_count,
+        )
+    else:
+        logger.debug("Plaid sync  |  item=%s  |  no changes", plaid_item.id)
     return {"added": added_count, "modified": modified_count, "removed": removed_count}
 
 

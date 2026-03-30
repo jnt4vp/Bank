@@ -165,17 +165,24 @@ async def classify_transaction(
         if llm_result.flagged and (
             normalized_category is None or normalized_category not in normalized_categories
         ):
-            logger.warning(
+            logger.debug(
                 "Ignoring LLM classification outside active pacts: %s",
                 llm_result.category,
             )
             return ClassificationResult(flagged=False)
-        logger.info(
-            "LLM classification: %s | %s | $%.2f → flagged=%s category=%s",
-            merchant, description, amount, llm_result.flagged, normalized_category,
-        )
         if not llm_result.flagged:
+            logger.debug(
+                "LLM classification: %s | %s | $%.2f → flagged=%s category=%s",
+                merchant, description, amount, llm_result.flagged, normalized_category,
+            )
             return ClassificationResult(flagged=False)
+        logger.info(
+            "LLM flagged transaction: %s | %s | $%.2f → category=%s",
+            merchant,
+            description,
+            amount,
+            normalized_category,
+        )
         return ClassificationResult(
             flagged=True,
             category=normalized_category,

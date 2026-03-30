@@ -78,7 +78,7 @@ class OllamaClassifierAdapter:
 
             body = resp.json()
             raw_response = body.get("response", "").strip()
-            logger.info("Ollama raw response: %s", raw_response)
+            logger.debug("Ollama raw response: %s", raw_response)
 
             parsed = json.loads(raw_response)
             flagged = bool(parsed.get("flagged", False))
@@ -107,7 +107,7 @@ class OllamaClassifierAdapter:
             )
             return None
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            logger.warning("Failed to parse Ollama response: %s", exc)
+            logger.debug("Failed to parse Ollama response: %s", exc)
             return None
         except httpx.HTTPStatusError as exc:
             logger.warning(

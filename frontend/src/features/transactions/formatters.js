@@ -70,3 +70,23 @@ export function sortTransactionsByActivityDate(transactions) {
     return String(right.id || '').localeCompare(String(left.id || ''))
   })
 }
+
+export function sortTransactionsByCreatedTime(transactions) {
+  return [...transactions].sort((left, right) => {
+    const createdAtDelta =
+      parseSortableDate(right?.created_at) - parseSortableDate(left?.created_at)
+
+    if (createdAtDelta !== 0) {
+      return createdAtDelta
+    }
+
+    const activityDateDelta =
+      parseSortableDate(right?.date) - parseSortableDate(left?.date)
+
+    if (activityDateDelta !== 0) {
+      return activityDateDelta
+    }
+
+    return String(right.id || '').localeCompare(String(left.id || ''))
+  })
+}

@@ -30,7 +30,7 @@ async def _poll_loop() -> None:
         try:
             synced = await sync_all_items(classifier=classifier, notifier=notifier)
             if synced:
-                logger.info("Plaid poll complete — synced %d items", synced)
+                logger.debug("Plaid poll complete — synced %d items", synced)
         except Exception:
             logger.exception("Plaid poll cycle failed")
 

@@ -3,11 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:  %(name)s  -  %(message)s")
+from .config import get_settings
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models  # noqa: F401  # Ensure model metadata is registered for migrations/dev auto-create.
-from .config import get_settings
 from .database import Base, async_session, engine
 from .routers.auth import router as auth_router
 from .routers.counter import router as counter_router
@@ -23,6 +22,21 @@ from .services.plaid_service import seed_sandbox_plaid_item, sync_transactions
 from .dependencies.integrations import get_classifier, get_notifier
 
 settings = get_settings()
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s:  %(name)s  -  %(message)s",
+    )
+
+    if settings.APP_ENV == "development":
+        logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+        logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
+_configure_logging()
 
 
 @asynccontextmanager
