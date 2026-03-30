@@ -10,6 +10,8 @@ import Signup from '../pages/Signup'
 import Register from '../pages/Register'
 import Transactions from '../pages/Transactions'
 import Pacts from '../pages/Pacts'
+import Goals from '../pages/Goals'
+import Analytics from '../pages/Analytics'
 import ProtectedRoute from './ProtectedRoute'
 
 export default function AppRouter() {
@@ -30,6 +32,8 @@ export default function AppRouter() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/pacts" element={<Pacts />} />
+        <Route path="/goals" element={<Goals />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

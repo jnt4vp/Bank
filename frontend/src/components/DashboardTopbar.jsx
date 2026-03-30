@@ -7,8 +7,8 @@ const primaryNavItems = [
   { label: 'Dashboard', to: '/dashboard', disabled: false },
   { label: 'Transactions', to: '/transactions', disabled: false },
   { label: 'Pacts', to: '/pacts', disabled: false },
-  { label: 'Goals', to: '#', disabled: true },
-  { label: 'Analytics', to: '#', disabled: true },
+  { label: 'Goals', to: '/goals', disabled: false },
+  { label: 'Analytics', to: '/analytics', disabled: false },
 ]
 
 export default function DashboardTopbar({ navAriaLabel = 'Primary' }) {

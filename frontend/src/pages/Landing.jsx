@@ -2,10 +2,13 @@ import '../landing.css'
 import Login from './Login'
 
 export default function Landing() {
+
   return (
     <div className="landing-page">
       <div className="bg">
-        <img src="/Untitled design.gif" alt="" />
+        <video autoPlay loop muted playsInline>
+          <source src="/money2.mp4" type="video/mp4" />
+        </video>
       </div>
 
       <div className="container">

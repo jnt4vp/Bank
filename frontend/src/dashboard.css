@@ -93,6 +93,12 @@
   color: #605965;
   text-decoration: none;
   cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.dashboard-nav-link:hover:not(.dashboard-nav-link-active) {
+  color: #2c2730;
+  transform: translateY(-1px);
 }
 
 .dashboard-nav-link-active {
@@ -131,6 +137,19 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 10px 30px rgba(102, 86, 62, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.dashboard-icon-button:hover,
+.dashboard-profile-trigger:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 14px 36px rgba(102, 86, 62, 0.13);
+}
+
+.dashboard-icon-button:active,
+.dashboard-profile-trigger:active {
+  transform: translateY(0);
 }
 
 .dashboard-icon-button {
@@ -299,6 +318,12 @@
 .dashboard-pill-action {
   cursor: pointer;
   color: var(--pb-accent-color);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.dashboard-pill-action:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .dashboard-top-grid {
@@ -384,6 +409,18 @@
   font-size: 0.96rem;
   cursor: pointer;
   box-shadow: 0 12px 24px rgba(184, 132, 40, 0.22);
+  transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(184, 132, 40, 0.32);
+}
+
+.dashboard-button:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.97);
 }
 
 .dashboard-score-card {
@@ -627,6 +664,12 @@
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.dashboard-link-button:hover {
+  opacity: 0.75;
+  transform: translateX(2px);
 }
 
 .dashboard-activity-list {

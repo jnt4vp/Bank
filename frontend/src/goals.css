@@ -1,0 +1,139 @@
+.goals-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 1rem;
+}
+
+/* ── Goal cards ── */
+.goals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.goals-card {
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 1.35rem;
+  padding: 1rem 1.1rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: box-shadow 0.15s ease;
+}
+
+.goals-card.is-over {
+  border-color: rgba(176, 77, 77, 0.28);
+  background: rgba(255, 240, 240, 0.38);
+}
+
+.goals-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.goals-card-category {
+  margin: 0 0 0.2rem;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #2f2932;
+}
+
+.goals-card-meta {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #726b73;
+}
+
+.goals-card-limit {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #9a9199;
+}
+
+.goals-card-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+/* ── Badge ── */
+.goals-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.goals-badge.is-ok {
+  background: rgba(120, 180, 80, 0.14);
+  color: #4a7a20;
+}
+
+.goals-badge.is-over {
+  background: rgba(176, 77, 77, 0.12);
+  color: #9e3e3e;
+}
+
+/* ── Delete button ── */
+.goals-delete {
+  background: none;
+  border: none;
+  color: #b0a8b2;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s ease;
+}
+
+.goals-delete:hover {
+  color: #9e3e3e;
+}
+
+/* ── Progress bar ── */
+.goals-bar-track {
+  width: 100%;
+  height: 7px;
+  background: rgba(229, 226, 222, 0.9);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.goals-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7a9e20, #a8c234);
+  transition: width 0.5s ease;
+}
+
+.goals-bar-fill.is-over {
+  background: linear-gradient(90deg, #c04040, #d86060);
+}
+
+/* ── Add form ── */
+.goals-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.goals-hint {
+  margin-top: 1.2rem;
+  font-size: 0.88rem;
+  color: #8a8090;
+  line-height: 1.55;
+  padding-top: 1.2rem;
+  border-top: 1px solid rgba(229, 226, 222, 0.55);
+}
+
+@media (max-width: 900px) {
+  .goals-grid {
+    grid-template-columns: 1fr;
+  }
+}

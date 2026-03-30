@@ -454,6 +454,27 @@ export default function Pacts() {
     }
   }
 
+  const [showDashboard, setShowDashboard] = useState(false)
+
+  if (!showDashboard) {
+    return (
+      <div className="dashboard-shell">
+        <DashboardTopbar navAriaLabel="Dashboard" />
+        <div className="pacts-intro">
+          <div className="pacts-intro-box">
+            <h1 className="pacts-intro-title">What's a Pact?</h1>
+            <p className="pacts-intro-desc">
+              A pact is a spending rule you commit to. You pick a category — like dining out or online shopping — and PactBank watches your transactions. If you break it, you get held accountable: an alert goes out, and a percentage of that purchase can be automatically moved into savings. It's a way to put real consequences behind your financial goals.
+            </p>
+            <button className="dashboard-button pacts-intro-btn" onClick={() => setShowDashboard(true)}>
+              Create Pact / See Pacts →
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard-shell">
       <DashboardTopbar navAriaLabel="Dashboard" />

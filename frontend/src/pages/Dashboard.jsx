@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTheme } from '../features/theme/ThemeContext.jsx'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import {
@@ -78,6 +79,7 @@ function transactionMatchesPact(tx, pact) {
 
 export default function Dashboard() {
   const { user, token } = useAuth()
+  const { bg } = useTheme()
   const firstName = user?.name?.split(' ')[0] || 'there'
 
   const [transactions, setTransactions] = useState([])
@@ -214,6 +216,29 @@ export default function Dashboard() {
   )
 
   const flaggedCount = flaggedTransactions.length
+
+  const greeting = useMemo(() => {
+    if (bg === 'red') return {
+      title: `We need to talk, ${firstName} 🚨`,
+      subtitle: "Multiple pacts broken — your discipline needs serious attention.",
+    }
+    if (bg === 'stormy') return {
+      title: `Heads up, ${firstName} 🌧️`,
+      subtitle: "You've slipped on a pact — time to refocus and get back on track.",
+    }
+    if (bg === 'sunny') return {
+      title: `Keep it up, ${firstName} ☀️`,
+      subtitle: "You're honoring all your pacts — outstanding discipline.",
+    }
+    if (bg === 'money') return {
+      title: `Nice work, ${firstName} 💰`,
+      subtitle: "You're keeping your pact — stay the course and build on it.",
+    }
+    return {
+      title: `Welcome back, ${firstName} 👋`,
+      subtitle: "You're on track to build better financial habits.",
+    }
+  }, [bg, firstName])
 
   const disciplineScore = useMemo(() => {
     if (transactions.length === 0) return null
@@ -357,12 +382,8 @@ export default function Dashboard() {
 
       <section className="dashboard-hero">
         <div className="dashboard-hero-copy">
-          <h1 className="dashboard-title">
-            Welcome back, {firstName} <span className="dashboard-wave">👋</span>
-          </h1>
-          <p className="dashboard-subtitle">
-            You&apos;re on track to build better financial habits.
-          </p>
+          <h1 className="dashboard-title">{greeting.title}</h1>
+          <p className="dashboard-subtitle">{greeting.subtitle}</p>
         </div>
 
         <div className="dashboard-hero-actions">
