@@ -11,6 +11,64 @@ from ...config import get_settings
 logger = logging.getLogger("bank.email")
 
 
+def _build_alert_content(merchant: str, amount: float, category: str | None) -> tuple[str, str]:
+    cat = (category or "").lower()
+
+    if any(k in cat for k in ("dining", "restaurant", "dining out")):
+        subject = f"Really? ${amount:.2f} at {merchant}? We saw that."
+        opener = "Going out to eat. Again. Your pact is not impressed — and honestly, neither are we."
+        closer = "Next time, maybe try the fridge. It's right there. Free, even."
+
+    elif any(k in cat for k in ("coffee", "café", "cafe")):
+        subject = f"${amount:.2f} on coffee. You have a coffee maker at home."
+        opener = f"Another coffee run to {merchant}. Bold choice. Literally and financially."
+        closer = "Your pact is awake. Unlike your self-control, apparently."
+
+    elif any(k in cat for k in ("shopping", "online")):
+        subject = f"Congrats on your latest impulse buy at {merchant} (${amount:.2f})"
+        opener = "We're not saying it was unnecessary. We're just saying your pact is."
+        closer = "Hope it was worth it. Spoiler: it wasn't."
+
+    elif any(k in cat for k in ("entertainment",)):
+        subject = f"Having fun? Your pact at {merchant} isn't. (${amount:.2f})"
+        opener = "Look, we get it — life is short. But so is your budget."
+        closer = "Your pact has been violated. The fun police have been notified."
+
+    elif any(k in cat for k in ("ride", "uber", "lyft", "taxi")):
+        subject = f"You paid ${amount:.2f} to sit in a stranger's car."
+        opener = f"{merchant} got you again. Ever heard of walking? Your pact has."
+        closer = "Your legs work. Your pact is watching."
+
+    elif any(k in cat for k in ("fast food", "fast_food", "fastfood", "mcdonald", "burger", "taco")):
+        subject = f"Fast food. Again. ${amount:.2f} at {merchant}."
+        opener = "We're not judging. Actually, we are. That's literally what we do."
+        closer = "Your pact saw the drive-through receipt. It's not happy."
+
+    elif any(k in cat for k in ("convenience", "gas station", "7-eleven", "corner")):
+        subject = f"A convenience store run? How convenient for your pact violation. (${amount:.2f})"
+        opener = f"Nothing says 'I broke my pact' like a {merchant} receipt."
+        closer = "Your pact didn't need a Slim Jim. You did though, apparently."
+
+    else:
+        subject = f"You broke your pact. ${amount:.2f} at {merchant}. We noticed."
+        opener = f"Whatever you spent ${amount:.2f} on at {merchant} — your pact didn't approve it."
+        closer = "You made a promise. Your pact remembers, even if you don't."
+
+    body = "\n".join([
+        opener,
+        "",
+        f"  Merchant  : {merchant}",
+        f"  Amount    : ${amount:.2f}",
+        f"  Category  : {category or 'unknown'}",
+        "",
+        closer,
+        "",
+        "— PactBank, holding you accountable so you don't have to.",
+    ])
+
+    return subject, body
+
+
 class SmtpNotifier:
     async def send_password_reset(
         self,
@@ -64,17 +122,7 @@ class SmtpNotifier:
             logger.warning("No recipient address available — skipping alert email")
             return
 
-        subject = f"Flagged transaction: {merchant} (${amount:.2f})"
-        body = "\n".join([
-            "A transaction on your account has been flagged for review.",
-            "",
-            f"  Merchant : {merchant}",
-            f"  Amount   : ${amount:.2f}",
-            f"  Category : {category or 'unknown'}",
-            f"  Reason   : {flag_reason or 'suspicious activity'}",
-            "",
-            "If you did not authorise this transaction, please contact support immediately.",
-        ])
+        subject, body = _build_alert_content(merchant, amount, category)
 
         await asyncio.to_thread(
             self._send_message,
