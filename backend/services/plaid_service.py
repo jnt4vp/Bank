@@ -318,6 +318,8 @@ async def sync_transactions(
                         category=category,
                         flag_reason=flag_reason,
                     )
+                    new_txn.alert_sent = True
+                    new_txn.alert_sent_at = datetime.now(timezone.utc)
                 except Exception:
                     logger.warning("Failed to send alert for plaid txn %s", txn.transaction_id)
 
@@ -332,6 +334,7 @@ async def sync_transactions(
             )
             existing_txn = result.scalar_one_or_none()
             if existing_txn:
+                was_flagged = bool(existing_txn.flagged)
                 plaid_original_description = txn.original_description or None
                 existing_txn.merchant = (
                     txn.merchant_name or txn.name or existing_txn.merchant
@@ -348,6 +351,29 @@ async def sync_transactions(
                 # Backfill account_id if it was null (e.g. from a transient accounts_get failure)
                 if existing_txn.account_id is None and txn.account_id:
                     existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
+
+                if (
+                    notifier
+                    and existing_txn.flagged
+                    and not was_flagged
+                    and not existing_txn.alert_sent
+                    and not is_initial_backfill
+                ):
+                    try:
+                        await notifier.send_transaction_alert(
+                            to_email=user_email,
+                            merchant=existing_txn.merchant,
+                            amount=float(existing_txn.amount),
+                            category=existing_txn.category,
+                            flag_reason=existing_txn.flag_reason,
+                        )
+                        existing_txn.alert_sent = True
+                        existing_txn.alert_sent_at = datetime.now(timezone.utc)
+                    except Exception:
+                        logger.warning(
+                            "Failed to send alert for modified plaid txn %s",
+                            txn.transaction_id,
+                        )
                 modified_count += 1
 
         # Process removed transactions

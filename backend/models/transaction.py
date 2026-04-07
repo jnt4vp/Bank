@@ -29,6 +29,8 @@ class Transaction(Base):
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     flagged: Mapped[bool] = mapped_column(default=False)
     flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    alert_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Plaid-sourced fields (nullable — null means manually created)

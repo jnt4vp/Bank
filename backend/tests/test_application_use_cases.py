@@ -194,6 +194,8 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             category=None,
             flagged=False,
             flag_reason=None,
+            alert_sent=False,
+            alert_sent_at=None,
         )
 
         with patch(
@@ -255,6 +257,8 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             category="non-essential spending",
             flagged=True,
             flag_reason="LLM: matched discretionary spending",
+            alert_sent=False,
+            alert_sent_at=None,
         )
 
         with patch(
@@ -291,7 +295,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             flagged=True,
             flag_reason="LLM: matched discretionary spending",
         )
-        db.commit.assert_awaited_once()
+        self.assertEqual(db.commit.await_count, 2)
         db.refresh.assert_awaited_once_with(transaction)
         notifier.send_transaction_alert.assert_awaited_once_with(
             to_email="test@example.com",
@@ -300,6 +304,8 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             category="non-essential spending",
             flag_reason="LLM: matched discretionary spending",
         )
+        self.assertTrue(transaction.alert_sent)
+        self.assertIsNotNone(transaction.alert_sent_at)
         self.assertEqual(result, transaction)
 
 

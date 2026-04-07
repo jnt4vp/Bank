@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,7 +93,7 @@ async def ingest_user_transaction(
         txn.id,
     )
 
-    if txn.flagged:
+    if txn.flagged and not txn.alert_sent:
         await notifier.send_transaction_alert(
             to_email=user_email,
             merchant=txn.merchant,
@@ -102,5 +101,12 @@ async def ingest_user_transaction(
             category=txn.category,
             flag_reason=txn.flag_reason,
         )
+        txn.alert_sent = True
+        txn.alert_sent_at = datetime.now(timezone.utc)
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
     return txn
