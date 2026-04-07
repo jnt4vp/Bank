@@ -665,6 +665,35 @@
   color: #5c5660;
 }
 
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(28, 24, 32, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.settings-modal {
+  width: min(100%, 26rem);
+  padding: 1.35rem 1.5rem;
+  border-radius: 1rem;
+  background: rgba(255, 253, 248, 0.98);
+  border: 1px solid rgba(224, 214, 196, 0.95);
+  box-shadow: 0 20px 48px rgba(60, 48, 36, 0.18);
+}
+
+.settings-modal-title {
+  margin: 0 0 0.65rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #2c2730;
+}
+
 .settings-quick-links {
   display: flex;
   flex-wrap: wrap;

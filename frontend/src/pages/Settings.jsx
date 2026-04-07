@@ -3,14 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { apiRequest } from '../lib/api/client'
 import DashboardTopbar from '../components/DashboardTopbar'
-import {
-  createAccountabilityPartner,
-  deleteAccountabilityPartner,
-  getAccountabilityAlertSettings,
-  listAccountabilityPartners,
-  updateAccountabilityAlertSettings,
-  updateAccountabilityPartner,
-} from '../features/accountability-partners/api'
+import { deleteAccountabilityPartner, listAccountabilityPartners } from '../features/accountability-partners/api'
 import '../dashboard.css'
 import '../settings.css'
 
@@ -201,27 +194,13 @@ export default function Settings() {
   const [currency, setCurrency] = useState('USD ($)')
   const [disciplineUiModeSaving, setDisciplineUiModeSaving] = useState(false)
   const [dashboardSkySaving, setDashboardSkySaving] = useState(false)
-  const [defaultSavingsPercent, setDefaultSavingsPercent] = useState(0)
-  const [savingsSaving, setSavingsSaving] = useState(false)
   const [resetDisciplineSaving, setResetDisciplineSaving] = useState(false)
   const [uiPrefsMessage, setUiPrefsMessage] = useState({ type: '', text: '' })
   const [partners, setPartners] = useState([])
   const [deletingPartnerId, setDeletingPartnerId] = useState(null)
-  const [partnerForm, setPartnerForm] = useState({
-    partner_name: '',
-    partner_email: '',
-    relationship_label: '',
-    is_active: true,
-  })
-  const [editingPartnerId, setEditingPartnerId] = useState(null)
+  const [partnerPendingDelete, setPartnerPendingDelete] = useState(null)
   const [partnerError, setPartnerError] = useState('')
   const [partnerSuccess, setPartnerSuccess] = useState('')
-  const [alertSettings, setAlertSettings] = useState({
-    alerts_enabled: true,
-    custom_subject_template: '',
-    custom_body_template: '',
-    custom_message: '',
-  })
 
 
   const userLabel = user?.name || user?.email || 'User'
@@ -240,100 +219,45 @@ export default function Settings() {
   }, [refreshUser, token])
 
   useEffect(() => {
-    if (user?.discipline_savings_percentage != null && !Number.isNaN(Number(user.discipline_savings_percentage))) {
-      setDefaultSavingsPercent(Number(user.discipline_savings_percentage))
+    if (!partnerPendingDelete) return undefined
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setPartnerPendingDelete(null)
     }
-  }, [user?.discipline_savings_percentage])
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [partnerPendingDelete])
 
   useEffect(() => {
-    async function loadAccountabilityData() {
+    async function loadAccountabilityPartners() {
       if (!token) {
         setPartners([])
         return
       }
       try {
-        const [partnersResult, settingsResult] = await Promise.all([
-          listAccountabilityPartners(token),
-          getAccountabilityAlertSettings(token),
-        ])
+        const partnersResult = await listAccountabilityPartners(token)
         setPartners(partnersResult || [])
-        if (settingsResult) {
-          setAlertSettings({
-            alerts_enabled: Boolean(settingsResult.alerts_enabled),
-            custom_subject_template: settingsResult.custom_subject_template || '',
-            custom_body_template: settingsResult.custom_body_template || '',
-            custom_message: settingsResult.custom_message || '',
-          })
-        }
       } catch {
-        setPartnerError('Failed to load accountability settings.')
+        setPartnerError('Failed to load accountability partners.')
       }
     }
-    loadAccountabilityData()
+    loadAccountabilityPartners()
   }, [token])
 
-  function handlePartnerFormChange(event) {
-    const { name, value, type, checked } = event.target
-    setPartnerForm((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
-  }
-
-  function resetPartnerForm() {
-    setPartnerForm({
-      partner_name: '',
-      partner_email: '',
-      relationship_label: '',
-      is_active: true,
-    })
-    setEditingPartnerId(null)
-  }
-
-  function isValidEmail(value) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
-  }
-
-  async function handleSavePartner() {
-    if (!token) return
+  function requestDeletePartner(partner) {
+    if (!partner?.id) return
     setPartnerError('')
     setPartnerSuccess('')
-    if (!isValidEmail(partnerForm.partner_email)) {
-      setPartnerError('Enter a valid partner email address.')
-      return
-    }
-    try {
-      const payload = {
-        partner_name: partnerForm.partner_name || null,
-        partner_email: partnerForm.partner_email.trim().toLowerCase(),
-        relationship_label: partnerForm.relationship_label || null,
-        is_active: partnerForm.is_active,
-      }
-      if (editingPartnerId) {
-        const updated = await updateAccountabilityPartner(editingPartnerId, payload, token)
-        setPartners((prev) => prev.map((p) => (p.id === editingPartnerId ? updated : p)))
-        setPartnerSuccess('Partner updated.')
-      } else {
-        const created = await createAccountabilityPartner(payload, token)
-        setPartners((prev) => [created, ...prev])
-        setPartnerSuccess('Partner added.')
-      }
-      resetPartnerForm()
-    } catch (error) {
-      setPartnerError(error?.message || 'Could not save partner.')
-    }
+    setPartnerPendingDelete(partner)
   }
 
-  async function handleDeletePartner(partner) {
+  function cancelDeletePartner() {
+    setPartnerPendingDelete(null)
+  }
+
+  async function confirmDeletePartner() {
+    const partner = partnerPendingDelete
     if (!token || !partner?.id) return
-    const label = partner.partner_name || partner.partner_email || 'this partner'
-    if (
-      !window.confirm(
-        `Remove ${label} from accountability partners? They will stop receiving pact alert emails.`
-      )
-    ) {
-      return
-    }
+    setPartnerPendingDelete(null)
     setPartnerError('')
     setPartnerSuccess('')
     setDeletingPartnerId(partner.id)
@@ -341,50 +265,11 @@ export default function Settings() {
       await deleteAccountabilityPartner(partner.id, token)
       setPartners((prev) => prev.filter((p) => p.id !== partner.id))
       setPartnerSuccess('Partner removed.')
-      if (editingPartnerId === partner.id) {
-        resetPartnerForm()
-      }
     } catch (error) {
       setPartnerError(error?.message || 'Could not remove partner.')
     } finally {
       setDeletingPartnerId(null)
     }
-  }
-
-  function handleEditPartner(partner) {
-    setEditingPartnerId(partner.id)
-    setPartnerForm({
-      partner_name: partner.partner_name || '',
-      partner_email: partner.partner_email || '',
-      relationship_label: partner.relationship_label || '',
-      is_active: Boolean(partner.is_active),
-    })
-  }
-
-  async function handleSaveAlertSettings() {
-    if (!token) return
-    setPartnerError('')
-    setPartnerSuccess('')
-    try {
-      const saved = await updateAccountabilityAlertSettings(alertSettings, token)
-      setAlertSettings({
-        alerts_enabled: Boolean(saved.alerts_enabled),
-        custom_subject_template: saved.custom_subject_template || '',
-        custom_body_template: saved.custom_body_template || '',
-        custom_message: saved.custom_message || '',
-      })
-      setPartnerSuccess('Alert settings saved.')
-    } catch (error) {
-      setPartnerError(error?.message || 'Could not save alert settings.')
-    }
-  }
-
-  function handleAlertSettingsChange(event) {
-    const { name, value, type, checked } = event.target
-    setAlertSettings((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }))
   }
 
   function clearUiPrefsMessageSoon() {
@@ -442,34 +327,6 @@ export default function Settings() {
     }
   }
 
-  async function handleSaveDefaultSavings() {
-    if (!token || savingsSaving) return
-    const n = Number(defaultSavingsPercent)
-    if (Number.isNaN(n) || n < 0 || n > 100) {
-      setUiPrefsMessage({ type: 'error', text: 'Enter a percentage between 0 and 100.' })
-      return
-    }
-    setUiPrefsMessage({ type: '', text: '' })
-    try {
-      setSavingsSaving(true)
-      await apiRequest('/api/auth/me', {
-        method: 'PATCH',
-        token,
-        body: { discipline_savings_percentage: n },
-      })
-      await refreshUser(token)
-      setUiPrefsMessage({ type: 'success', text: 'Default savings percentage saved for new rules.' })
-      clearUiPrefsMessageSoon()
-    } catch (error) {
-      setUiPrefsMessage({
-        type: 'error',
-        text: error?.message || 'Could not save default savings percentage.',
-      })
-    } finally {
-      setSavingsSaving(false)
-    }
-  }
-
   async function handleResetDisciplineWindow() {
     if (!token || resetDisciplineSaving) return
     if (
@@ -510,20 +367,6 @@ export default function Settings() {
     )
     window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
   }
-
-  const previewSubject = alertSettings.custom_subject_template || 'Accountability Alert'
-  const previewBodyTemplate =
-    alertSettings.custom_body_template ||
-    'Hi {partner_name}, a flagged purchase was detected in category {category} for ${amount} at {merchant}. Message from me: {custom_message}'
-  const previewBody = previewBodyTemplate
-    .replaceAll('{partner_name}', partnerForm.partner_name || 'Accountability Partner')
-    .replaceAll('{user_name}', user?.name || user?.email || 'User')
-    .replaceAll('{category}', 'gambling')
-    .replaceAll('{amount}', '25.99')
-    .replaceAll('{merchant}', 'Example Merchant')
-    .replaceAll('{description}', 'Example transaction')
-    .replaceAll('{transaction_date}', new Date().toISOString().slice(0, 10))
-    .replaceAll('{custom_message}', alertSettings.custom_message || 'Please check in with me.')
 
   function handleProfileChange(event) {
     const { name, value } = event.target
@@ -581,7 +424,7 @@ export default function Settings() {
   
           <h1 className="dashboard-title settings-title">Settings</h1>
           <p className="dashboard-subtitle settings-subtitle">
-            Profile, notifications, accountability partners, Pacts appearance, and account shortcuts.
+            Profile, notifications, accountability partners, app preferences, and account shortcuts.
           </p>
 
         </div>
@@ -726,167 +569,92 @@ export default function Settings() {
           <section className="dashboard-card settings-card settings-card-partners">
             <div className="settings-section-header">
               <div>
-                <p className="settings-section-kicker">Accountability partners</p>
-                <h2>Who gets alert emails</h2>
+                <p className="settings-section-kicker">Accountability</p>
+                <h2>Accountability partners</h2>
                 <p className="settings-support-lede" style={{ marginTop: '0.5rem' }}>
-                  Partners receive emails when a purchase breaks an active pact. Manage the list here or tune templates
-                  below.
+                  People listed here may receive emails when a purchase breaks an active pact. You can remove a partner
+                  anytime.
                 </p>
               </div>
             </div>
 
             <div className="settings-control-stack" style={{ paddingTop: 0 }}>
-              <p className="settings-control-label" style={{ margin: '0 0 0.35rem' }}>
-                Your partners ({partners.length})
-              </p>
               {partners.length === 0 ? (
-                <p className="settings-support-lede">No partners yet. Add someone you trust below.</p>
+                <p className="settings-support-lede">No accountability partners on file.</p>
               ) : (
-                partners.map((partner) => (
-                  <div key={partner.id} className="settings-partner-card">
-                    <div className="settings-row-copy">
-                      <h3 style={{ fontSize: '1.05rem' }}>{partner.partner_name || partner.partner_email}</h3>
-                      <p>
-                        {partner.partner_email}
-                        {partner.relationship_label ? ` · ${partner.relationship_label}` : ''}
-                      </p>
-                      {partner.is_active === false ? (
-                        <span className="settings-partner-badge">Inactive</span>
-                      ) : (
-                        <span className="settings-partner-badge">Active</span>
-                      )}
+                partners.map((partner) => {
+                  const label = partner.partner_name || partner.partner_email || 'Partner'
+                  return (
+                    <div key={partner.id} className="settings-partner-card">
+                      <div className="settings-row-copy">
+                        <h3 style={{ fontSize: '1.05rem' }}>{label}</h3>
+                        <p className="settings-support-lede" style={{ marginTop: '0.25rem' }}>
+                          {partner.partner_email}
+                          {partner.relationship_label ? ` · ${partner.relationship_label}` : ''}
+                        </p>
+                        {partner.is_active === false ? (
+                          <span className="settings-partner-badge">Inactive</span>
+                        ) : (
+                          <span className="settings-partner-badge">Active</span>
+                        )}
+                      </div>
+                      <div className="settings-partner-actions" style={{ marginTop: '0.75rem' }}>
+                        <button
+                          type="button"
+                          className="settings-button-danger"
+                          disabled={deletingPartnerId === partner.id || Boolean(partnerPendingDelete)}
+                          onClick={() => requestDeletePartner(partner)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <div className="settings-partner-actions" style={{ marginTop: '0.75rem' }}>
-                      <button
-                        type="button"
-                        className="settings-ghost-button"
-                        onClick={() => handleEditPartner(partner)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="settings-button-danger"
-                        disabled={deletingPartnerId === partner.id}
-                        onClick={() => handleDeletePartner(partner)}
-                      >
-                        {deletingPartnerId === partner.id ? 'Removing…' : 'Remove partner'}
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
-            </div>
-
-            <div className="settings-list settings-control-stack">
-              <p className="settings-section-kicker" style={{ marginBottom: '0.25rem' }}>
-                Email templates
-              </p>
-              <label className="settings-field">
-                <span>Enable accountability alerts</span>
-                <input
-                  type="checkbox"
-                  name="alerts_enabled"
-                  checked={alertSettings.alerts_enabled}
-                  onChange={handleAlertSettingsChange}
-                />
-              </label>
-              <label className="settings-field">
-                <span>Custom subject template</span>
-                <input
-                  className="settings-input"
-                  name="custom_subject_template"
-                  value={alertSettings.custom_subject_template}
-                  onChange={handleAlertSettingsChange}
-                  placeholder="Accountability Alert"
-                />
-              </label>
-              <label className="settings-field">
-                <span>Custom body template</span>
-                <textarea
-                  className="settings-input"
-                  name="custom_body_template"
-                  value={alertSettings.custom_body_template}
-                  onChange={handleAlertSettingsChange}
-                  placeholder="Hi {partner_name}, a flagged purchase in {category} was detected..."
-                  rows={4}
-                />
-              </label>
-              <label className="settings-field">
-                <span>Custom message</span>
-                <input
-                  className="settings-input"
-                  name="custom_message"
-                  value={alertSettings.custom_message}
-                  onChange={handleAlertSettingsChange}
-                  placeholder="Please check in with me."
-                />
-              </label>
-              <div className="settings-detail-row">
-                <span>Email preview subject</span>
-                <strong>{previewSubject}</strong>
-              </div>
-              <div className="settings-detail-row">
-                <span>Email preview body</span>
-                <strong style={{ display: 'block', maxWidth: '100%', whiteSpace: 'normal' }}>{previewBody}</strong>
-              </div>
-              <button type="button" className="settings-primary-button" onClick={handleSaveAlertSettings}>
-                Save alert templates
-              </button>
-            </div>
-
-            <div className="settings-list settings-control-stack">
-              <p className="settings-section-kicker" style={{ marginBottom: '0.25rem' }}>
-                {editingPartnerId ? 'Edit partner' : 'Add a partner'}
-              </p>
-              <label className="settings-field">
-                <span>Display name</span>
-                <input
-                  className="settings-input"
-                  name="partner_name"
-                  value={partnerForm.partner_name}
-                  onChange={handlePartnerFormChange}
-                  placeholder="e.g. Alex"
-                />
-              </label>
-              <label className="settings-field">
-                <span>Partner email</span>
-                <input
-                  className="settings-input"
-                  type="email"
-                  name="partner_email"
-                  value={partnerForm.partner_email}
-                  onChange={handlePartnerFormChange}
-                  placeholder="partner@email.com"
-                />
-              </label>
-              <label className="settings-field">
-                <span>Relationship (optional)</span>
-                <input
-                  className="settings-input"
-                  name="relationship_label"
-                  value={partnerForm.relationship_label}
-                  onChange={handlePartnerFormChange}
-                  placeholder="e.g. spouse, friend"
-                />
-              </label>
-              <label className="settings-field" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ flex: 1 }}>Partner can receive alerts</span>
-                <input type="checkbox" name="is_active" checked={partnerForm.is_active} onChange={handlePartnerFormChange} />
-              </label>
-              <div className="settings-form-actions">
-                <button type="button" className="settings-primary-button" onClick={handleSavePartner}>
-                  {editingPartnerId ? 'Save changes' : 'Add partner'}
-                </button>
-                {editingPartnerId ? (
-                  <button type="button" className="settings-ghost-button" onClick={resetPartnerForm}>
-                    Cancel
-                  </button>
-                ) : null}
-              </div>
               {partnerError ? <p className="settings-form-feedback is-error">{partnerError}</p> : null}
               {partnerSuccess ? <p className="settings-form-feedback is-success">{partnerSuccess}</p> : null}
             </div>
+
+            {partnerPendingDelete ? (
+              <div
+                className="settings-modal-overlay"
+                role="presentation"
+                onClick={cancelDeletePartner}
+              >
+                <div
+                  className="settings-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="settings-remove-partner-title"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h3 id="settings-remove-partner-title" className="settings-modal-title">
+                    Remove partner?
+                  </h3>
+                  <p className="settings-support-lede">
+                    Remove{' '}
+                    <strong>
+                      {partnerPendingDelete.partner_name || partnerPendingDelete.partner_email || 'this partner'}
+                    </strong>{' '}
+                    from accountability alert emails. You can add a partner again anytime from My Pacts.
+                  </p>
+                  <div className="settings-form-actions" style={{ marginTop: '1rem' }}>
+                    <button type="button" className="settings-ghost-button" onClick={cancelDeletePartner}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-button-danger"
+                      disabled={deletingPartnerId !== null}
+                      onClick={confirmDeletePartner}
+                    >
+                      {deletingPartnerId ? 'Removing…' : 'Remove partner'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="dashboard-card settings-card settings-card-security">
@@ -1015,36 +783,6 @@ export default function Settings() {
                   {resetDisciplineSaving ? 'Resetting…' : 'Reset discipline window'}
                 </button>
               </div>
-
-              <label className="settings-control-group">
-                <div className="settings-control-label-row">
-                  <span className="settings-control-label">Default pact savings %</span>
-                </div>
-                <p className="settings-support-lede">
-                  Default percentage moved to savings when a pact is broken (you can still override per pact on Pacts).
-                </p>
-                <input
-                  className="settings-input"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={0.5}
-                  value={Number.isFinite(defaultSavingsPercent) ? defaultSavingsPercent : 0}
-                  onChange={(e) => {
-                    const next = parseFloat(e.target.value)
-                    setDefaultSavingsPercent(Number.isFinite(next) ? next : 0)
-                  }}
-                />
-                <button
-                  type="button"
-                  className="settings-primary-button"
-                  style={{ marginTop: '0.5rem', width: 'fit-content' }}
-                  disabled={savingsSaving}
-                  onClick={handleSaveDefaultSavings}
-                >
-                  {savingsSaving ? 'Saving…' : 'Save default'}
-                </button>
-              </label>
 
               <SegmentedControl
                 label="Display theme (local)"
