@@ -2,10 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { apiRequest } from '../lib/api'
+import { getDisciplineUiState } from '../features/pacts/disciplineState'
 import {
   getAccountabilitySettings,
   saveAccountabilitySettings,
 } from '../features/accountability/api'
+import {
+  createAccountabilityPartner,
+  deleteAccountabilityPartner,
+  listAccountabilityPartners,
+  updateAccountabilityPartner,
+} from '../features/accountability-partners/api'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
 import '../pacts.css'
@@ -46,8 +53,10 @@ function formatAccountabilityType(type) {
   }
 }
 
+const PACTS_SKIP_INTRO_KEY = 'pactbank.pacts.skipIntro'
+
 export default function Pacts() {
-  const { user, token } = useAuth()
+  const { user, token, refreshUser } = useAuth()
   const firstName = user?.name?.split(' ')[0] || 'there'
 
   const [pacts, setPacts] = useState([])
@@ -72,6 +81,16 @@ export default function Pacts() {
   const [settingsLoading, setSettingsLoading] = useState({})
   const [settingsSaving, setSettingsSaving] = useState({})
   const [settingsError, setSettingsError] = useState({})
+  const [partners, setPartners] = useState([])
+  const [partnersLoading, setPartnersLoading] = useState(false)
+  const [partnerSaving, setPartnerSaving] = useState(false)
+  const [partnerForm, setPartnerForm] = useState({
+    partner_name: '',
+    partner_email: '',
+    relationship_label: '',
+    is_active: true,
+  })
+  const [editingPartnerId, setEditingPartnerId] = useState(null)
 
   const getLockDays = (lockedUntil) => {
     if (!lockedUntil) return 0
@@ -219,6 +238,28 @@ export default function Pacts() {
   useEffect(() => {
     loadPacts()
   }, [loadPacts])
+
+  useEffect(() => {
+    if (!token) return
+    refreshUser(token).catch(() => {})
+  }, [token, refreshUser])
+
+  const loadPartners = useCallback(async () => {
+    if (!token) return
+    try {
+      setPartnersLoading(true)
+      const data = await listAccountabilityPartners(token)
+      setPartners(Array.isArray(data) ? data : [])
+    } catch (err) {
+      setError(err?.message || 'Failed to load accountability partners.')
+    } finally {
+      setPartnersLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    loadPartners()
+  }, [loadPartners])
 
   const lockPact = useCallback(
     async (pact) => {
@@ -378,6 +419,83 @@ export default function Pacts() {
     }
   }
 
+  function resetPartnerForm() {
+    setEditingPartnerId(null)
+    setPartnerForm({
+      partner_name: '',
+      partner_email: '',
+      relationship_label: '',
+      is_active: true,
+    })
+  }
+
+  function validatePartnerForm() {
+    if (!partnerForm.partner_email?.trim()) return 'Partner email is required.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerForm.partner_email.trim())) {
+      return 'Enter a valid partner email.'
+    }
+    return null
+  }
+
+  async function handleSavePartner() {
+    const validationError = validatePartnerForm()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    setPartnerSaving(true)
+    setError(null)
+    setSuccess('')
+    const payload = {
+      partner_name: partnerForm.partner_name?.trim() || null,
+      partner_email: partnerForm.partner_email.trim().toLowerCase(),
+      relationship_label: partnerForm.relationship_label?.trim() || null,
+      is_active: Boolean(partnerForm.is_active),
+    }
+
+    try {
+      if (editingPartnerId) {
+        const updated = await updateAccountabilityPartner(editingPartnerId, payload, token)
+        setPartners((prev) => prev.map((partner) => (partner.id === editingPartnerId ? updated : partner)))
+        setSuccess('Accountability partner updated.')
+      } else {
+        const created = await createAccountabilityPartner(payload, token)
+        setPartners((prev) => [created, ...prev])
+        setSuccess('Accountability partner added.')
+      }
+      resetPartnerForm()
+    } catch (err) {
+      setError(err?.message || 'Failed to save accountability partner.')
+    } finally {
+      setPartnerSaving(false)
+    }
+  }
+
+  async function handleDeletePartner(partnerId) {
+    const confirmed = window.confirm('Remove this accountability partner?')
+    if (!confirmed) return
+
+    try {
+      await deleteAccountabilityPartner(partnerId, token)
+      setPartners((prev) => prev.filter((partner) => partner.id !== partnerId))
+      if (editingPartnerId === partnerId) resetPartnerForm()
+      setSuccess('Accountability partner removed.')
+    } catch (err) {
+      setError(err?.message || 'Failed to remove accountability partner.')
+    }
+  }
+
+  function beginEditPartner(partner) {
+    setEditingPartnerId(partner.id)
+    setPartnerForm({
+      partner_name: partner.partner_name || '',
+      partner_email: partner.partner_email || '',
+      relationship_label: partner.relationship_label || '',
+      is_active: Boolean(partner.is_active),
+    })
+  }
+
   const handleSavePact = async (pact) => {
     setError(null)
     setSuccess('')
@@ -454,7 +572,33 @@ export default function Pacts() {
     }
   }
 
-  const [showDashboard, setShowDashboard] = useState(false)
+  const [showDashboard, setShowDashboard] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const v = window.localStorage.getItem(PACTS_SKIP_INTRO_KEY)
+    if (v === '0') return false
+    return true
+  })
+  const disciplineModeEnabled = (user?.discipline_ui_mode || 'discipline') === 'discipline'
+  const disciplineScore = Number(user?.discipline_score ?? 100)
+  const disciplineUiState = getDisciplineUiState(disciplineScore)
+
+  function openPactsMain() {
+    try {
+      window.localStorage.setItem(PACTS_SKIP_INTRO_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+    setShowDashboard(true)
+  }
+
+  function showPactsIntro() {
+    try {
+      window.localStorage.setItem(PACTS_SKIP_INTRO_KEY, '0')
+    } catch {
+      /* ignore */
+    }
+    setShowDashboard(false)
+  }
 
   if (!showDashboard) {
     return (
@@ -466,8 +610,21 @@ export default function Pacts() {
             <p className="pacts-intro-desc">
               A pact is a spending rule you commit to. You pick a category — like dining out or online shopping — and PactBank watches your transactions. If you break it, you get held accountable: an alert goes out, and a percentage of that purchase can be automatically moved into savings. It's a way to put real consequences behind your financial goals.
             </p>
-            <button className="dashboard-button pacts-intro-btn" onClick={() => setShowDashboard(true)}>
+            {disciplineModeEnabled ? (
+              <p className="pacts-intro-discipline-hint" role="status">
+                <strong>{disciplineUiState.label}</strong>
+                <span> · Score {disciplineScore}/100</span>
+                <span className="pacts-intro-discipline-note">
+                  {' '}
+                  Open My Pacts below to manage rules, partners, and discipline settings.
+                </span>
+              </p>
+            ) : null}
+            <button type="button" className="dashboard-button pacts-intro-btn" onClick={openPactsMain}>
               Create Pact / See Pacts →
+            </button>
+            <button type="button" className="pacts-intro-skip" onClick={openPactsMain}>
+              Skip intro — go straight to My Pacts
             </button>
           </div>
         </div>
@@ -476,7 +633,11 @@ export default function Pacts() {
   }
 
   return (
-    <div className="dashboard-shell">
+    <div
+      className={`dashboard-shell ${
+        disciplineModeEnabled ? `pacts-discipline-${disciplineUiState.key}` : 'pacts-classic-mode'
+      }`}
+    >
       <DashboardTopbar navAriaLabel="Dashboard" />
 
       <section className="dashboard-hero">
@@ -486,12 +647,22 @@ export default function Pacts() {
           <p className="dashboard-subtitle">
             Add, organize, and remove accountability rules that shape how your spending is tracked.
           </p>
+          {disciplineModeEnabled ? (
+            <div className="pacts-discipline-banner" role="status" aria-live="polite">
+              <strong>{disciplineUiState.label}</strong>
+              <span>Score: {disciplineScore}/100</span>
+              <p>{disciplineUiState.tone}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="dashboard-hero-actions">
           <div className="dashboard-pill">
             {loading ? 'Loading pacts...' : `${activePacts.length} Active Pacts`}
           </div>
+          <button type="button" className="pacts-intro-link" onClick={showPactsIntro}>
+            What is a Pact?
+          </button>
           <Link className="dashboard-pill dashboard-pill-action" to="/dashboard">
             Back to Dashboard →
           </Link>
@@ -516,9 +687,15 @@ export default function Pacts() {
           </div>
 
           <div className="dashboard-card dashboard-card-hero-accent">
-            <p className="dashboard-card-label">Status</p>
+            <p className="dashboard-card-label">
+              {disciplineModeEnabled ? 'Discipline State' : 'Status'}
+            </p>
             <p className="dashboard-stat">
-              {activePacts.length === pacts.length ? 'Stable' : 'Mixed'}
+              {disciplineModeEnabled
+                ? disciplineUiState.label
+                : activePacts.length === pacts.length
+                  ? 'Stable'
+                  : 'Mixed'}
             </p>
           </div>
         </section>
@@ -575,6 +752,65 @@ export default function Pacts() {
                   ))}
                 </select>
               </label>
+              <div className="pacts-helper-card">
+                <h3>Accountability partner</h3>
+                <p>
+                  Partner emails are sent only when a flagged purchase breaks one of your active pact categories.
+                </p>
+                <div className="pacts-partner-grid">
+                  <label className="pacts-field">
+                    <span>Partner name</span>
+                    <input
+                      type="text"
+                      className="pacts-input"
+                      value={partnerForm.partner_name}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
+                      }
+                      placeholder="Alex"
+                    />
+                  </label>
+                  <label className="pacts-field">
+                    <span>Partner email</span>
+                    <input
+                      type="email"
+                      className="pacts-input"
+                      value={partnerForm.partner_email}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
+                      }
+                      placeholder="alex@example.com"
+                    />
+                  </label>
+                  <label className="pacts-field">
+                    <span>Relationship</span>
+                    <input
+                      type="text"
+                      className="pacts-input"
+                      value={partnerForm.relationship_label}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, relationship_label: event.target.value }))
+                      }
+                      placeholder="Friend, parent, coach"
+                    />
+                  </label>
+                </div>
+                <div className="pacts-partner-actions">
+                  <button
+                    type="button"
+                    className="pacts-secondary-button"
+                    onClick={handleSavePartner}
+                    disabled={partnerSaving}
+                  >
+                    {partnerSaving ? 'Saving partner...' : editingPartnerId ? 'Update partner' : 'Add partner'}
+                  </button>
+                  {editingPartnerId ? (
+                    <button type="button" className="pacts-secondary-button" onClick={resetPartnerForm}>
+                      Cancel edit
+                    </button>
+                  ) : null}
+                </div>
+              </div>
 
               <label className="pacts-field">
                 <span>Discipline savings target (%)</span>
@@ -663,6 +899,7 @@ export default function Pacts() {
                   const isSettingsLoading = settingsLoading[pact.id]
                   const isSettingsSaving = settingsSaving[pact.id]
                   const pactSettingsError = settingsError[pact.id]
+                  const primaryPartner = partners.find((partner) => partner.is_active) || partners[0]
 
                   return (
                     <div className="pacts-card pacts-card-compact" key={pact.id}>
@@ -682,6 +919,14 @@ export default function Pacts() {
                           {formatAccountabilityType(formState.accountability_type)} ·{' '}
                           {Number(formState.discipline_savings_percentage) || 0}% savings
                         </p>
+                        <p className="pacts-card-mini-summary">
+                          {primaryPartner
+                            ? `${primaryPartner.partner_name || 'Partner'} (${primaryPartner.partner_email})`
+                            : 'No accountability partner set'}
+                        </p>
+                        {formState.accountability_note ? (
+                          <p className="pacts-card-mini-summary">Message: {formState.accountability_note}</p>
+                        ) : null}
                       </div>
 
                       <div className="pacts-card-compact-actions">
@@ -861,6 +1106,44 @@ export default function Pacts() {
                                   disabled={isLocked}
                                 />
                               </label>
+                              <div className="pacts-helper-card">
+                                <h4>Active accountability partners</h4>
+                                {partnersLoading ? (
+                                  <p className="pacts-accountability-loading">Loading partners…</p>
+                                ) : partners.length === 0 ? (
+                                  <p className="pacts-empty">
+                                    No accountability partner yet. Add one in the form panel to send partner alerts.
+                                  </p>
+                                ) : (
+                                  <div className="pacts-partner-list">
+                                    {partners.map((partner) => (
+                                      <div className="pacts-partner-row" key={partner.id}>
+                                        <div>
+                                          <strong>{partner.partner_name || 'Unnamed partner'}</strong>
+                                          <p>{partner.partner_email}</p>
+                                          {partner.relationship_label ? <p>{partner.relationship_label}</p> : null}
+                                        </div>
+                                        <div className="pacts-partner-row-actions">
+                                          <button
+                                            type="button"
+                                            className="pacts-secondary-button"
+                                            onClick={() => beginEditPartner(partner)}
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="pacts-danger-button"
+                                            onClick={() => handleDeletePartner(partner.id)}
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
 
                               <div className="pacts-card-actions">
                                 <button

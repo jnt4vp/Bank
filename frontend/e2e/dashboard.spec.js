@@ -107,3 +107,19 @@ test.describe("Settings", () => {
     await expect(page.getByText(/security/i)).toBeVisible();
   });
 });
+
+test.describe("Pacts accountability UI", () => {
+  test("shows accountability partner helper text and empty state", async ({ page }) => {
+    await loginAndGoToDashboard(page);
+    await page.getByRole("link", { name: /pacts/i }).click();
+    await expect(page).toHaveURL(/pacts/);
+
+    await expect(
+      page.getByText(/partner emails are sent only when a flagged purchase/i)
+    ).toBeVisible();
+
+    await expect(
+      page.getByText(/no accountability partner yet|no accountability partner set/i).first()
+    ).toBeVisible();
+  });
+});

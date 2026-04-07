@@ -24,9 +24,12 @@ export function AuthProvider({ children }) {
         persistSession({ token: nextToken, user: me })
         return me
       } catch (error) {
-        clearStoredSession()
-        setToken(null)
-        setUser(null)
+        const status = error && typeof error.status === 'number' ? error.status : null
+        if (status === 401) {
+          clearStoredSession()
+          setToken(null)
+          setUser(null)
+        }
         throw error
       } finally {
         setLoading(false)

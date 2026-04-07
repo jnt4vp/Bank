@@ -23,14 +23,6 @@ export default function AuthProvider({ children }) {
       }
     }
 
-    if (storedSession.user) {
-      setSession(storedSession)
-      setIsReady(true)
-      return () => {
-        isActive = false
-      }
-    }
-
     async function hydrateSession() {
       try {
         const user = await fetchCurrentUser(storedSession.token)
@@ -58,6 +50,8 @@ export default function AuthProvider({ children }) {
       }
     }
 
+    // Always refresh from API when a token exists so profile fields (e.g. discipline window)
+    // stay current instead of sticking to stale localStorage after deploy.
     hydrateSession()
 
     return () => {
@@ -78,12 +72,21 @@ export default function AuthProvider({ children }) {
     return nextSession
   }
 
-  async function refreshUser() {
-    if (!session?.token) return
-    const user = await fetchCurrentUser(session.token)
-    const nextSession = { token: session.token, user }
-    persistSession(nextSession)
-    setSession(nextSession)
+  async function refreshUser(overrideToken) {
+    const tok = overrideToken ?? session?.token
+    if (!tok) return
+    try {
+      const user = await fetchCurrentUser(tok)
+      const nextSession = { token: tok, user }
+      persistSession(nextSession)
+      setSession(nextSession)
+    } catch (err) {
+      const fromDisk = readStoredSession()
+      if (fromDisk?.token === tok && fromDisk.user) {
+        setSession(fromDisk)
+      }
+      throw err
+    }
   }
 
   function logout() {

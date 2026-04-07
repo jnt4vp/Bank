@@ -10,7 +10,9 @@ from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
 from ..repositories.pacts import get_active_pact_categories
 from ..repositories.transactions import create_transaction
+from ..services.discipline import ensure_discipline_window_after_manual_transaction
 from ..services.classifier import classify_transaction
+from ..services.accountability_alerts import send_accountability_alerts_for_transaction
 
 logger = logging.getLogger("bank.transactions")
 
@@ -73,6 +75,8 @@ async def ingest_user_transaction(
         flagged=classification.flagged,
         flag_reason=classification.flag_reason,
     )
+    await db.flush()
+    await ensure_discipline_window_after_manual_transaction(db, user_id, txn)
 
     try:
         await db.commit()
@@ -108,5 +112,19 @@ async def ingest_user_transaction(
         except Exception:
             await db.rollback()
             raise
+
+    if txn.flagged and not txn.accountability_alert_sent:
+        sent = await send_accountability_alerts_for_transaction(
+            db,
+            notifier=notifier,
+            transaction=txn,
+            user_id=user_id,
+        )
+        if sent:
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+                raise
 
     return txn

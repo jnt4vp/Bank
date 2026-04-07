@@ -1,4 +1,8 @@
-.PHONY: dev dev-no-db test test-backend test-frontend test-e2e
+.PHONY: dev dev-no-db db-migrate test test-backend test-frontend test-e2e
+
+# Apply PostgreSQL schema (run after docker compose up or a fresh DB).
+db-migrate:
+	@./.venv/bin/alembic -c alembic.ini upgrade head
 
 dev:
 	./scripts/dev.sh

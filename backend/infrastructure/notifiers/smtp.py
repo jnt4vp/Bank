@@ -134,6 +134,28 @@ class SmtpNotifier:
             success_message=f"Alert email sent to {recipient} for flagged merchant '{merchant}'",
         )
 
+    async def send_accountability_alert(
+        self,
+        *,
+        to_email: str,
+        subject: str,
+        body: str,
+    ) -> None:
+        settings = get_settings()
+        if not settings.GMAIL_USER or not settings.GMAIL_APP_PASSWORD:
+            logger.warning("Gmail credentials not configured — skipping accountability alert email")
+            return
+
+        await asyncio.to_thread(
+            self._send_message,
+            from_email=settings.GMAIL_USER,
+            to_email=to_email,
+            password=settings.GMAIL_APP_PASSWORD,
+            subject=subject,
+            body=body,
+            success_message=f"Accountability alert sent to {to_email}",
+        )
+
     def _send_message(
         self,
         *,

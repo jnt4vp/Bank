@@ -22,3 +22,12 @@ class NotifierPort(Protocol):
         flag_reason: str | None,
     ) -> None:
         """Send a flagged transaction alert."""
+
+    async def send_accountability_alert(
+        self,
+        *,
+        to_email: str,
+        subject: str,
+        body: str,
+    ) -> None:
+        """Send an accountability partner alert."""

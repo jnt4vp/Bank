@@ -159,15 +159,21 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_reset_password_accepts_legacy_naive_expiry_values(self):
         user = SimpleNamespace(
+            id=uuid4(),
             reset_token="reset-token",
             reset_token_expires=datetime.utcnow() + timedelta(minutes=15),
             password_hash="old-hash",
         )
 
-        with patch("backend.services.auth.get_user_by_reset_token", new=AsyncMock(return_value=user)), patch(
-            "backend.services.auth.hash_password",
-            return_value="new-hash",
-        ) as hash_password_mock:
+        with (
+            patch(
+                "backend.services.auth.get_user_by_reset_token",
+                new=AsyncMock(return_value=user),
+            ),
+            patch("backend.services.auth._check_password_history", new=AsyncMock()),
+            patch("backend.services.auth._save_password_history", new=AsyncMock()),
+            patch("backend.services.auth.hash_password", return_value="new-hash") as hash_password_mock,
+        ):
             await reset_password(object(), "reset-token", "password123")
 
         hash_password_mock.assert_called_once_with("password123")
@@ -181,6 +187,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         classifier = SimpleNamespace(classify_transaction=AsyncMock())
         notifier = SimpleNamespace(send_transaction_alert=AsyncMock())
         db = SimpleNamespace(
+            flush=AsyncMock(),
             commit=AsyncMock(),
             rollback=AsyncMock(),
             refresh=AsyncMock(),
@@ -196,6 +203,8 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             flag_reason=None,
             alert_sent=False,
             alert_sent_at=None,
+            accountability_alert_sent=False,
+            accountability_alert_sent_at=None,
         )
 
         with patch(
@@ -204,7 +213,10 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         ), patch(
             "backend.application.transactions.create_transaction",
             new=AsyncMock(return_value=transaction),
-        ) as create_transaction_mock:
+        ) as create_transaction_mock, patch(
+            "backend.application.transactions.ensure_discipline_window_after_manual_transaction",
+            new=AsyncMock(),
+        ):
             result = await ingest_user_transaction(
                 db,
                 user_id=transaction.user_id,
@@ -227,6 +239,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             flagged=False,
             flag_reason=None,
         )
+        db.flush.assert_awaited_once()
         db.commit.assert_awaited_once()
         db.refresh.assert_awaited_once_with(transaction)
         notifier.send_transaction_alert.assert_not_awaited()
@@ -244,6 +257,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         )
         notifier = SimpleNamespace(send_transaction_alert=AsyncMock())
         db = SimpleNamespace(
+            flush=AsyncMock(),
             commit=AsyncMock(),
             rollback=AsyncMock(),
             refresh=AsyncMock(),
@@ -259,6 +273,8 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             flag_reason="LLM: matched discretionary spending",
             alert_sent=False,
             alert_sent_at=None,
+            accountability_alert_sent=False,
+            accountability_alert_sent_at=None,
         )
 
         with patch(
@@ -267,7 +283,10 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         ), patch(
             "backend.application.transactions.create_transaction",
             new=AsyncMock(return_value=transaction),
-        ) as create_transaction_mock:
+        ) as create_transaction_mock, patch(
+            "backend.application.transactions.ensure_discipline_window_after_manual_transaction",
+            new=AsyncMock(),
+        ):
             result = await ingest_user_transaction(
                 db,
                 user_id=transaction.user_id,
@@ -295,6 +314,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
             flagged=True,
             flag_reason="LLM: matched discretionary spending",
         )
+        db.flush.assert_awaited_once()
         self.assertEqual(db.commit.await_count, 2)
         db.refresh.assert_awaited_once_with(transaction)
         notifier.send_transaction_alert.assert_awaited_once_with(

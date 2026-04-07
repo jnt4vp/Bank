@@ -21,6 +21,8 @@ class TransactionResponse(BaseModel):
     flag_reason: str | None
     alert_sent: bool = False
     alert_sent_at: datetime | None = None
+    accountability_alert_sent: bool = False
+    accountability_alert_sent_at: datetime | None = None
     created_at: datetime
     plaid_transaction_id: str | None = None
     plaid_original_description: str | None = None

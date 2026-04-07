@@ -16,7 +16,7 @@ const BG_VIDEOS = {
 
 function AppShell() {
   const location = useLocation()
-  const { bg, devOverride, setDevOverride, DEV_MODES } = useTheme()
+  const { bg, disciplineTierKey, devOverride, setDevOverride, DEV_MODES } = useTheme()
 
   const noNavbarRoutes = ['/dashboard', '/transactions', '/pacts', '/goals', '/analytics', '/settings']
   const hideNavbar = noNavbarRoutes.some((path) => location.pathname.startsWith(path))
@@ -25,7 +25,11 @@ function AppShell() {
   const sliderIndex = DEV_MODES.indexOf(bg)
 
   return (
-    <div className="app-shell" data-theme={bg}>
+    <div
+      className="app-shell"
+      data-theme={bg}
+      {...(disciplineTierKey ? { 'data-discipline-tier': disciplineTierKey } : {})}
+    >
       <div className="app-shell-bg" aria-hidden="true">
         {videoSrc && (
           <video key={videoSrc} autoPlay loop muted playsInline>
@@ -68,7 +72,12 @@ export default function AppLayout() {
   const { user, token } = useAuth()
 
   return (
-    <ThemeProvider token={token} userId={user?.id}>
+    <ThemeProvider
+      token={token}
+      userId={user?.id}
+      dashboardForceSky={Boolean(user?.dashboard_force_sky)}
+      disciplineScoreStartedAt={user?.discipline_score_started_at}
+    >
       <AppShell />
     </ThemeProvider>
   )

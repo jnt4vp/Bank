@@ -1,4 +1,8 @@
+import logging
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..application.auth import (
@@ -21,7 +25,12 @@ from ..services.auth import (
     InvalidResetTokenError,
     PasswordReusedError,
 )
+from ..services.discipline import (
+    calculate_discipline_score,
+    count_transactions_for_discipline_score,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -75,7 +84,31 @@ async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        total_transactions, flagged_transactions = await count_transactions_for_discipline_score(
+            db,
+            user_id=current_user.id,
+            discipline_score_started_at=current_user.discipline_score_started_at,
+        )
+        score = calculate_discipline_score(
+            total_transactions=total_transactions,
+            flagged_transactions=flagged_transactions,
+        )
+        if current_user.discipline_score != score:
+            current_user.discipline_score = score
+            await db.commit()
+            await db.refresh(current_user)
+    except SQLAlchemyError:
+        await db.rollback()
+        logger.warning(
+            "Could not refresh discipline_score for user %s — returning cached user row",
+            current_user.id,
+            exc_info=True,
+        )
     return current_user
 
 
@@ -85,7 +118,29 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.discipline_savings_percentage = payload.discipline_savings_percentage
+    if payload.discipline_savings_percentage is not None:
+        current_user.discipline_savings_percentage = payload.discipline_savings_percentage
+    if payload.discipline_ui_mode is not None:
+        next_mode = payload.discipline_ui_mode.strip().lower()
+        if next_mode not in {"discipline", "classic"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="discipline_ui_mode must be 'discipline' or 'classic'",
+            )
+        current_user.discipline_ui_mode = next_mode
+    if payload.dashboard_force_sky is not None:
+        current_user.dashboard_force_sky = payload.dashboard_force_sky
+    if payload.reset_discipline_window is True:
+        current_user.discipline_score_started_at = datetime.now(timezone.utc)
+        total_rw, flagged_rw = await count_transactions_for_discipline_score(
+            db,
+            user_id=current_user.id,
+            discipline_score_started_at=current_user.discipline_score_started_at,
+        )
+        current_user.discipline_score = calculate_discipline_score(
+            total_transactions=total_rw,
+            flagged_transactions=flagged_rw,
+        )
     await db.commit()
     await db.refresh(current_user)
     return current_user

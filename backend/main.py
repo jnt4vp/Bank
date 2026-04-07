@@ -1,7 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from .config import get_settings
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +16,7 @@ from .routers.plaid import router as plaid_router
 from .routers.transactions import router as transactions_router
 from .application.auth import ensure_dev_seed_user_exists
 from .routers.accountability_settings import router as accountability_settings_router
+from .routers.accountability_partners import router as accountability_partners_router
 from .routers.pact import router as pact_router
 from .models.plaid_item import PlaidItem
 from .models.pact import Pact
@@ -106,6 +109,38 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+_DB_SETUP_HINT = (
+    "Database is empty or schema is behind the code. From the project root run: "
+    "./.venv/bin/alembic -c alembic.ini upgrade head "
+    "(Postgres must be running, e.g. docker compose up -d)."
+)
+
+
+@app.exception_handler(ProgrammingError)
+async def _programming_error_handler(_request: Request, exc: ProgrammingError):
+    inner = getattr(exc, "orig", None) or exc
+    text = str(inner)
+    if "does not exist" in text or "UndefinedTable" in text:
+        logging.getLogger(__name__).warning("DB schema missing or stale: %s", text)
+        return JSONResponse(status_code=503, content={"detail": _DB_SETUP_HINT})
+    logging.getLogger(__name__).exception("ProgrammingError: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error (database)."},
+    )
+
+
+@app.exception_handler(OperationalError)
+async def _operational_error_handler(_request: Request, exc: OperationalError):
+    logging.getLogger(__name__).warning("DB connection issue: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Cannot reach the database. Start Postgres (docker compose up -d) and check DATABASE_URL."
+        },
+    )
+
+
 # CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
@@ -124,6 +159,11 @@ app.include_router(
     accountability_settings_router,
     prefix="/api/accountability-settings",
     tags=["accountability-settings"],
+)
+app.include_router(
+    accountability_partners_router,
+    prefix="/api/accountability-partners",
+    tags=["accountability-partners"],
 )
 app.include_router(pact_router, tags=["pacts"])
 

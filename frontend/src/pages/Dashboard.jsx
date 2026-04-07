@@ -11,6 +11,8 @@ import {
 import { apiRequest } from '../lib/api'
 import PlaidConnectButton from '../features/plaid/PlaidConnectButton'
 import { getPlaidItems, syncPlaidItem } from '../features/plaid/api'
+import { filterTransactionsForDisciplineWindow } from '../features/pacts/disciplineState'
+import { computePactSavings } from '../features/pacts/savings'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
 
@@ -126,6 +128,10 @@ export default function Dashboard() {
         date: tx.date || null,
         pending: Boolean(tx.pending),
         description: tx.description || '',
+        subtotal: tx.subtotal ?? null,
+        tax_amount: tx.tax_amount ?? null,
+        tax_percent: tx.tax_percent ?? null,
+        total_amount: tx.total_amount ?? null,
       }))
 
       const rawPacts = Array.isArray(pactsData)
@@ -210,43 +216,75 @@ export default function Dashboard() {
     [pacts]
   )
 
+  const disciplineWindowTransactions = useMemo(
+    () => filterTransactionsForDisciplineWindow(transactions, user?.discipline_score_started_at),
+    [transactions, user?.discipline_score_started_at]
+  )
+
   const flaggedTransactions = useMemo(
-    () => transactions.filter((t) => t.flagged),
-    [transactions]
+    () => disciplineWindowTransactions.filter((t) => t.flagged),
+    [disciplineWindowTransactions]
   )
 
   const flaggedCount = flaggedTransactions.length
 
+  const disciplineScore = useMemo(() => {
+    if (
+      user?.discipline_score !== undefined &&
+      user?.discipline_score !== null &&
+      !Number.isNaN(Number(user.discipline_score))
+    ) {
+      return Math.max(0, Math.min(100, Math.round(Number(user.discipline_score))))
+    }
+    if (disciplineWindowTransactions.length === 0) return null
+    return Math.max(
+      0,
+      Math.min(100, Math.round(100 - (flaggedCount / disciplineWindowTransactions.length) * 100))
+    )
+  }, [user?.discipline_score, disciplineWindowTransactions.length, flaggedCount])
+
+  const flaggedSharePercent =
+    disciplineWindowTransactions.length === 0
+      ? null
+      : Math.max(
+          0,
+          Math.min(100, Math.round((flaggedCount / disciplineWindowTransactions.length) * 100))
+        )
+
   const greeting = useMemo(() => {
-    if (bg === 'red') return {
-      title: `We need to talk, ${firstName} 🚨`,
-      subtitle: "Multiple pacts broken — your discipline needs serious attention.",
+    if (bg === 'red') {
+      return {
+        title: `We need to talk, ${firstName} 🚨`,
+        subtitle:
+          'A large share of your tracked spending is hitting pact rules—your discipline score is under heavy pressure.',
+      }
     }
-    if (bg === 'stormy') return {
-      title: `Heads up, ${firstName} 🌧️`,
-      subtitle: "You've slipped on a pact — time to refocus and get back on track.",
+    if (bg === 'stormy') {
+      return {
+        title: `Heads up, ${firstName} 🌧️`,
+        subtitle:
+          'Flagged purchases are a growing slice of activity—tighten focus before the score slips further.',
+      }
     }
-    if (bg === 'sunny') return {
-      title: `Keep it up, ${firstName} ☀️`,
-      subtitle: "You're honoring all your pacts — outstanding discipline.",
+    if (bg === 'sunny') {
+      return {
+        title: `Keep it up, ${firstName} ☀️`,
+        subtitle:
+          'Most of your tracked purchases are staying within your rules—discipline score is in a strong range.',
+      }
     }
-    if (bg === 'money') return {
-      title: `Nice work, ${firstName} 💰`,
-      subtitle: "You're keeping your pact — stay the course and build on it.",
+    if (bg === 'money') {
+      return {
+        title: `Nice work, ${firstName} 💰`,
+        subtitle:
+          "You're in a solid range—keep shaving down the flagged share of spending to push the score higher.",
+      }
     }
     return {
       title: `Welcome back, ${firstName} 👋`,
       subtitle: "You're on track to build better financial habits.",
     }
   }, [bg, firstName])
-
-  const disciplineScore = useMemo(() => {
-    if (transactions.length === 0) return null
-    return Math.max(
-      0,
-      Math.round(100 - (flaggedCount / transactions.length) * 100)
-    )
-  }, [transactions.length, flaggedCount])
 
   const recentTransactions = useMemo(() => transactions.slice(0, 4), [transactions])
 
@@ -277,29 +315,13 @@ export default function Dashboard() {
   }, [transactions, allTimeTotal])
 
   const pactSavings = useMemo(() => {
-    if (flaggedTransactions.length === 0 || activePacts.length === 0) return 0
-
-    let total = 0
-
-    activePacts.forEach((pact) => {
-      const settings = accountabilityByPact[pact.id]
-      if (!settings) return
-
-      const type = settings.accountability_type
-      const percent = Number(settings.discipline_savings_percentage || 0)
-
-      if (!(type === 'savings_percentage' || type === 'both') || percent <= 0) {
-        return
-      }
-
-      flaggedTransactions.forEach((tx) => {
-        if (transactionMatchesPact(tx, pact)) {
-          total += tx.amount * (percent / 100)
-        }
-      })
+    return computePactSavings({
+      flaggedTransactions,
+      activePacts,
+      accountabilityByPact,
+      transactionMatchesPact,
+      debug: Boolean(import.meta.env.DEV),
     })
-
-    return total
   }, [flaggedTransactions, activePacts, accountabilityByPact])
 
   const activeRuleCards = useMemo(() => {
@@ -333,6 +355,14 @@ export default function Dashboard() {
       }
     }
 
+    if (disciplineWindowTransactions.length === 0) {
+      return {
+        headline: 'Discipline window is empty so far.',
+        suggestion:
+          'Your score only looks at purchases from your current discipline start time. Sync new activity to build the window; full history stays visible below.',
+      }
+    }
+
     if (flaggedCount > 0) {
       const topFlaggedCategory = flaggedTransactions.reduce((acc, tx) => {
         const key = normalizeCategory(tx.category)
@@ -354,22 +384,23 @@ export default function Dashboard() {
 
     if (activePacts.length > 0) {
       return {
-        headline: `No flagged purchases across ${transactions.length} tracked transaction${
-          transactions.length === 1 ? '' : 's'
+        headline: `No flagged purchases in your discipline window across ${disciplineWindowTransactions.length} transaction${
+          disciplineWindowTransactions.length === 1 ? '' : 's'
         }.`,
         suggestion: `Your ${activePacts.length} active pact rule${
           activePacts.length === 1 ? '' : 's'
-        } appear to be working well. Stay consistent.`,
+        } look good for new spending. Stay consistent.`,
       }
     }
 
     return {
-      headline: 'No flagged purchases detected.',
+      headline: 'No flagged purchases in your discipline window.',
       suggestion:
-        'You are spending consistently. Add pact rules to turn that momentum into a measurable habit system.',
+        'Add pact rules so new purchases are evaluated against your goals.',
     }
   }, [
     transactions.length,
+    disciplineWindowTransactions.length,
     flaggedCount,
     flaggedTransactions,
     activePacts.length,
@@ -449,7 +480,9 @@ export default function Dashboard() {
             <div>
               <p className="dashboard-card-label">Discipline Score</p>
               <p className="dashboard-score-copy">
-                {flaggedCount} flagged of {transactions.length} total
+                {flaggedSharePercent === null
+                  ? 'No purchases in your discipline window yet — only new activity after your score start time counts.'
+                  : `${flaggedSharePercent}% of window purchases flagged — score is the inverse (higher is better).`}
               </p>
             </div>
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -38,5 +38,13 @@ async def ingest_transaction(
 async def list_transactions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    flagged_only: bool = Query(
+        False,
+        description="When true, return only flagged transactions (optional filter).",
+    ),
 ):
-    return await get_transactions_for_user(db, current_user.id)
+    return await get_transactions_for_user(
+        db,
+        current_user.id,
+        flagged_only=flagged_only,
+    )

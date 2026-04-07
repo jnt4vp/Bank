@@ -1,14 +1,11 @@
 import { apiRequest } from '../../lib/api'
+import { persistSession } from './session'
 
 export async function loginWithPassword({ email, password }) {
   const result = await apiRequest('/api/auth/login', {
     method: 'POST',
     body: { email, password },
   })
-
-  if (result?.access_token) {
-    localStorage.setItem('token', result.access_token)
-  }
 
   return result
 }
@@ -19,8 +16,12 @@ export async function registerAccount({ name, email, password, phone }) {
     body: { name, email, password, phone },
   })
 
-  if (result?.access_token) {
-    localStorage.setItem('token', result.access_token)
+  const token = result?.access_token
+  if (token) {
+    persistSession({
+      token,
+      user: result.user ?? null,
+    })
   }
 
   return result

@@ -38,6 +38,14 @@ function getErrorMessage(response, data) {
   return `Request failed (${response.status})`
 }
 
+function isLikelyNetworkFailure(err) {
+  if (!(err instanceof TypeError)) {
+    return false
+  }
+  const msg = typeof err.message === 'string' ? err.message : ''
+  return /failed to fetch|load failed|networkerror|fetch/i.test(msg)
+}
+
 export async function apiRequest(path, options = {}) {
   const {
     method = 'GET',
@@ -47,16 +55,29 @@ export async function apiRequest(path, options = {}) {
     signal,
   } = options
 
-  const response = await fetch(buildUrl(path), {
-    method,
-    headers: {
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-  })
+  const url = buildUrl(path)
+  let response
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal,
+    })
+  } catch (err) {
+    if (isLikelyNetworkFailure(err)) {
+      const hint =
+        API_BASE_URL === ''
+          ? 'Cannot reach the API server. From the project root run `make dev` (starts Postgres, backend on port 8000, and frontend), or start the backend alone with `uvicorn backend.main:app --reload --port 8000`.'
+          : 'Cannot reach the API server. Check VITE_API_BASE_URL and your network.'
+      throw new ApiError(hint, { status: 0, data: null })
+    }
+    throw err
+  }
 
   const contentType = response.headers.get('content-type') || ''
   const isJson = contentType.includes('application/json')

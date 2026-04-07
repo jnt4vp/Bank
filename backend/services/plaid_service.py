@@ -26,7 +26,7 @@ from plaid.model.sandbox_public_token_create_request_options_transactions import
 from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_sync_request_options import TransactionsSyncRequestOptions
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -34,10 +34,12 @@ from ..models.account import Account
 from ..models.plaid_item import PlaidItem
 from ..models.transaction import Transaction
 from ..models.user import User
+from ..services.discipline import ensure_discipline_window_after_plaid_sync
 from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
 from ..repositories.pacts import get_active_pact_categories
 from ..services.classifier import classify_transaction
+from ..services.accountability_alerts import send_accountability_alerts_for_transaction
 from ..services.token_encryption import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -106,6 +108,16 @@ async def create_link_token(user_id: uuid.UUID) -> str:
     return response.link_token
 
 
+async def _touch_bank_connected_at(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Record first successful Plaid link; idempotent."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or user.bank_connected_at is not None:
+        return
+    user.bank_connected_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
 async def exchange_public_token(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -141,6 +153,8 @@ async def exchange_public_token(
 
     await db.commit()
     await db.refresh(plaid_item)
+
+    await _touch_bank_connected_at(db, user_id)
 
     # Fetch and store accounts for this item
     await _sync_accounts(db, plaid_item)
@@ -241,6 +255,11 @@ async def sync_transactions(
     # Fetch user's active pact categories once for the entire sync cycle
     user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
 
+    prior_txn_count_result = await db.execute(
+        select(func.count(Transaction.id)).where(Transaction.user_id == plaid_item.user_id)
+    )
+    prior_txn_count = int(prior_txn_count_result.scalar_one() or 0)
+
     while has_more:
         request = TransactionsSyncRequest(
             access_token=_get_access_token(plaid_item),
@@ -323,6 +342,20 @@ async def sync_transactions(
                 except Exception:
                     logger.warning("Failed to send alert for plaid txn %s", txn.transaction_id)
 
+            if flagged and notifier and not is_initial_backfill:
+                try:
+                    await send_accountability_alerts_for_transaction(
+                        db,
+                        notifier=notifier,
+                        transaction=new_txn,
+                        user_id=plaid_item.user_id,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Failed to send accountability alerts for plaid txn %s",
+                        txn.transaction_id,
+                    )
+
             added_count += 1
 
         # Process modified transactions (pending → posted, amount changes, etc.)
@@ -374,6 +407,24 @@ async def sync_transactions(
                             "Failed to send alert for modified plaid txn %s",
                             txn.transaction_id,
                         )
+                if (
+                    notifier
+                    and existing_txn.flagged
+                    and not existing_txn.accountability_alert_sent
+                    and not is_initial_backfill
+                ):
+                    try:
+                        await send_accountability_alerts_for_transaction(
+                            db,
+                            notifier=notifier,
+                            transaction=existing_txn,
+                            user_id=plaid_item.user_id,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed accountability alerts for modified plaid txn %s",
+                            txn.transaction_id,
+                        )
                 modified_count += 1
 
         # Process removed transactions
@@ -390,6 +441,12 @@ async def sync_transactions(
 
         has_more = response.has_more
         cursor = response.next_cursor
+
+    await ensure_discipline_window_after_plaid_sync(
+        db,
+        plaid_item.user_id,
+        prior_txn_count=prior_txn_count,
+    )
 
     # Update cursor and last sync time
     plaid_item.transaction_cursor = cursor

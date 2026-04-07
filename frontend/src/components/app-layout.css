@@ -426,6 +426,93 @@
   background: linear-gradient(180deg, rgba(192, 64, 64, 0.45), rgba(192, 64, 64, 0.05));
 }
 
+/* ════════════════════════════════════════
+   SKY + discipline tier (75–100 Strong … 0–24 Broken)
+   When dashboard_force_sky is on, video stays calm; tier shapes dashboard accents.
+   ════════════════════════════════════════ */
+
+/* Strong Discipline — clean, stable, positive */
+.app-shell[data-theme="sky"][data-discipline-tier="strong"] .dashboard-overview-shell {
+  border-color: rgba(91, 163, 105, 0.35);
+  box-shadow: 0 24px 64px rgba(45, 95, 55, 0.07), inset 0 1px 0 rgba(200, 235, 205, 0.35);
+  background: linear-gradient(
+    165deg,
+    rgba(230, 248, 232, 0.42) 0%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+}
+.app-shell[data-theme="sky"][data-discipline-tier="strong"] .dashboard-score-ring {
+  border-color: rgba(91, 163, 105, 0.45);
+  box-shadow: 0 0 0 1px rgba(91, 163, 105, 0.12) inset;
+}
+.app-shell[data-theme="sky"][data-discipline-tier="strong"] .dashboard-score-ring-inner {
+  color: #2d5d38;
+}
+
+/* Stable but Slipping — slight warnings */
+.app-shell[data-theme="sky"][data-discipline-tier="slipping"] .dashboard-overview-shell {
+  border-color: rgba(207, 178, 94, 0.4);
+  box-shadow: 0 24px 60px rgba(140, 110, 30, 0.08), inset 0 1px 0 rgba(255, 228, 160, 0.4);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 245, 220, 0.45) 0%,
+    rgba(255, 255, 255, 0.18) 100%
+  );
+}
+.app-shell[data-theme="sky"][data-discipline-tier="slipping"] .dashboard-score-ring {
+  border-color: rgba(200, 160, 55, 0.5);
+}
+.app-shell[data-theme="sky"][data-discipline-tier="slipping"] .dashboard-score-ring-inner {
+  color: #7a5a12;
+}
+
+/* At Risk — noticeable warnings */
+.app-shell[data-theme="sky"][data-discipline-tier="risk"] .dashboard-overview-shell {
+  border-color: rgba(210, 133, 84, 0.48);
+  box-shadow: 0 26px 70px rgba(160, 85, 40, 0.11), inset 0 1px 0 rgba(255, 200, 170, 0.35);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 224, 200, 0.5) 0%,
+    rgba(120, 135, 160, 0.12) 100%
+  );
+}
+.app-shell[data-theme="sky"][data-discipline-tier="risk"] .dashboard-title {
+  color: #4a3020;
+}
+.app-shell[data-theme="sky"][data-discipline-tier="risk"] .dashboard-subtitle {
+  color: #8a5a38;
+}
+.app-shell[data-theme="sky"][data-discipline-tier="risk"] .dashboard-score-ring {
+  border-color: rgba(200, 100, 55, 0.55);
+}
+.app-shell[data-theme="sky"][data-discipline-tier="risk"] .dashboard-score-ring-inner {
+  color: #a05028;
+}
+
+/* Broken Discipline — strongest failure cues */
+.app-shell[data-theme="sky"][data-discipline-tier="broken"] .dashboard-overview-shell {
+  border-color: rgba(194, 96, 96, 0.55);
+  box-shadow: 0 28px 80px rgba(130, 35, 35, 0.14), inset 0 1px 0 rgba(255, 190, 190, 0.35);
+  background: linear-gradient(
+    165deg,
+    rgba(255, 210, 210, 0.52) 0%,
+    rgba(90, 40, 40, 0.12) 100%
+  );
+}
+.app-shell[data-theme="sky"][data-discipline-tier="broken"] .dashboard-title {
+  color: #5c2222;
+}
+.app-shell[data-theme="sky"][data-discipline-tier="broken"] .dashboard-subtitle {
+  color: #904040;
+}
+.app-shell[data-theme="sky"][data-discipline-tier="broken"] .dashboard-score-ring {
+  border-color: rgba(190, 70, 70, 0.65);
+  box-shadow: 0 0 0 2px rgba(190, 70, 70, 0.12);
+}
+.app-shell[data-theme="sky"][data-discipline-tier="broken"] .dashboard-score-ring-inner {
+  color: #8c2020;
+}
+
 /* ── DEV-only background switcher ── */
 .dev-bg-switcher {
   position: fixed;

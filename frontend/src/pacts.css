@@ -8,6 +8,53 @@
   padding: 2rem 1rem;
 }
 
+.pacts-discipline-banner {
+  margin-top: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  max-width: 560px;
+}
+
+.pacts-discipline-banner strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.pacts-discipline-banner span {
+  display: inline-block;
+  margin-top: 0.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.pacts-discipline-banner p {
+  margin: 0.3rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.pacts-discipline-strong .pacts-discipline-banner {
+  border-color: rgba(91, 163, 105, 0.5);
+  background: rgba(202, 242, 206, 0.33);
+}
+
+.pacts-discipline-slipping .pacts-discipline-banner {
+  border-color: rgba(207, 178, 94, 0.55);
+  background: rgba(255, 238, 194, 0.42);
+}
+
+.pacts-discipline-risk .pacts-discipline-banner {
+  border-color: rgba(210, 133, 84, 0.55);
+  background: rgba(255, 220, 196, 0.42);
+}
+
+.pacts-discipline-broken .pacts-discipline-banner {
+  border-color: rgba(194, 96, 96, 0.55);
+  background: rgba(255, 208, 208, 0.45);
+}
+
 .pacts-intro-box {
   display: flex;
   flex-direction: column;
@@ -42,6 +89,62 @@
 .pacts-intro-btn {
   font-size: 1.05rem;
   padding: 1rem 2rem;
+}
+
+.pacts-intro-discipline-hint {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(230, 221, 210, 0.85);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #3d3640;
+  text-align: left;
+  max-width: 520px;
+}
+
+.pacts-intro-discipline-hint strong {
+  color: #2f2932;
+}
+
+.pacts-intro-discipline-note {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.88rem;
+  color: #6f6871;
+}
+
+.pacts-intro-skip {
+  margin-top: 0.75rem;
+  border: none;
+  background: transparent;
+  color: #6b5a3e;
+  font: inherit;
+  font-size: 0.95rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.35rem;
+}
+
+.pacts-intro-skip:hover {
+  color: #4a3f2a;
+}
+
+.pacts-intro-link {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 0.92rem;
+  color: #6b5a3e;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  align-self: center;
+}
+
+.pacts-intro-link:hover {
+  color: #4a3f2a;
 }
 
 .pacts-grid {
@@ -110,6 +213,69 @@
   margin: 0;
   color: #6c7a4e;
   font-size: 0.92rem;
+}
+
+.pacts-helper-card {
+  border: 1px solid rgba(230, 221, 210, 0.96);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 0.85rem;
+}
+
+.pacts-helper-card h3,
+.pacts-helper-card h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.pacts-helper-card p {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  color: #6f6871;
+}
+
+.pacts-partner-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.pacts-partner-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.pacts-empty {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6f6871;
+}
+
+.pacts-partner-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.pacts-partner-row {
+  border: 1px solid rgba(230, 221, 210, 0.96);
+  border-radius: 0.9rem;
+  padding: 0.6rem 0.7rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.pacts-partner-row p {
+  margin: 0.1rem 0 0;
+}
+
+.pacts-partner-row-actions {
+  display: flex;
+  gap: 0.35rem;
 }
 
 .pacts-list {
@@ -276,5 +442,14 @@
   .pacts-secondary-button,
   .pacts-danger-button {
     flex: 1;
+  }
+
+  .pacts-partner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pacts-partner-actions,
+  .pacts-partner-row-actions {
+    flex-direction: column;
   }
 }

@@ -292,14 +292,26 @@ export default function Register() {
 
         setRegisteredUser(createdUser);
         setAuthToken(nextToken);
-        await refreshUser(nextToken);
+        try {
+          await refreshUser(nextToken);
+        } catch (refreshErr) {
+          console.warn("Could not load full profile after sign-up; using server response.", refreshErr);
+        }
         setCurrentStep(2);
       } catch (err) {
         console.error("REGISTER ERROR:", err);
+        const apiDetail = err?.data?.detail
+        const detailStr =
+          typeof apiDetail === "string"
+            ? apiDetail
+            : Array.isArray(apiDetail)
+              ? apiDetail.map((x) => x?.msg || x?.type || "").filter(Boolean).join(" ")
+              : apiDetail
+                ? String(apiDetail)
+                : null
         setError(
-          err?.detail ||
+          detailStr ||
             err?.message ||
-            JSON.stringify(err) ||
             "Registration failed."
         );
       } finally {
@@ -385,10 +397,18 @@ export default function Register() {
         goNext();
       } catch (err) {
         console.error("PACT CREATE ERROR:", err);
+        const apiDetail = err?.data?.detail;
+        const detailStr =
+          typeof apiDetail === "string"
+            ? apiDetail
+            : Array.isArray(apiDetail)
+              ? apiDetail.map((x) => x?.msg || x?.type || "").filter(Boolean).join(" ")
+              : apiDetail != null
+                ? String(apiDetail)
+                : null;
         setError(
-          err?.detail ||
+          detailStr ||
             err?.message ||
-            JSON.stringify(err) ||
             "Failed to save pact."
         );
       } finally {
@@ -438,13 +458,16 @@ export default function Register() {
       setLoading(true);
 
       try {
-        const accountabilityResponse = await saveAccountabilitySettings({
-          pact_id: createdPact.id,
-          accountability_type: accountabilityType,
-          discipline_savings_percentage:
-            accountabilityType === "email" ? 0 : percentValue,
-          accountability_note: accountabilityNote.trim() || null,
-        });
+        const accountabilityResponse = await saveAccountabilitySettings(
+          {
+            pact_id: createdPact.id,
+            accountability_type: accountabilityType,
+            discipline_savings_percentage:
+              accountabilityType === "email" ? 0 : percentValue,
+            accountability_note: accountabilityNote.trim() || null,
+          },
+          authToken
+        );
 
         console.log(
           "ACCOUNTABILITY SETTINGS RESPONSE:",
@@ -454,10 +477,18 @@ export default function Register() {
         goNext();
       } catch (err) {
         console.error("ACCOUNTABILITY ERROR:", err);
+        const apiDetail = err?.data?.detail;
+        const detailStr =
+          typeof apiDetail === "string"
+            ? apiDetail
+            : Array.isArray(apiDetail)
+              ? apiDetail.map((x) => x?.msg || x?.type || "").filter(Boolean).join(" ")
+              : apiDetail != null
+                ? String(apiDetail)
+                : null;
         setError(
-          err?.detail ||
+          detailStr ||
             err?.message ||
-            JSON.stringify(err) ||
             "Failed to save accountability settings."
         );
       } finally {

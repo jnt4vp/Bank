@@ -208,7 +208,10 @@ if port_is_open 8000; then
 Backend port 8000 is already in use.
 
 Continuing with the existing backend on http://localhost:8000 instead of starting a new one.
-If that is not the server you want, stop the process using port 8000 and rerun `make dev`.
+
+If you see "Internal Server Error" from the API, that process may be an old server or wrong project:
+  • Stop it:  lsof -nP -iTCP:8000 -sTCP:LISTEN   then  kill <PID>
+  • Then run  make dev  again so this repo’s venv serves backend.main:app with fresh migrations.
 EOF
 else
   echo "Starting FastAPI backend on http://localhost:8000"
@@ -224,7 +227,7 @@ else
 Backend startup raced with an existing process already bound to port 8000.
 
 Continuing with the existing backend on http://localhost:8000 instead of failing `make dev`.
-If that is not the server you want, stop the process using port 8000 and rerun `make dev`.
+Stop that process if you need THIS repo’s API (see lsof on port 8000), then rerun `make dev`.
 EOF
     else
       wait "$BACKEND_PID"

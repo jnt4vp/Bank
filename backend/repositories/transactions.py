@@ -30,13 +30,18 @@ async def create_transaction(
     return txn
 
 
-async def get_transactions_for_user(db: AsyncSession, user_id: UUID) -> list[Transaction]:
-    result = await db.execute(
-        select(Transaction)
-        .where(Transaction.user_id == user_id)
-        .order_by(
-            Transaction.date.desc().nullslast(),
-            Transaction.created_at.desc(),
-        )
+async def get_transactions_for_user(
+    db: AsyncSession,
+    user_id: UUID,
+    *,
+    flagged_only: bool = False,
+) -> list[Transaction]:
+    q = select(Transaction).where(Transaction.user_id == user_id)
+    if flagged_only:
+        q = q.where(Transaction.flagged.is_(True))
+    q = q.order_by(
+        Transaction.date.desc().nullslast(),
+        Transaction.created_at.desc(),
     )
+    result = await db.execute(q)
     return list(result.scalars().all())

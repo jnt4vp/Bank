@@ -325,6 +325,16 @@ body {
   margin-top: 6px;
 }
 
+.landing-score-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(60, 45, 20, 0.55);
+  margin-top: 4px;
+  max-width: 11rem;
+  margin-inline: auto;
+  line-height: 1.35;
+}
+
 /* ================================
    STATS
 ================================ */

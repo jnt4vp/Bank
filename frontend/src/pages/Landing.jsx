@@ -7,7 +7,7 @@ export default function Landing() {
     <div className="landing-page">
       <div className="bg">
         <video autoPlay loop muted playsInline>
-          <source src="/money2.mp4" type="video/mp4" />
+          <source src="/normal.MP4" type="video/mp4" />
         </video>
       </div>
 
@@ -67,8 +67,9 @@ export default function Landing() {
                   transform="rotate(140 110 110)"/>
               </svg>
               <div className="landing-score-overlay">
-                <div className="landing-score-value">82<span>%</span></div>
-                <div className="landing-score-label">Discipline Score</div>
+                <div className="landing-score-value">—</div>
+                <div className="landing-score-label">Your live discipline score</div>
+                <div className="landing-score-hint">Shown on your dashboard after sign in</div>
               </div>
             </div>
 

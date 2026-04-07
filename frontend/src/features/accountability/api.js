@@ -1,7 +1,9 @@
 import { apiRequest } from '../../lib/api/client'
+import { readStoredSession } from '../auth/session'
 
-function getToken(token) {
-  return token || localStorage.getItem('token') || undefined
+function getToken(explicitToken) {
+  if (explicitToken) return explicitToken
+  return readStoredSession()?.token || undefined
 }
 
 export async function saveAccountabilitySettings(payload, token) {
