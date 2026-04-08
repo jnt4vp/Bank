@@ -39,9 +39,8 @@ export default function Analytics() {
     [windowed]
   )
 
-  const flaggedCount = windowed.filter(t => t.flagged).length
-
   const disciplineScore = useMemo(() => {
+    const flagged = windowed.filter((t) => t.flagged).length
     if (
       user?.discipline_score !== undefined &&
       user?.discipline_score !== null &&
@@ -49,8 +48,8 @@ export default function Analytics() {
     ) {
       return Math.max(0, Math.min(100, Math.round(Number(user.discipline_score))))
     }
-    return computeDisciplineScoreFromFlagged(windowed.length, flaggedCount)
-  }, [user?.discipline_score, windowed.length, flaggedCount])
+    return computeDisciplineScoreFromFlagged(windowed.length, flagged)
+  }, [user, windowed])
 
   const categoryBreakdown = useMemo(() => {
     const totals = {}

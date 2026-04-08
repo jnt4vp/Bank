@@ -90,21 +90,20 @@ export default function Goals() {
     [goals]
   )
 
+  const hasGoalsToFetch = Boolean(token && goals.length > 0)
+  const displaySpentByGoal = hasGoalsToFetch ? spentByGoal : {}
+  const showAttributionError = hasGoalsToFetch ? attributionError : null
+  const showAttributionMeta = hasGoalsToFetch ? attributionMeta : null
+  const attributionLoadingUi = hasGoalsToFetch && attributionLoading
+
   useEffect(() => {
-    if (!token || goals.length === 0) {
-      setSpentByGoal({})
-      setAttributionMeta(null)
-      setAttributionError(null)
+    if (!hasGoalsToFetch) {
       return undefined
     }
 
     let cancelled = false
     const { period_start, period_end } = localCalendarMonthBounds()
-
-    setAttributionLoading(true)
-    setAttributionError(null)
-
-    fetchGoalSpendingBreakdown(token, {
+    const payload = {
       goals: goals.map((g) => ({
         category: g.category,
         keywords: g.keywords || [],
@@ -113,32 +112,40 @@ export default function Goals() {
       })),
       period_start,
       period_end,
-    })
-      .then((data) => {
+    }
+
+    void (async () => {
+      await Promise.resolve()
+      if (cancelled) return
+      setAttributionLoading(true)
+      setAttributionError(null)
+      try {
+        const data = await fetchGoalSpendingBreakdown(token, payload)
         if (cancelled) return
         setSpentByGoal(data.spent_by_goal || {})
         setAttributionMeta({
           method: data.method,
           llm_assigned_count: data.llm_assigned_count ?? 0,
         })
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return
         setSpentByGoal({})
         setAttributionMeta(null)
         setAttributionError(err.message || 'Could not load goal spending.')
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setAttributionLoading(false)
-      })
+      }
+    })()
 
     return () => {
       cancelled = true
     }
-  }, [token, goalsSignature, navigationKey])
+    // goalsSignature tracks goal rows + signals (replaces listing `goals` in deps)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, goalsSignature, navigationKey, hasGoalsToFetch])
 
   const onTrack = goals.filter(
-    (g) => (spentByGoal[g.category.toLowerCase()] || 0) <= g.limit
+    (g) => (displaySpentByGoal[g.category.toLowerCase()] || 0) <= g.limit
   ).length
 
   function addGoal(e) {
@@ -196,7 +203,7 @@ export default function Goals() {
           <p className="dashboard-subtitle">
             {goals.length === 0
               ? 'Set monthly spending caps and tie each goal to keywords, merchants, or themes.'
-              : txLoading || attributionLoading
+              : txLoading || attributionLoadingUi
                 ? 'Loading your progress...'
                 : `${onTrack} of ${goals.length} goals on track in ${monthLabel}.`}
           </p>
@@ -215,13 +222,13 @@ export default function Goals() {
               <p className="dashboard-empty">No goals yet. Add one to get started.</p>
             ) : (
               <div className="goals-list">
-                {attributionError && (
+                {showAttributionError && (
                   <p className="dashboard-error" role="alert">
-                    {attributionError}
+                    {showAttributionError}
                   </p>
                 )}
                 {goals.map((goal) => {
-                  const spent = spentByGoal[goal.category.toLowerCase()] || 0
+                  const spent = displaySpentByGoal[goal.category.toLowerCase()] || 0
                   const pct = Math.min((spent / goal.limit) * 100, 100)
                   const over = spent > goal.limit
                   const remaining = goal.limit - spent
@@ -340,10 +347,11 @@ export default function Goals() {
               is enabled, we classify into broad themes (entertainment, shopping, …) and map them using
               your theme list, then use a second pass with full context for anything still unclear.
             </p>
-            {attributionMeta?.method === 'rules+llm' && attributionMeta.llm_assigned_count > 0 ? (
+            {showAttributionMeta?.method === 'rules+llm' &&
+            showAttributionMeta.llm_assigned_count > 0 ? (
               <p className="goals-hint">
-                AI matched {attributionMeta.llm_assigned_count} transaction
-                {attributionMeta.llm_assigned_count === 1 ? '' : 's'} this month (Ollama).
+                AI matched {showAttributionMeta.llm_assigned_count} transaction
+                {showAttributionMeta.llm_assigned_count === 1 ? '' : 's'} this month (Ollama).
               </p>
             ) : null}
           </div>
