@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTheme } from '../features/theme/useTheme.js'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import {
   formatTransactionAmount,
   formatTransactionCategory,
   formatTransactionDate,
+  normalizeTransactionsResponse,
   sortTransactionsByActivityDate,
 } from '../features/transactions/formatters'
 import { apiRequest } from '../lib/api'
@@ -52,12 +53,14 @@ function normalizeText(value) {
 }
 
 function accountabilityLabel(type, percent) {
-  if (type === 'email') return 'Acknowledgment email'
-  if (type === 'savings_percentage') {
-    return `${Number(percent || 0)}% redirected to savings`
-  }
-  if (type === 'both') return `Email + ${Number(percent || 0)}% to savings`
-  return 'Accountability enabled'
+  const p = Number(percent || 0)
+  const savingsBit = p > 0 ? ` · ${p}% savings (simulated)` : ''
+  if (type === 'email') return `Alerts: email yourself${savingsBit}`
+  if (type === 'friend') return `Alerts: accountability partner${savingsBit}`
+  if (type === 'none') return `No alerts${savingsBit}`
+  if (type === 'savings_percentage') return `Legacy: savings-only${savingsBit}`
+  if (type === 'both') return `Legacy: email + savings${savingsBit}`
+  return `Alerts${savingsBit}`
 }
 
 function transactionMatchesPact(tx, pact) {
@@ -81,6 +84,7 @@ function transactionMatchesPact(tx, pact) {
 
 export default function Dashboard() {
   const { user, token } = useAuth()
+  const location = useLocation()
   const { bg } = useTheme()
   const firstName = user?.name?.split(' ')[0] || 'there'
 
@@ -88,33 +92,36 @@ export default function Dashboard() {
   const [pacts, setPacts] = useState([])
   const [plaidItems, setPlaidItems] = useState([])
   const [accountabilityByPact, setAccountabilityByPact] = useState({})
+  const [simulatedSavings, setSimulatedSavings] = useState({
+    enabled: false,
+    totalRecorded: 0,
+    transfers: [],
+  })
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
 
-  const loadDashboardData = useCallback(async () => {
+  const loadDashboardData = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
     if (!token || !user?.id) {
       setLoading(false)
       return
     }
 
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      }
       setError(null)
 
-      const [transactionsData, pactsData, plaidItemsData] = await Promise.all([
+      const [transactionsData, pactsData, plaidItemsData, savingsPayload] = await Promise.all([
         apiRequest('/api/transactions/', { token }),
         apiRequest(`/api/pacts/user/${user.id}`, { token }),
         getPlaidItems(token),
+        apiRequest('/api/simulated-savings-transfers/', { token }).catch(() => null),
       ])
 
-      const rawTransactions = Array.isArray(transactionsData)
-        ? transactionsData
-        : Array.isArray(transactionsData?.results)
-          ? transactionsData.results
-          : Array.isArray(transactionsData?.transactions)
-            ? transactionsData.transactions
-            : []
+      const rawTransactions = normalizeTransactionsResponse(transactionsData)
 
       const normalizedTransactions = rawTransactions.map((tx) => ({
         id: tx.id,
@@ -173,6 +180,12 @@ export default function Dashboard() {
 
       const accountabilityMap = Object.fromEntries(accountabilityPairs)
 
+      setSimulatedSavings({
+        enabled: Boolean(savingsPayload?.simulated_transfers_enabled),
+        totalRecorded: Number(savingsPayload?.total_recorded || 0),
+        transfers: Array.isArray(savingsPayload?.transfers) ? savingsPayload.transfers : [],
+      })
+
       setTransactions(sortTransactionsByActivityDate(normalizedTransactions))
       setPacts(normalizedPacts)
       setPlaidItems(Array.isArray(plaidItemsData) ? plaidItemsData : [])
@@ -180,13 +193,32 @@ export default function Dashboard() {
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }, [token, user?.id])
 
   useEffect(() => {
+    if (location.pathname !== '/dashboard') {
+      return
+    }
     loadDashboardData()
-  }, [loadDashboardData])
+  }, [location.pathname, location.key, loadDashboardData])
+
+  useEffect(() => {
+    if (location.pathname !== '/dashboard') {
+      return undefined
+    }
+    function refetchWhenVisible() {
+      if (document.visibilityState !== 'visible') {
+        return
+      }
+      loadDashboardData({ silent: true })
+    }
+    document.addEventListener('visibilitychange', refetchWhenVisible)
+    return () => document.removeEventListener('visibilitychange', refetchWhenVisible)
+  }, [location.pathname, loadDashboardData])
 
   const handlePlaidConnected = useCallback(async () => {
     await loadDashboardData()
@@ -224,6 +256,12 @@ export default function Dashboard() {
   const flaggedTransactions = useMemo(
     () => disciplineWindowTransactions.filter((t) => t.flagged),
     [disciplineWindowTransactions]
+  )
+
+  /** All-time flagged purchases — discipline window only affects score/insight, not $ pact savings. */
+  const allTimeFlaggedTransactions = useMemo(
+    () => transactions.filter((t) => t.flagged),
+    [transactions]
   )
 
   const flaggedCount = flaggedTransactions.length
@@ -286,19 +324,43 @@ export default function Dashboard() {
     }
   }, [bg, firstName])
 
-  const recentTransactions = useMemo(() => transactions.slice(0, 4), [transactions])
+  /** Simulated savings rows keyed by source transaction (for sub-lines under purchases). */
+  const savingsTransfersBySourceTxId = useMemo(() => {
+    const map = {}
+    for (const tr of simulatedSavings.transfers) {
+      const sid = tr.source_transaction_id
+      if (sid == null) continue
+      const key = String(sid)
+      if (!map[key]) map[key] = []
+      map[key].push(tr)
+    }
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        const tb = new Date(b.created_at).getTime()
+        const ta = new Date(a.created_at).getTime()
+        return tb - ta
+      })
+    }
+    return map
+  }, [simulatedSavings.transfers])
 
-  const bankConnected = plaidItems.length > 0
-
-  const allTimeTotal = useMemo(
-    () => transactions.reduce((sum, tx) => sum + tx.amount, 0),
+  // Purchases only (do not merge savings into the same sort/slice — transfers were crowding out normal txns).
+  const recentPurchases = useMemo(
+    () => sortTransactionsByActivityDate(transactions).slice(0, 6),
     [transactions]
   )
 
-  const categoryBreakdown = useMemo(() => {
-    if (transactions.length === 0) return []
+  const bankConnected = plaidItems.length > 0
 
-    const totals = transactions.reduce((acc, tx) => {
+  const windowSpendingTotal = useMemo(
+    () => disciplineWindowTransactions.reduce((sum, tx) => sum + tx.amount, 0),
+    [disciplineWindowTransactions]
+  )
+
+  const categoryBreakdown = useMemo(() => {
+    if (disciplineWindowTransactions.length === 0) return []
+
+    const totals = disciplineWindowTransactions.reduce((acc, tx) => {
       const category = normalizeCategory(tx.category)
       acc[category] = (acc[category] || 0) + tx.amount
       return acc
@@ -308,21 +370,27 @@ export default function Dashboard() {
       .map(([category, amount]) => ({
         category,
         amount,
-        percent: allTimeTotal > 0 ? Math.round((amount / allTimeTotal) * 100) : 0,
+        percent: windowSpendingTotal > 0 ? Math.round((amount / windowSpendingTotal) * 100) : 0,
       }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 4)
-  }, [transactions, allTimeTotal])
+  }, [disciplineWindowTransactions, windowSpendingTotal])
 
-  const pactSavings = useMemo(() => {
+  const pactSavingsFromRules = useMemo(() => {
     return computePactSavings({
-      flaggedTransactions,
+      flaggedTransactions: allTimeFlaggedTransactions,
       activePacts,
       accountabilityByPact,
       transactionMatchesPact,
       debug: Boolean(import.meta.env.DEV),
     })
-  }, [flaggedTransactions, activePacts, accountabilityByPact])
+  }, [allTimeFlaggedTransactions, activePacts, accountabilityByPact])
+
+  // Simulated ledger can lag (e.g. settings saved after txn, or migration not run). Never show $0
+  // when rules say savings apply — max() keeps the card aligned with “broke pact → $ to savings”.
+  const pactSavingsDisplay = simulatedSavings.enabled
+    ? Math.max(simulatedSavings.totalRecorded, pactSavingsFromRules)
+    : pactSavingsFromRules
 
   const activeRuleCards = useMemo(() => {
     return activePacts.map((pact) => {
@@ -339,7 +407,7 @@ export default function Dashboard() {
               settings.discipline_savings_percentage
             )
           : 'No accountability settings saved',
-        note: settings?.accountability_note || '',
+        note: '',
         enabled: String(pact.status).toLowerCase() === 'active',
       }
     })
@@ -419,7 +487,9 @@ export default function Dashboard() {
 
         <div className="dashboard-hero-actions">
           <div className="dashboard-pill">
-            {loading ? 'Loading activity...' : `${transactions.length} Transactions`}
+            {loading
+              ? 'Loading activity...'
+              : `${disciplineWindowTransactions.length} in score window`}
           </div>
 
           {bankConnected ? (
@@ -465,15 +535,18 @@ export default function Dashboard() {
               </div>
 
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Transactions</p>
-                <p className="dashboard-stat">{transactions.length}</p>
+                <p className="dashboard-card-label">Transactions (window)</p>
+                <p className="dashboard-stat">{disciplineWindowTransactions.length}</p>
               </div>
             </>
           )}
 
           <div className="dashboard-card">
             <p className="dashboard-card-label">Pact Savings</p>
-            <p className="dashboard-stat">{formatCurrency(pactSavings)}</p>
+            <p className="dashboard-stat">{formatCurrency(pactSavingsDisplay)}</p>
+            {simulatedSavings.enabled ? (
+              <p className="dashboard-card-footnote">Simulated transfers (demo — not a real bank move)</p>
+            ) : null}
           </div>
 
           <div className="dashboard-card dashboard-score-card dashboard-card-hero-accent">
@@ -497,20 +570,22 @@ export default function Dashboard() {
         <section className="dashboard-content-grid">
           <div className="dashboard-card dashboard-panel dashboard-panel-hero">
             <div className="dashboard-panel-header">
-              <h2>All Time Spending</h2>
-              <span>{formatCurrency(allTimeTotal)} total</span>
+              <h2>Discipline window spending</h2>
+              <span>{formatCurrency(windowSpendingTotal)} total</span>
             </div>
 
             <div className="dashboard-analytics-card">
               <div className="dashboard-donut-wrap">
                 <div className="dashboard-donut">
-                  <div className="dashboard-donut-center">{formatCurrency(allTimeTotal)}</div>
+                  <div className="dashboard-donut-center">{formatCurrency(windowSpendingTotal)}</div>
                 </div>
               </div>
 
               <div className="dashboard-category-list">
                 {categoryBreakdown.length === 0 ? (
-                  <p className="dashboard-empty">No transactions available yet.</p>
+                  <p className="dashboard-empty">
+                    No purchases in your discipline window yet — same window as your score and analytics.
+                  </p>
                 ) : (
                   categoryBreakdown.map((item) => (
                     <div key={item.category}>
@@ -575,62 +650,89 @@ export default function Dashboard() {
             {loading && <p className="dashboard-empty">Loading transactions...</p>}
             {error && <p className="dashboard-error">{error}</p>}
 
-            {!loading && !error && recentTransactions.length === 0 && (
+            {!loading && !error && recentPurchases.length === 0 && (
               <p className="dashboard-empty">
                 {bankConnected
                   ? 'Your bank is connected, but no transactions have synced yet. Try Sync Bank.'
-                  : 'No transactions yet. Connect your bank account to start syncing activity.'}
+                  : 'No activity yet. Add a purchase or connect your bank to populate this feed.'}
               </p>
             )}
 
-            {!loading && !error && recentTransactions.length > 0 && (
+            {!loading && !error && recentPurchases.length > 0 && (
               <div className="dashboard-activity-list">
-                {recentTransactions.map((tx) => (
-                  <div className="dashboard-activity-row" key={tx.id}>
-                    <div className="dashboard-activity-main">
-                      <div className="dashboard-activity-merchant">{tx.merchant}</div>
-                      <div className="dashboard-activity-meta">
-                        {formatTransactionDate(tx)} ·{' '}
-                        {formatTransactionCategory(tx.category)}
+                {recentPurchases.map((tx) => {
+                  const sid = String(tx.id)
+                  const savingsForTx = savingsTransfersBySourceTxId[sid] || []
+                  return (
+                    <div className="dashboard-activity-group" key={sid}>
+                      <div className="dashboard-activity-row">
+                        <div className="dashboard-activity-main">
+                          <div className="dashboard-activity-merchant">{tx.merchant}</div>
+                          <div className="dashboard-activity-meta">
+                            {formatTransactionDate(tx)} ·{' '}
+                            {formatTransactionCategory(tx.category)}
+                          </div>
+
+                          {tx.flagged && (
+                            <div className="dashboard-activity-flag">
+                              ⚠ {tx.flag_reason || 'Flagged purchase'}
+                            </div>
+                          )}
+
+                          {!tx.flagged && tx.description && (
+                            <div className="dashboard-activity-meta">{tx.description}</div>
+                          )}
+                        </div>
+
+                        <div
+                          className={`dashboard-activity-amount ${
+                            tx.flagged ? 'is-flagged' : ''
+                          }`}
+                        >
+                          {formatTransactionAmount(tx.amount)}
+                        </div>
                       </div>
 
-                      {tx.flagged && (
-                        <div className="dashboard-activity-flag">
-                          ⚠ {tx.flag_reason || 'Flagged purchase'}
+                      {savingsForTx.map((tr) => (
+                        <div
+                          className="dashboard-activity-row dashboard-activity-simulated-transfer dashboard-activity-savings-followup"
+                          key={`sim-${tr.id}`}
+                        >
+                          <div className="dashboard-activity-main">
+                            <div className="dashboard-activity-merchant">
+                              {formatCurrency(tr.amount)} moved to savings (simulated)
+                            </div>
+                            <div className="dashboard-activity-meta">
+                              From this purchase · your discipline savings % applied (simulated, not a bank
+                              transfer)
+                            </div>
+                          </div>
+                          <div className="dashboard-activity-amount is-simulated-savings">
+                            {formatCurrency(tr.amount)}
+                          </div>
                         </div>
-                      )}
-
-                      {!tx.flagged && tx.description && (
-                        <div className="dashboard-activity-meta">{tx.description}</div>
-                      )}
+                      ))}
                     </div>
-
-                    <div
-                      className={`dashboard-activity-amount ${
-                        tx.flagged ? 'is-flagged' : ''
-                      }`}
-                    >
-                      {formatTransactionAmount(tx.amount)}
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
 
-          <div className="dashboard-card dashboard-panel">
+          <div className="dashboard-card dashboard-panel dashboard-panel-insight">
             <div className="dashboard-panel-header">
               <h2>Insight</h2>
             </div>
 
             <div className="dashboard-insight-card">
-              <p className="dashboard-insight-copy">
+              <p className="dashboard-insight-headline">
                 <strong>{insightText.headline}</strong>
               </p>
-              <p className="dashboard-insight-suggestion">Suggestion:</p>
-              <p className="dashboard-insight-copy">{insightText.suggestion}</p>
-
-              <div className="dashboard-insight-chart">
+              <div className="dashboard-insight-suggestion-block">
+                <p className="dashboard-insight-suggestion-label">Suggestion</p>
+                <p className="dashboard-insight-suggestion-body">{insightText.suggestion}</p>
+              </div>
+              <div className="dashboard-insight-chart" aria-hidden="true">
                 <div className="dashboard-insight-line" />
               </div>
             </div>

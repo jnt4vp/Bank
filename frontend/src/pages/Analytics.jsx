@@ -1,5 +1,10 @@
 import { useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
+import {
+  computeDisciplineScoreFromFlagged,
+  filterTransactionsForDisciplineWindow,
+} from '../features/pacts/disciplineState'
 import { useTransactions } from '../features/transactions/useTransactions'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
@@ -15,29 +20,41 @@ function normalizeCategory(cat) {
 }
 
 export default function Analytics() {
-  const { token } = useAuth()
-  const { transactions, loading } = useTransactions(token)
+  const { token, user } = useAuth()
+  const { key: navigationKey } = useLocation()
+  const { transactions, loading } = useTransactions(token, navigationKey)
+
+  const windowed = useMemo(
+    () => filterTransactionsForDisciplineWindow(transactions, user?.discipline_score_started_at),
+    [transactions, user?.discipline_score_started_at]
+  )
 
   const totalSpent = useMemo(
-    () => transactions.reduce((s, t) => s + t.amount, 0),
-    [transactions]
+    () => windowed.reduce((s, t) => s + t.amount, 0),
+    [windowed]
   )
 
   const flaggedAmount = useMemo(
-    () => transactions.filter(t => t.flagged).reduce((s, t) => s + t.amount, 0),
-    [transactions]
+    () => windowed.filter(t => t.flagged).reduce((s, t) => s + t.amount, 0),
+    [windowed]
   )
 
-  const flaggedCount = transactions.filter(t => t.flagged).length
+  const flaggedCount = windowed.filter(t => t.flagged).length
 
   const disciplineScore = useMemo(() => {
-    if (!transactions.length) return null
-    return Math.round(100 - (flaggedCount / transactions.length) * 100)
-  }, [transactions, flaggedCount])
+    if (
+      user?.discipline_score !== undefined &&
+      user?.discipline_score !== null &&
+      !Number.isNaN(Number(user.discipline_score))
+    ) {
+      return Math.max(0, Math.min(100, Math.round(Number(user.discipline_score))))
+    }
+    return computeDisciplineScoreFromFlagged(windowed.length, flaggedCount)
+  }, [user?.discipline_score, windowed.length, flaggedCount])
 
   const categoryBreakdown = useMemo(() => {
     const totals = {}
-    transactions.forEach(t => {
+    windowed.forEach(t => {
       const cat = normalizeCategory(t.category)
       totals[cat] = (totals[cat] || 0) + t.amount
     })
@@ -46,11 +63,11 @@ export default function Analytics() {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 7)
       .map(([category, amount]) => ({ category, amount, barPercent: (amount / max) * 100 }))
-  }, [transactions])
+  }, [windowed])
 
   const topMerchants = useMemo(() => {
     const totals = {}
-    transactions.forEach(t => {
+    windowed.forEach(t => {
       const m = t.merchant || t.description || 'Unknown'
       totals[m] = (totals[m] || 0) + t.amount
     })
@@ -58,11 +75,11 @@ export default function Analytics() {
       .sort(([, a], [, b]) => b - a)
       .slice(0, 6)
       .map(([merchant, amount]) => ({ merchant, amount }))
-  }, [transactions])
+  }, [windowed])
 
   const monthlySpending = useMemo(() => {
     const months = {}
-    transactions.forEach(t => {
+    windowed.forEach(t => {
       const d = new Date(t.date || t.created_at)
       if (isNaN(d)) return
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -75,9 +92,9 @@ export default function Analytics() {
       const label = new Date(Number(year), Number(month) - 1).toLocaleString('default', { month: 'short' })
       return { label, amount, barPercent: (amount / max) * 100 }
     })
-  }, [transactions])
+  }, [windowed])
 
-  const empty = !loading && transactions.length === 0
+  const empty = !loading && windowed.length === 0
 
   return (
     <div className="dashboard-shell">
@@ -86,7 +103,9 @@ export default function Analytics() {
       <section className="dashboard-hero">
         <div className="dashboard-hero-copy">
           <h1 className="dashboard-title">Analytics</h1>
-          <p className="dashboard-subtitle">Where your money went, and whether it should have.</p>
+          <p className="dashboard-subtitle">
+            Spending and discipline since your score window started — same window as your discipline score.
+          </p>
         </div>
       </section>
 
@@ -103,7 +122,7 @@ export default function Analytics() {
           </div>
           <div className="dashboard-card">
             <p className="dashboard-card-label">Transactions</p>
-            <p className="dashboard-stat">{loading ? '—' : transactions.length}</p>
+            <p className="dashboard-stat">{loading ? '—' : windowed.length}</p>
           </div>
           <div className="dashboard-card dashboard-card-hero-accent">
             <p className="dashboard-card-label">Discipline Score</p>
@@ -115,7 +134,10 @@ export default function Analytics() {
 
         {empty ? (
           <div className="dashboard-card analytics-empty">
-            <p>Connect your bank to see your analytics.</p>
+            <p>
+              No transactions in your discipline window yet. Link a bank and sync, or wait for new activity
+              after your window starts.
+            </p>
           </div>
         ) : (
           <section className="dashboard-content-grid">

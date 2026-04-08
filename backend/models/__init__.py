@@ -8,5 +8,18 @@ from .transaction import Transaction
 from .user import User
 from .accountability_settings import AccountabilitySettings
 from .pact import Pact
+from .simulated_savings_transfer import SimulatedSavingsTransfer
 
-__all__ = ["Account", "AccountabilityAlertSettings", "AccountabilityPartner", "AccountabilitySettings", "Counter", "Pact", "PasswordHistory", "PlaidItem", "Transaction", "User"]
+__all__ = [
+    "Account",
+    "AccountabilityAlertSettings",
+    "AccountabilityPartner",
+    "AccountabilitySettings",
+    "Counter",
+    "Pact",
+    "PasswordHistory",
+    "PlaidItem",
+    "SimulatedSavingsTransfer",
+    "Transaction",
+    "User",
+]

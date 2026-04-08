@@ -337,6 +337,13 @@
   display: grid;
   grid-template-columns: 1.05fr 1fr;
   gap: 1rem;
+  align-items: start;
+}
+
+/* Insight sits beside Recent Activity; without this the row stretches and the card looks broken. */
+.dashboard-content-grid > .dashboard-panel-insight.dashboard-panel {
+  align-self: start;
+  min-height: auto;
 }
 
 .dashboard-card {
@@ -383,6 +390,13 @@
   font-size: clamp(1.8rem, 2.1vw, 2.4rem);
   font-weight: 700;
   color: #2c2730;
+}
+
+.dashboard-card-footnote {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #6a636d;
 }
 
 .dashboard-connect-title {
@@ -678,6 +692,12 @@
   gap: 0.7rem;
 }
 
+.dashboard-activity-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .dashboard-activity-row {
   display: flex;
   align-items: flex-start;
@@ -721,40 +741,76 @@
   color: #b04d4d;
 }
 
+.dashboard-activity-simulated-transfer {
+  background: rgba(232, 248, 238, 0.55);
+  border-color: rgba(120, 180, 140, 0.35);
+}
+
+.dashboard-activity-savings-followup {
+  margin-left: 0.5rem;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  border-radius: 0.95rem;
+}
+
+.dashboard-activity-amount.is-simulated-savings {
+  color: #2d7a4e;
+}
+
 .dashboard-insight-card {
-  height: calc(100% - 2rem);
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: 0.85rem;
 }
 
-.dashboard-insight-copy {
+.dashboard-insight-headline {
   margin: 0;
-  color: #3f3842;
+  font-size: 0.98rem;
   line-height: 1.5;
+  color: #3f3842;
 }
 
-.dashboard-insight-suggestion {
-  margin: 0.8rem 0 0.2rem;
-  color: var(--pb-accent-color);
+.dashboard-insight-suggestion-block {
+  padding: 0.8rem 0.95rem;
+  border-radius: 1.05rem;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.dashboard-insight-suggestion-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pb-accent-color);
+}
+
+.dashboard-insight-suggestion-body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #4a424d;
 }
 
 .dashboard-insight-chart {
-  margin-top: 0.9rem;
-  height: 100px;
-  border-bottom: 1px dashed rgba(206, 193, 177, 0.9);
-  border-right: 1px dashed rgba(206, 193, 177, 0.9);
+  flex-shrink: 0;
+  height: 64px;
+  margin-top: 0.15rem;
+  border-radius: 0.85rem;
+  border: 1px dashed rgba(206, 193, 177, 0.75);
+  background: rgba(255, 255, 255, 0.22);
   position: relative;
   overflow: hidden;
 }
 
 .dashboard-insight-line {
   position: absolute;
-  inset: 22px 8px 0 8px;
-  background: linear-gradient(180deg, rgba(230, 200, 145, 0.45), rgba(230, 200, 145, 0.08));
+  inset: 10px 10px 6px 10px;
+  background: linear-gradient(180deg, rgba(230, 200, 145, 0.5), rgba(230, 200, 145, 0.06));
   clip-path: polygon(0% 100%, 14% 94%, 28% 78%, 42% 72%, 56% 76%, 70% 66%, 82% 20%, 100% 48%, 100% 100%);
-  border-radius: 1rem 1rem 0 0;
+  border-radius: 0.65rem 0.65rem 0 0;
 }
 
 .dashboard-empty,
@@ -831,7 +887,7 @@
   }
 
   .dashboard-title {
-    font-size: 2.4px;
+    font-size: 2.4rem;
   }
 
   .dashboard-topbar,

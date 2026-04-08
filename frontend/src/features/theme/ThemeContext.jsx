@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiRequest } from '../../lib/api'
+import { normalizeTransactionsResponse } from '../transactions/formatters'
 import {
   computeDisciplineScoreFromFlagged,
   filterTransactionsForDisciplineWindow,
@@ -25,11 +26,7 @@ function useDisciplineTheme(token, userId, dashboardForceSky, disciplineScoreSta
 
     apiRequest('/api/transactions/', { token })
       .then((txData) => {
-        const transactions = Array.isArray(txData)
-          ? txData
-          : Array.isArray(txData?.results)
-            ? txData.results
-            : []
+        const transactions = normalizeTransactionsResponse(txData)
 
         const windowed = filterTransactionsForDisciplineWindow(
           transactions,

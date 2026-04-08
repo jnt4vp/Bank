@@ -3,6 +3,28 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: 'USD',
 })
 
+/**
+ * Parse GET /api/transactions/ JSON into a plain array (same shape Dashboard, Transactions, theme use).
+ */
+export function normalizeTransactionsResponse(data) {
+  if (Array.isArray(data)) {
+    return data
+  }
+  if (Array.isArray(data?.results)) {
+    return data.results
+  }
+  if (Array.isArray(data?.transactions)) {
+    return data.transactions
+  }
+  if (Array.isArray(data?.items)) {
+    return data.items
+  }
+  if (Array.isArray(data?.data)) {
+    return data.data
+  }
+  return []
+}
+
 export function formatTransactionAmount(amount) {
   const numericAmount = Number(amount)
 
@@ -51,13 +73,20 @@ function parseSortableDate(value) {
   return parsedDate.getTime()
 }
 
+/** Bank posting date when present; otherwise ingest time (manual / simulated rows often have no `date`). */
+export function activityTimelineSortKeyMs(tx) {
+  const postDate = parseSortableDate(tx?.date)
+  if (postDate !== Number.NEGATIVE_INFINITY) {
+    return postDate
+  }
+  return parseSortableDate(tx?.created_at)
+}
+
 export function sortTransactionsByActivityDate(transactions) {
   return [...transactions].sort((left, right) => {
-    const activityDateDelta =
-      parseSortableDate(right?.date) - parseSortableDate(left?.date)
-
-    if (activityDateDelta !== 0) {
-      return activityDateDelta
+    const keyDelta = activityTimelineSortKeyMs(right) - activityTimelineSortKeyMs(left)
+    if (keyDelta !== 0) {
+      return keyDelta
     }
 
     const createdAtDelta =

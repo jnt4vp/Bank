@@ -13,6 +13,9 @@ from ..repositories.transactions import create_transaction
 from ..services.discipline import ensure_discipline_window_after_manual_transaction
 from ..services.classifier import classify_transaction
 from ..services.accountability_alerts import send_accountability_alerts_for_transaction
+from ..services.simulated_savings_transfers import (
+    record_simulated_savings_transfers_for_transaction,
+)
 
 logger = logging.getLogger("bank.transactions")
 
@@ -85,6 +88,14 @@ async def ingest_user_transaction(
         raise
 
     await db.refresh(txn)
+
+    # Demo: ledger savings moves without a real linked account (see SimulatedSavingsTransfer).
+    await record_simulated_savings_transfers_for_transaction(
+        db,
+        user_id=user_id,
+        transaction=txn,
+        skip_for_initial_plaid_backfill=False,
+    )
 
     logger.info(
         "ADDED TRANSACTION  |  merchant=%s  |  description=%s  |  amount=$%.2f  |  flagged=%s  |  category=%s  |  reason=%s  |  id=%s",

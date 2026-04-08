@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     PLAID_TOKEN_KEY: str = ""  # encryption key for access tokens; falls back to JWT_SECRET
 
     FRONTEND_URL: str = "http://localhost:5173"
+    # Demo: record "savings transfers" in DB without Plaid/ACH (see SimulatedSavingsTransfer).
+    # Set false when wiring a real money-movement provider.
+    SIMULATED_TRANSFERS_ENABLED: bool = True
+
     DEV_SEED_EXAMPLE_USER: bool = True
     DEV_SEED_EXAMPLE_NAME: str = "Test User"
     DEV_SEED_EXAMPLE_EMAIL: str = "test@example.com"

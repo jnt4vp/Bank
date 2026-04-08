@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../features/auth/context'
+import { filterTransactionsForDisciplineWindow } from '../features/pacts/disciplineState'
 import {
   formatTransactionAmount,
   formatTransactionCategory,
@@ -39,8 +40,9 @@ function matchesQuery(transaction, query) {
 }
 
 export default function Transactions() {
-  const { token } = useAuth()
-  const { transactions, loading, error } = useTransactions(token)
+  const { token, user } = useAuth()
+  const { key: navigationKey } = useLocation()
+  const { transactions, loading, error } = useTransactions(token, navigationKey)
 
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -83,41 +85,48 @@ export default function Transactions() {
     )
   }, [categoryFilter, query, statusFilter, transactions])
 
-  const flaggedCount = useMemo(
-    () => transactions.filter((transaction) => transaction.flagged).length,
-    [transactions]
+  const windowed = useMemo(
+    () => filterTransactionsForDisciplineWindow(transactions, user?.discipline_score_started_at),
+    [transactions, user?.discipline_score_started_at]
   )
 
-  const latestActivity = filteredTransactions[0]
-    ? formatTransactionDate(filteredTransactions[0])
-    : 'No activity yet'
+  const windowTotalSpent = useMemo(
+    () => windowed.reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+    [windowed]
+  )
+
+  const windowFlaggedCount = useMemo(
+    () => windowed.filter((transaction) => transaction.flagged).length,
+    [windowed]
+  )
 
   return (
     <div className="dashboard-shell transactions-page">
       <DashboardTopbar navAriaLabel="Primary" />
 
-      <section className="transactions-hero">
-        <div className="transactions-hero-copy">
+      <section className="dashboard-hero transactions-hero">
+        <div className="dashboard-hero-copy transactions-hero-copy">
           <h1 className="dashboard-title transactions-title">Transactions</h1>
           <p className="dashboard-subtitle transactions-subtitle">
-            Review every synced purchase, deposit, and flagged event in one place.
+            The list below is your full synced history. Summary stats match your discipline score window
+            (same as Dashboard and Analytics).
           </p>
         </div>
 
         <div className="transactions-stat-grid">
           <article className="transactions-stat-card">
-            <span className="transactions-stat-label">Tracked</span>
-            <strong className="transactions-stat-value">{transactions.length}</strong>
+            <span className="transactions-stat-label">In score window</span>
+            <strong className="transactions-stat-value">{windowed.length}</strong>
           </article>
           <article className="transactions-stat-card">
-            <span className="transactions-stat-label">Flagged</span>
-            <strong className="transactions-stat-value">{flaggedCount}</strong>
-          </article>
-          <article className="transactions-stat-card">
-            <span className="transactions-stat-label">Latest activity</span>
-            <strong className="transactions-stat-value transactions-stat-value-small">
-              {latestActivity}
+            <span className="transactions-stat-label">Spent (window)</span>
+            <strong className="transactions-stat-value">
+              {formatTransactionAmount(windowTotalSpent)}
             </strong>
+          </article>
+          <article className="transactions-stat-card">
+            <span className="transactions-stat-label">Flagged (window)</span>
+            <strong className="transactions-stat-value">{windowFlaggedCount}</strong>
           </article>
         </div>
       </section>

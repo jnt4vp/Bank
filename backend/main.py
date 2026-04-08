@@ -17,7 +17,9 @@ from .routers.transactions import router as transactions_router
 from .application.auth import ensure_dev_seed_user_exists
 from .routers.accountability_settings import router as accountability_settings_router
 from .routers.accountability_partners import router as accountability_partners_router
+from .routers.goals import router as goals_router
 from .routers.pact import router as pact_router
+from .routers.simulated_savings_transfers import router as simulated_savings_transfers_router
 from .models.plaid_item import PlaidItem
 from .models.pact import Pact
 from .services.plaid_poller import start_poller, stop_poller
@@ -165,7 +167,13 @@ app.include_router(
     prefix="/api/accountability-partners",
     tags=["accountability-partners"],
 )
+app.include_router(goals_router, prefix="/api/goals", tags=["goals"])
 app.include_router(pact_router, tags=["pacts"])
+app.include_router(
+    simulated_savings_transfers_router,
+    prefix="/api/simulated-savings-transfers",
+    tags=["simulated-savings-transfers"],
+)
 
 
 @app.get("/health")

@@ -5,7 +5,7 @@ import { computePactSavings, computeSavingsBaseAmount } from './savings.js'
 
 const pact = { id: 'p1' }
 const settings = {
-  p1: { accountability_type: 'savings_percentage', discipline_savings_percentage: 10 },
+  p1: { accountability_type: 'email', discipline_savings_percentage: 10 },
 }
 const matcher = () => true
 
@@ -45,4 +45,17 @@ test('computePactSavings rounds decimal contributions stably', () => {
     transactionMatchesPact: matcher,
   })
   assert.equal(value, 2)
+})
+
+test('computePactSavings applies percent for email accountability when savings % set', () => {
+  const emailSettings = {
+    p1: { accountability_type: 'email', discipline_savings_percentage: 15 },
+  }
+  const value = computePactSavings({
+    flaggedTransactions: [{ id: 't3', amount: 100 }],
+    activePacts: [pact],
+    accountabilityByPact: emailSettings,
+    transactionMatchesPact: matcher,
+  })
+  assert.equal(value, 15)
 })

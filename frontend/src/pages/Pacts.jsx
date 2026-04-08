@@ -28,12 +28,21 @@ const PRESET_OPTIONS = [
   'TikTok Shop',
 ]
 
+/** Who gets pact-break alerts only — savings % is a separate field below. */
 const ACCOUNTABILITY_TYPES = [
-  { value: 'email', label: 'Email me' },
+  { value: 'email', label: 'Email yourself' },
   { value: 'friend', label: 'Accountability partner' },
+  { value: 'none', label: 'None' },
 ]
 
 const AUTO_LOCK_DELAY_MS = 5 * 60 * 1000
+
+const ALERT_RECIPIENT_TYPES = new Set(['email', 'friend', 'none'])
+
+function normalizeAlertRecipientType(raw) {
+  const t = String(raw || 'email').toLowerCase()
+  return ALERT_RECIPIENT_TYPES.has(t) ? t : 'email'
+}
 
 function normalizeCategory(category) {
   if (!category) return 'Other'
@@ -45,9 +54,15 @@ function normalizeCategory(category) {
 function formatAccountabilityType(type) {
   switch (type) {
     case 'email':
-      return 'Email me'
+      return 'Email yourself'
     case 'friend':
       return 'Accountability partner'
+    case 'none':
+      return 'None'
+    case 'savings_percentage':
+      return 'Savings only (legacy)'
+    case 'both':
+      return 'Email + savings (legacy)'
     default:
       return type || '—'
   }
@@ -65,7 +80,7 @@ export default function Pacts() {
   const [deletingId, setDeletingId] = useState(null)
   const [editingPactId, setEditingPactId] = useState(null)
   const [editingValues, setEditingValues] = useState({})
-  const [expandedPactId, setExpandedPactId] = useState(null)
+  const [libraryPactSaving, setLibraryPactSaving] = useState(null)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState('')
   const [now, setNow] = useState(new Date())
@@ -75,11 +90,9 @@ export default function Pacts() {
   const [lockDays, setLockDays] = useState(0)
   const [newAccountabilityType, setNewAccountabilityType] = useState('email')
   const [newDisciplineSavingsPercentage, setNewDisciplineSavingsPercentage] = useState(0)
-  const [newAccountabilityNote, setNewAccountabilityNote] = useState('')
 
   const [settingsFormState, setSettingsFormState] = useState({})
   const [settingsLoading, setSettingsLoading] = useState({})
-  const [settingsSaving, setSettingsSaving] = useState({})
   const [settingsError, setSettingsError] = useState({})
   const [partners, setPartners] = useState([])
   const [partnersLoading, setPartnersLoading] = useState(false)
@@ -135,7 +148,6 @@ export default function Pacts() {
   const startEditingPact = (pact) => {
     const pactLockDays = getLockDays(pact.locked_until)
 
-    setExpandedPactId(null)
     setEditingPactId(pact.id)
     setEditingValues({
       preset_category: pact.preset_category || '',
@@ -156,7 +168,6 @@ export default function Pacts() {
         ...(prev[pactId] || {
           accountability_type: 'email',
           discipline_savings_percentage: 0,
-          accountability_note: '',
         }),
         ...updates,
       },
@@ -176,9 +187,8 @@ export default function Pacts() {
         setSettingsFormState((prev) => ({
           ...prev,
           [pactId]: {
-            accountability_type: settings.accountability_type || 'email',
+            accountability_type: normalizeAlertRecipientType(settings.accountability_type),
             discipline_savings_percentage: settings.discipline_savings_percentage || 0,
-            accountability_note: settings.accountability_note || '',
           },
         }))
       } catch (err) {
@@ -188,7 +198,6 @@ export default function Pacts() {
             [pactId]: {
               accountability_type: 'email',
               discipline_savings_percentage: 0,
-              accountability_note: '',
             },
           }))
         } else {
@@ -348,7 +357,7 @@ export default function Pacts() {
             pact_id: createdPactId,
             accountability_type: newAccountabilityType,
             discipline_savings_percentage: Number(newDisciplineSavingsPercentage) || 0,
-            accountability_note: newAccountabilityNote.trim() || null,
+            accountability_note: null,
           },
           token
         )
@@ -359,7 +368,6 @@ export default function Pacts() {
       setLockDays(0)
       setNewAccountabilityType('email')
       setNewDisciplineSavingsPercentage(0)
-      setNewAccountabilityNote('')
       setSuccess('Pact added.')
       await loadPacts()
     } catch (err) {
@@ -393,20 +401,12 @@ export default function Pacts() {
         delete next[pactId]
         return next
       })
-      setSettingsSaving((prev) => {
-        const next = { ...prev }
-        delete next[pactId]
-        return next
-      })
       setSettingsError((prev) => {
         const next = { ...prev }
         delete next[pactId]
         return next
       })
 
-      if (expandedPactId === pactId) {
-        setExpandedPactId(null)
-      }
       if (editingPactId === pactId) {
         cancelEditing()
       }
@@ -499,6 +499,8 @@ export default function Pacts() {
   const handleSavePact = async (pact) => {
     setError(null)
     setSuccess('')
+    setLibraryPactSaving(pact.id)
+    setSettingsError((prev) => ({ ...prev, [pact.id]: null }))
 
     const lockDaysInt = Number(editingValues.lockDays) || 0
     const locked_until =
@@ -521,54 +523,41 @@ export default function Pacts() {
         body: payload,
       })
 
+      const formState = settingsFormState[pact.id]
+      if (formState) {
+        const settingsPayload = {
+          pact_id: pact.id,
+          accountability_type: formState.accountability_type,
+          discipline_savings_percentage: Number(formState.discipline_savings_percentage) || 0,
+          accountability_note: null,
+        }
+        const updated = await saveAccountabilitySettings(settingsPayload, token)
+        setSettingsFormState((prev) => ({
+          ...prev,
+          [pact.id]: {
+            accountability_type: updated.accountability_type || 'email',
+            discipline_savings_percentage: updated.discipline_savings_percentage || 0,
+          },
+        }))
+      }
+
       cancelEditing()
       await loadPacts()
-      setSuccess('Pact updated.')
+      setSuccess('Pact saved.')
+
+      await lockPact({
+        id: pact.id,
+        locked_until,
+      })
     } catch (err) {
-      setError(err?.message || 'Failed to update pact.')
-    }
-  }
-
-  const handleSaveSettings = async (pactId) => {
-    const formState = settingsFormState[pactId]
-    if (!formState) return
-
-    setSettingsSaving((prev) => ({ ...prev, [pactId]: true }))
-    setSettingsError((prev) => ({ ...prev, [pactId]: null }))
-
-    try {
-      const payload = {
-        pact_id: pactId,
-        accountability_type: formState.accountability_type,
-        discipline_savings_percentage: Number(formState.discipline_savings_percentage) || 0,
-        accountability_note: formState.accountability_note?.trim() || null,
-      }
-
-      const updated = await saveAccountabilitySettings(payload, token)
-
-      setSettingsFormState((prev) => ({
-        ...prev,
-        [pactId]: {
-          accountability_type: updated.accountability_type || 'email',
-          discipline_savings_percentage: updated.discipline_savings_percentage || 0,
-          accountability_note: updated.accountability_note || '',
-        },
-      }))
-
-      setExpandedPactId(null)
-      setSuccess('Settings saved.')
-
-      const pact = pacts.find((p) => p.id === pactId)
-      if (pact) {
-        await lockPact(pact)
-      }
-    } catch (err) {
+      const message = err?.message || 'Failed to save pact.'
+      setError(message)
       setSettingsError((prev) => ({
         ...prev,
-        [pactId]: err?.message || 'Failed to save settings.',
+        [pact.id]: message,
       }))
     } finally {
-      setSettingsSaving((prev) => ({ ...prev, [pactId]: false }))
+      setLibraryPactSaving(null)
     }
   }
 
@@ -739,7 +728,7 @@ export default function Pacts() {
               </label>
 
               <label className="pacts-field">
-                <span>Alert recipient</span>
+                <span>Who gets alerts if you break this pact?</span>
                 <select
                   value={newAccountabilityType}
                   onChange={(event) => setNewAccountabilityType(event.target.value)}
@@ -752,65 +741,68 @@ export default function Pacts() {
                   ))}
                 </select>
               </label>
-              <div className="pacts-helper-card">
-                <h3>Accountability partner</h3>
-                <p>
-                  Partner emails are sent only when a flagged purchase breaks one of your active pact categories.
-                </p>
-                <div className="pacts-partner-grid">
-                  <label className="pacts-field">
-                    <span>Partner name</span>
-                    <input
-                      type="text"
-                      className="pacts-input"
-                      value={partnerForm.partner_name}
-                      onChange={(event) =>
-                        setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
-                      }
-                      placeholder="Alex"
-                    />
-                  </label>
-                  <label className="pacts-field">
-                    <span>Partner email</span>
-                    <input
-                      type="email"
-                      className="pacts-input"
-                      value={partnerForm.partner_email}
-                      onChange={(event) =>
-                        setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
-                      }
-                      placeholder="alex@example.com"
-                    />
-                  </label>
-                  <label className="pacts-field">
-                    <span>Relationship</span>
-                    <input
-                      type="text"
-                      className="pacts-input"
-                      value={partnerForm.relationship_label}
-                      onChange={(event) =>
-                        setPartnerForm((prev) => ({ ...prev, relationship_label: event.target.value }))
-                      }
-                      placeholder="Friend, parent, coach"
-                    />
-                  </label>
-                </div>
-                <div className="pacts-partner-actions">
-                  <button
-                    type="button"
-                    className="pacts-secondary-button"
-                    onClick={handleSavePartner}
-                    disabled={partnerSaving}
-                  >
-                    {partnerSaving ? 'Saving partner...' : editingPartnerId ? 'Update partner' : 'Add partner'}
-                  </button>
-                  {editingPartnerId ? (
-                    <button type="button" className="pacts-secondary-button" onClick={resetPartnerForm}>
-                      Cancel edit
+
+              {newAccountabilityType === 'friend' && (
+                <div className="pacts-helper-card">
+                  <h3>Accountability partner</h3>
+                  <p>
+                    Partner emails are sent when a flagged purchase breaks one of your active pact categories.
+                  </p>
+                  <div className="pacts-partner-grid">
+                    <label className="pacts-field">
+                      <span>Partner name</span>
+                      <input
+                        type="text"
+                        className="pacts-input"
+                        value={partnerForm.partner_name}
+                        onChange={(event) =>
+                          setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
+                        }
+                        placeholder="Alex"
+                      />
+                    </label>
+                    <label className="pacts-field">
+                      <span>Partner email</span>
+                      <input
+                        type="email"
+                        className="pacts-input"
+                        value={partnerForm.partner_email}
+                        onChange={(event) =>
+                          setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
+                        }
+                        placeholder="alex@example.com"
+                      />
+                    </label>
+                    <label className="pacts-field">
+                      <span>Relationship</span>
+                      <input
+                        type="text"
+                        className="pacts-input"
+                        value={partnerForm.relationship_label}
+                        onChange={(event) =>
+                          setPartnerForm((prev) => ({ ...prev, relationship_label: event.target.value }))
+                        }
+                        placeholder="Friend, parent, coach"
+                      />
+                    </label>
+                  </div>
+                  <div className="pacts-partner-actions">
+                    <button
+                      type="button"
+                      className="pacts-secondary-button"
+                      onClick={handleSavePartner}
+                      disabled={partnerSaving}
+                    >
+                      {partnerSaving ? 'Saving partner...' : editingPartnerId ? 'Update partner' : 'Add partner'}
                     </button>
-                  ) : null}
+                    {editingPartnerId ? (
+                      <button type="button" className="pacts-secondary-button" onClick={resetPartnerForm}>
+                        Cancel edit
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <label className="pacts-field">
                 <span>Discipline savings target (%)</span>
@@ -823,18 +815,9 @@ export default function Pacts() {
                   className="pacts-input"
                 />
                 <p className="pacts-field-note">
-                  When a purchase breaks this pact, this percentage can be redirected into savings.
+                  When a purchase breaks this pact, this percent of the amount is simulated as moved to
+                  savings (demo—not a real transfer). Works with any alert type if the % is above 0.
                 </p>
-              </label>
-
-              <label className="pacts-field">
-                <span>Accountability note</span>
-                <textarea
-                  value={newAccountabilityNote}
-                  onChange={(event) => setNewAccountabilityNote(event.target.value)}
-                  placeholder="Optional reminder or message for the alert."
-                  className="pacts-textarea"
-                />
               </label>
 
               <label className="pacts-field">
@@ -888,16 +871,13 @@ export default function Pacts() {
                   const isLocked = lockedUntil ? lockedUntil > now : false
                   const remainingMs = lockedUntil ? lockedUntil.getTime() - now.getTime() : 0
                   const remainingLabel = lockedUntil ? formatRemaining(remainingMs) : null
-                  const isExpanded = expandedPactId === pact.id
 
                   const formState = settingsFormState[pact.id] || {
                     accountability_type: 'email',
                     discipline_savings_percentage: 0,
-                    accountability_note: '',
                   }
 
                   const isSettingsLoading = settingsLoading[pact.id]
-                  const isSettingsSaving = settingsSaving[pact.id]
                   const pactSettingsError = settingsError[pact.id]
                   const primaryPartner = partners.find((partner) => partner.is_active) || partners[0]
 
@@ -924,126 +904,26 @@ export default function Pacts() {
                             ? `${primaryPartner.partner_name || 'Partner'} (${primaryPartner.partner_email})`
                             : 'No accountability partner set'}
                         </p>
-                        {formState.accountability_note ? (
-                          <p className="pacts-card-mini-summary">Message: {formState.accountability_note}</p>
-                        ) : null}
                       </div>
 
-                      <div className="pacts-card-compact-actions">
-                        <button
-                          type="button"
-                          className="pacts-secondary-button"
-                          onClick={() => {
-                            cancelEditing()
-                            setExpandedPactId(isExpanded ? null : pact.id)
-                          }}
-                        >
-                          {isExpanded ? 'Close' : 'Settings'}
-                        </button>
-
-                        <button
-                          type="button"
-                          className="pacts-secondary-button"
-                          onClick={() => startEditingPact(pact)}
-                          disabled={isLocked}
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          type="button"
-                          className="pacts-danger-button"
-                          disabled={deletingId === pact.id || isLocked}
-                          onClick={() => handleDeletePact(pact.id, isLocked)}
-                          title={isLocked ? 'This pact cannot be deleted until the lock expires.' : ''}
-                        >
-                          {deletingId === pact.id ? 'Deleting...' : 'Delete'}
-                        </button>
-                      </div>
+                      {editingPactId !== pact.id && (
+                        <div className="pacts-card-compact-actions">
+                          <button
+                            type="button"
+                            className="pacts-secondary-button"
+                            onClick={() => startEditingPact(pact)}
+                            disabled={isLocked}
+                            title={isLocked ? 'This pact is locked until the lock expires.' : ''}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
 
                       {editingPactId === pact.id && (
                         <div className="pacts-card-expanded">
                           <h4 className="pacts-edit-title">Edit pact</h4>
 
-                          {isPreset ? (
-                            <label className="pacts-field">
-                              <span>Preset category</span>
-                              <select
-                                value={editingValues.preset_category}
-                                onChange={(event) =>
-                                  setEditingValues((prev) => ({
-                                    ...prev,
-                                    preset_category: event.target.value,
-                                  }))
-                                }
-                                className="pacts-input"
-                              >
-                                {PRESET_OPTIONS.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : (
-                            <label className="pacts-field">
-                              <span>Custom category</span>
-                              <input
-                                type="text"
-                                value={editingValues.custom_category}
-                                onChange={(event) =>
-                                  setEditingValues((prev) => ({
-                                    ...prev,
-                                    custom_category: event.target.value,
-                                  }))
-                                }
-                                className="pacts-input"
-                              />
-                            </label>
-                          )}
-
-                          <label className="pacts-field">
-                            <span>Lock duration</span>
-                            <select
-                              value={editingValues.lockDays}
-                              onChange={(event) =>
-                                setEditingValues((prev) => ({
-                                  ...prev,
-                                  lockDays: Number(event.target.value),
-                                }))
-                              }
-                              className="pacts-input"
-                              disabled={isLocked}
-                            >
-                              <option value={0}>No lock</option>
-                              <option value={1}>1 day</option>
-                              <option value={7}>1 week</option>
-                              <option value={30}>30 days</option>
-                            </select>
-                          </label>
-
-                          <div className="pacts-card-actions">
-                            <button
-                              type="button"
-                              className="dashboard-button"
-                              disabled={isLocked}
-                              onClick={() => handleSavePact(pact)}
-                            >
-                              Save changes
-                            </button>
-                            <button
-                              type="button"
-                              className="pacts-secondary-button"
-                              onClick={cancelEditing}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {isExpanded && editingPactId !== pact.id && (
-                        <div className="pacts-card-expanded">
                           {isSettingsLoading ? (
                             <p className="pacts-accountability-loading">Loading settings…</p>
                           ) : (
@@ -1052,10 +932,71 @@ export default function Pacts() {
                                 <p className="dashboard-error">{pactSettingsError}</p>
                               )}
 
+                              {isPreset ? (
+                                <label className="pacts-field">
+                                  <span>Preset category</span>
+                                  <select
+                                    value={editingValues.preset_category}
+                                    onChange={(event) =>
+                                      setEditingValues((prev) => ({
+                                        ...prev,
+                                        preset_category: event.target.value,
+                                      }))
+                                    }
+                                    className="pacts-input"
+                                    disabled={isLocked}
+                                  >
+                                    {PRESET_OPTIONS.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              ) : (
+                                <label className="pacts-field">
+                                  <span>Custom category</span>
+                                  <input
+                                    type="text"
+                                    value={editingValues.custom_category}
+                                    onChange={(event) =>
+                                      setEditingValues((prev) => ({
+                                        ...prev,
+                                        custom_category: event.target.value,
+                                      }))
+                                    }
+                                    className="pacts-input"
+                                    disabled={isLocked}
+                                  />
+                                </label>
+                              )}
+
                               <label className="pacts-field">
-                                <span>Alert recipient</span>
+                                <span>Lock duration</span>
                                 <select
-                                  value={formState.accountability_type}
+                                  value={editingValues.lockDays}
+                                  onChange={(event) =>
+                                    setEditingValues((prev) => ({
+                                      ...prev,
+                                      lockDays: Number(event.target.value),
+                                    }))
+                                  }
+                                  className="pacts-input"
+                                  disabled={isLocked}
+                                >
+                                  <option value={0}>No lock</option>
+                                  <option value={1}>1 day</option>
+                                  <option value={7}>1 week</option>
+                                  <option value={30}>30 days</option>
+                                </select>
+                              </label>
+
+                              <h4 className="pacts-edit-title pacts-edit-title-sub">Accountability</h4>
+
+                              <label className="pacts-field">
+                                <span>Who gets alerts if you break this pact?</span>
+                                <select
+                                  value={normalizeAlertRecipientType(formState.accountability_type)}
                                   onChange={(event) =>
                                     updateFormState(pact.id, {
                                       accountability_type: event.target.value,
@@ -1088,71 +1029,149 @@ export default function Pacts() {
                                   disabled={isLocked}
                                 />
                                 <p className="pacts-field-note">
-                                  This is the percentage to move into savings when the pact is broken.
+                                  When you break this pact, this percent of the purchase amount is
+                                  simulated as moved to savings (demo—not a real bank transfer).
                                 </p>
                               </label>
 
-                              <label className="pacts-field">
-                                <span>Accountability note</span>
-                                <textarea
-                                  value={formState.accountability_note}
-                                  onChange={(event) =>
-                                    updateFormState(pact.id, {
-                                      accountability_note: event.target.value,
-                                    })
-                                  }
-                                  placeholder="Optional reminder or message for the alert."
-                                  className="pacts-textarea"
-                                  disabled={isLocked}
-                                />
-                              </label>
-                              <div className="pacts-helper-card">
-                                <h4>Active accountability partners</h4>
-                                {partnersLoading ? (
-                                  <p className="pacts-accountability-loading">Loading partners…</p>
-                                ) : partners.length === 0 ? (
-                                  <p className="pacts-empty">
-                                    No accountability partner yet. Add one in the form panel to send partner alerts.
+                              {formState.accountability_type === 'friend' && (
+                                <div className="pacts-helper-card">
+                                  <h4>Accountability partner</h4>
+                                  <p className="pacts-field-note pacts-helper-card-lead">
+                                    Add or manage who receives alerts when this pact is broken.
                                   </p>
-                                ) : (
-                                  <div className="pacts-partner-list">
-                                    {partners.map((partner) => (
-                                      <div className="pacts-partner-row" key={partner.id}>
-                                        <div>
-                                          <strong>{partner.partner_name || 'Unnamed partner'}</strong>
-                                          <p>{partner.partner_email}</p>
-                                          {partner.relationship_label ? <p>{partner.relationship_label}</p> : null}
-                                        </div>
-                                        <div className="pacts-partner-row-actions">
-                                          <button
-                                            type="button"
-                                            className="pacts-secondary-button"
-                                            onClick={() => beginEditPartner(partner)}
-                                          >
-                                            Edit
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="pacts-danger-button"
-                                            onClick={() => handleDeletePartner(partner.id)}
-                                          >
-                                            Remove
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))}
+                                  <div className="pacts-partner-grid">
+                                    <label className="pacts-field">
+                                      <span>Partner name</span>
+                                      <input
+                                        type="text"
+                                        className="pacts-input"
+                                        value={partnerForm.partner_name}
+                                        onChange={(event) =>
+                                          setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
+                                        }
+                                        placeholder="Alex"
+                                        disabled={isLocked}
+                                      />
+                                    </label>
+                                    <label className="pacts-field">
+                                      <span>Partner email</span>
+                                      <input
+                                        type="email"
+                                        className="pacts-input"
+                                        value={partnerForm.partner_email}
+                                        onChange={(event) =>
+                                          setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
+                                        }
+                                        placeholder="alex@example.com"
+                                        disabled={isLocked}
+                                      />
+                                    </label>
+                                    <label className="pacts-field">
+                                      <span>Relationship</span>
+                                      <input
+                                        type="text"
+                                        className="pacts-input"
+                                        value={partnerForm.relationship_label}
+                                        onChange={(event) =>
+                                          setPartnerForm((prev) => ({
+                                            ...prev,
+                                            relationship_label: event.target.value,
+                                          }))
+                                        }
+                                        placeholder="Friend, parent, coach"
+                                        disabled={isLocked}
+                                      />
+                                    </label>
                                   </div>
-                                )}
-                              </div>
+                                  <div className="pacts-partner-actions">
+                                    <button
+                                      type="button"
+                                      className="pacts-secondary-button"
+                                      onClick={handleSavePartner}
+                                      disabled={partnerSaving || isLocked}
+                                    >
+                                      {partnerSaving
+                                        ? 'Saving…'
+                                        : editingPartnerId
+                                          ? 'Update partner'
+                                          : 'Add partner'}
+                                    </button>
+                                    {editingPartnerId ? (
+                                      <button
+                                        type="button"
+                                        className="pacts-secondary-button"
+                                        onClick={resetPartnerForm}
+                                        disabled={isLocked}
+                                      >
+                                        Cancel edit
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  {partnersLoading ? (
+                                    <p className="pacts-accountability-loading">Loading partners…</p>
+                                  ) : partners.length === 0 ? (
+                                    <p className="pacts-empty">No partners saved yet.</p>
+                                  ) : (
+                                    <div className="pacts-partner-list">
+                                      {partners.map((partner) => (
+                                        <div className="pacts-partner-row" key={partner.id}>
+                                          <div>
+                                            <strong>{partner.partner_name || 'Unnamed partner'}</strong>
+                                            <p>{partner.partner_email}</p>
+                                            {partner.relationship_label ? (
+                                              <p>{partner.relationship_label}</p>
+                                            ) : null}
+                                          </div>
+                                          <div className="pacts-partner-row-actions">
+                                            <button
+                                              type="button"
+                                              className="pacts-secondary-button"
+                                              onClick={() => beginEditPartner(partner)}
+                                              disabled={isLocked}
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="pacts-danger-button"
+                                              onClick={() => handleDeletePartner(partner.id)}
+                                              disabled={isLocked}
+                                            >
+                                              Remove
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               <div className="pacts-card-actions">
                                 <button
                                   type="button"
                                   className="dashboard-button"
-                                  disabled={isSettingsSaving || isLocked}
-                                  onClick={() => handleSaveSettings(pact.id)}
+                                  disabled={libraryPactSaving === pact.id || isLocked}
+                                  onClick={() => handleSavePact(pact)}
                                 >
-                                  {isSettingsSaving ? 'Saving…' : 'Save settings'}
+                                  {libraryPactSaving === pact.id ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="pacts-secondary-button"
+                                  onClick={cancelEditing}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  className="pacts-danger-button"
+                                  disabled={deletingId === pact.id || isLocked}
+                                  onClick={() => handleDeletePact(pact.id, isLocked)}
+                                  title={isLocked ? 'This pact cannot be deleted until the lock expires.' : ''}
+                                >
+                                  {deletingId === pact.id ? 'Deleting…' : 'Delete pact'}
                                 </button>
                               </div>
                             </>
@@ -1178,13 +1197,19 @@ export default function Pacts() {
               </div>
 
               <div className="pacts-info-item">
-                <h3>Alert recipient</h3>
-                <p>Choose whether pact alerts go to you or to your accountability partner.</p>
+                <h3>Who gets alerts</h3>
+                <p>
+                  Pick email yourself, an accountability partner, or none. Discipline savings % is
+                  separate. Partner fields only appear when you choose accountability partner.
+                </p>
               </div>
 
               <div className="pacts-info-item">
                 <h3>Discipline savings</h3>
-                <p>A broken pact can move part of the purchase amount into savings based on your chosen percentage.</p>
+                <p>
+                  A violating purchase can simulate moving your chosen percentage of that purchase into
+                  savings. This is in-app only until a real transfer integration exists.
+                </p>
               </div>
 
               <div className="pacts-info-item">

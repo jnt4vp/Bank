@@ -1,28 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { apiRequest } from '../../lib/api/client'
-import { sortTransactionsByActivityDate } from './formatters'
+import { normalizeTransactionsResponse, sortTransactionsByActivityDate } from './formatters'
 
-function normalizeTransactions(data) {
-  if (Array.isArray(data)) {
-    return data
-  }
-  if (Array.isArray(data?.results)) {
-    return data.results
-  }
-  if (Array.isArray(data?.transactions)) {
-    return data.transactions
-  }
-  if (Array.isArray(data?.items)) {
-    return data.items
-  }
-  if (Array.isArray(data?.data)) {
-    return data.data
-  }
-  return []
-}
-
-export function useTransactions(token) {
+/**
+ * @param {string | null | undefined} token
+ * @param {string | number | undefined} navigationKey - pass `useLocation().key` so each visit refetches
+ */
+export function useTransactions(token, navigationKey) {
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -42,7 +27,7 @@ export function useTransactions(token) {
           return
         }
 
-        setTransactions(sortTransactionsByActivityDate(normalizeTransactions(data)))
+        setTransactions(sortTransactionsByActivityDate(normalizeTransactionsResponse(data)))
       })
       .catch((err) => {
         if (cancelled) {
@@ -60,7 +45,7 @@ export function useTransactions(token) {
     return () => {
       cancelled = true
     }
-  }, [token])
+  }, [token, navigationKey])
 
   if (!token) {
     return { transactions: [], loading: false, error: null }

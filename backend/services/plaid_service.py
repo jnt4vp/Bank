@@ -40,6 +40,9 @@ from ..ports.notifier import NotifierPort
 from ..repositories.pacts import get_active_pact_categories
 from ..services.classifier import classify_transaction
 from ..services.accountability_alerts import send_accountability_alerts_for_transaction
+from ..services.simulated_savings_transfers import (
+    record_simulated_savings_transfers_for_transaction,
+)
 from ..services.token_encryption import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
@@ -327,6 +330,14 @@ async def sync_transactions(
                 date=txn.date,
             )
             db.add(new_txn)
+            await db.flush()
+
+            await record_simulated_savings_transfers_for_transaction(
+                db,
+                user_id=plaid_item.user_id,
+                transaction=new_txn,
+                skip_for_initial_plaid_backfill=is_initial_backfill,
+            )
 
             if flagged and notifier and not is_initial_backfill:
                 try:

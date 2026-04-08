@@ -11,6 +11,7 @@ from ..schemas.accountability_settings import (
     AccountabilitySettingsOut,
 )
 from ..application.auth import get_current_user
+from ..services.simulated_savings_transfers import backfill_simulated_savings_for_user
 
 
 router = APIRouter()
@@ -59,6 +60,12 @@ async def upsert_accountability_settings(
         settings.accountability_note = payload.accountability_note
 
     await db.commit()
+
+    ledger_added = await backfill_simulated_savings_for_user(
+        db, user_id=current_user.id
+    )
+    if ledger_added:
+        await db.commit()
 
     refreshed_result = await db.execute(
         select(AccountabilitySettings).where(

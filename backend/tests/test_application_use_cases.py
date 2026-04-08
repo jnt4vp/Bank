@@ -216,6 +216,9 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         ) as create_transaction_mock, patch(
             "backend.application.transactions.ensure_discipline_window_after_manual_transaction",
             new=AsyncMock(),
+        ), patch(
+            "backend.application.transactions.record_simulated_savings_transfers_for_transaction",
+            new=AsyncMock(return_value=0),
         ):
             result = await ingest_user_transaction(
                 db,
@@ -286,6 +289,9 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         ) as create_transaction_mock, patch(
             "backend.application.transactions.ensure_discipline_window_after_manual_transaction",
             new=AsyncMock(),
+        ), patch(
+            "backend.application.transactions.record_simulated_savings_transfers_for_transaction",
+            new=AsyncMock(return_value=0),
         ):
             result = await ingest_user_transaction(
                 db,

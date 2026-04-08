@@ -42,9 +42,8 @@ export function computePactSavings({
     const settings = accountabilityByPact?.[pact.id]
     if (!settings) return
 
-    const type = settings.accountability_type
     const percent = Number(settings.discipline_savings_percentage || 0)
-    if (!(type === 'savings_percentage' || type === 'both') || percent <= 0) return
+    if (percent <= 0) return
 
     flaggedTransactions.forEach((tx) => {
       if (!transactionMatchesPact(tx, pact)) return
