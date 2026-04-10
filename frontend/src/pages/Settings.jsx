@@ -3,7 +3,12 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { apiRequest } from '../lib/api/client'
 import DashboardTopbar from '../components/DashboardTopbar'
-import { deleteAccountabilityPartner, listAccountabilityPartners } from '../features/accountability-partners/api'
+import {
+  createAccountabilityPartner,
+  deleteAccountabilityPartner,
+  listAccountabilityPartners,
+  updateAccountabilityPartner,
+} from '../features/accountability-partners/api'
 import '../dashboard.css'
 import '../settings.css'
 
@@ -197,6 +202,14 @@ export default function Settings() {
   const [resetDisciplineSaving, setResetDisciplineSaving] = useState(false)
   const [uiPrefsMessage, setUiPrefsMessage] = useState({ type: '', text: '' })
   const [partners, setPartners] = useState([])
+  const [partnerForm, setPartnerForm] = useState({
+    partner_name: '',
+    partner_email: '',
+    relationship_label: '',
+    is_active: true,
+  })
+  const [editingPartnerId, setEditingPartnerId] = useState(null)
+  const [partnerSaving, setPartnerSaving] = useState(false)
   const [deletingPartnerId, setDeletingPartnerId] = useState(null)
   const [partnerPendingDelete, setPartnerPendingDelete] = useState(null)
   const [partnerError, setPartnerError] = useState('')
@@ -242,6 +255,73 @@ export default function Settings() {
     }
     loadAccountabilityPartners()
   }, [token])
+
+  function resetPartnerForm() {
+    setEditingPartnerId(null)
+    setPartnerForm({
+      partner_name: '',
+      partner_email: '',
+      relationship_label: '',
+      is_active: true,
+    })
+  }
+
+  function beginEditPartner(partner) {
+    setEditingPartnerId(partner.id)
+    setPartnerError('')
+    setPartnerSuccess('')
+    setPartnerForm({
+      partner_name: partner.partner_name || '',
+      partner_email: partner.partner_email || '',
+      relationship_label: partner.relationship_label || '',
+      is_active: partner.is_active !== false,
+    })
+  }
+
+  function validatePartnerForm() {
+    if (!partnerForm.partner_email?.trim()) return 'Partner email is required.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(partnerForm.partner_email.trim())) {
+      return 'Enter a valid partner email.'
+    }
+    return null
+  }
+
+  async function handleSavePartner() {
+    const validationError = validatePartnerForm()
+    if (validationError) {
+      setPartnerError(validationError)
+      setPartnerSuccess('')
+      return
+    }
+
+    setPartnerSaving(true)
+    setPartnerError('')
+    setPartnerSuccess('')
+
+    const payload = {
+      partner_name: partnerForm.partner_name?.trim() || null,
+      partner_email: partnerForm.partner_email.trim().toLowerCase(),
+      relationship_label: partnerForm.relationship_label?.trim() || null,
+      is_active: Boolean(partnerForm.is_active),
+    }
+
+    try {
+      if (editingPartnerId) {
+        const updated = await updateAccountabilityPartner(editingPartnerId, payload, token)
+        setPartners((prev) => prev.map((partner) => (partner.id === editingPartnerId ? updated : partner)))
+        setPartnerSuccess('Partner updated.')
+      } else {
+        const created = await createAccountabilityPartner(payload, token)
+        setPartners((prev) => [created, ...prev])
+        setPartnerSuccess('Partner added.')
+      }
+      resetPartnerForm()
+    } catch (error) {
+      setPartnerError(error?.message || 'Could not save partner.')
+    } finally {
+      setPartnerSaving(false)
+    }
+  }
 
   function requestDeletePartner(partner) {
     if (!partner?.id) return
@@ -579,6 +659,70 @@ export default function Settings() {
             </div>
 
             <div className="settings-control-stack" style={{ paddingTop: 0 }}>
+              <div className="settings-control-group" style={{ marginBottom: '0.85rem' }}>
+                <div className="settings-control-label-row" style={{ marginBottom: '0.85rem' }}>
+                  <span className="settings-control-label">
+                    {editingPartnerId ? 'Edit partner' : 'Add a partner'}
+                  </span>
+                </div>
+
+                <div className="settings-profile-form" style={{ paddingTop: 0 }}>
+                  <label className="settings-field">
+                    <span>Partner name</span>
+                    <input
+                      className="settings-input"
+                      value={partnerForm.partner_name}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
+                      }
+                      placeholder="Alex"
+                    />
+                  </label>
+
+                  <label className="settings-field">
+                    <span>Partner email</span>
+                    <input
+                      className="settings-input"
+                      type="email"
+                      value={partnerForm.partner_email}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
+                      }
+                      placeholder="alex@example.com"
+                    />
+                  </label>
+
+                  <label className="settings-field">
+                    <span>Relationship</span>
+                    <input
+                      className="settings-input"
+                      value={partnerForm.relationship_label}
+                      onChange={(event) =>
+                        setPartnerForm((prev) => ({ ...prev, relationship_label: event.target.value }))
+                      }
+                      placeholder="Friend, sibling, coach"
+                    />
+                  </label>
+
+                  <div className="settings-form-actions">
+                    <button
+                      type="button"
+                      className="settings-primary-button"
+                      onClick={handleSavePartner}
+                      disabled={partnerSaving}
+                    >
+                      {partnerSaving ? 'Saving...' : editingPartnerId ? 'Save changes' : 'Add partner'}
+                    </button>
+
+                    {editingPartnerId ? (
+                      <button type="button" className="settings-ghost-button" onClick={resetPartnerForm}>
+                        Cancel
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
               {partners.length === 0 ? (
                 <p className="settings-support-lede">No accountability partners on file.</p>
               ) : (
@@ -599,6 +743,14 @@ export default function Settings() {
                         )}
                       </div>
                       <div className="settings-partner-actions" style={{ marginTop: '0.75rem' }}>
+                        <button
+                          type="button"
+                          className="settings-ghost-button"
+                          disabled={Boolean(partnerPendingDelete)}
+                          onClick={() => beginEditPartner(partner)}
+                        >
+                          Edit
+                        </button>
                         <button
                           type="button"
                           className="settings-button-danger"

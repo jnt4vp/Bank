@@ -8,9 +8,11 @@ from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from ..models.accountability_alert_settings import AccountabilityAlertSettings
 from ..models.accountability_partner import AccountabilityPartner
+from ..models.pact import Pact
 from ..models.transaction import Transaction
 from ..models.user import User
 from ..ports.notifier import NotifierPort
@@ -33,6 +35,25 @@ def _safe_template(template: str, values: dict[str, Any]) -> str:
     for key, value in values.items():
         rendered = rendered.replace(f"{{{key}}}", str(value))
     return rendered
+
+
+def _norm(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _transaction_matches_pact(txn: Transaction, pact: Pact) -> bool:
+    tx_cat = _norm(txn.category)
+    tx_merchant = _norm(txn.merchant)
+    tx_desc = _norm(txn.description)
+    pact_cat = _norm(pact.custom_category or pact.category or pact.preset_category)
+    if not pact_cat:
+        return False
+    return (
+        pact_cat in tx_cat
+        or tx_cat in pact_cat
+        or pact_cat in tx_merchant
+        or pact_cat in tx_desc
+    )
 
 
 async def send_accountability_alerts_for_transaction(
@@ -60,13 +81,51 @@ async def send_accountability_alerts_for_transaction(
     if not alerts_enabled:
         return False
 
+    pacts_result = await db.execute(
+        select(Pact)
+        .options(selectinload(Pact.accountability_settings))
+        .where(
+            Pact.user_id == user_id,
+            Pact.status == "active",
+        )
+    )
+    matched_pacts = [
+        pact
+        for pact in pacts_result.scalars().unique().all()
+        if pact.accountability_settings
+        and pact.accountability_settings.accountability_type == "friend"
+        and _transaction_matches_pact(transaction, pact)
+    ]
+    if not matched_pacts:
+        return False
+
+    selected_partner_ids: set[str] = set()
+    wants_legacy_fallback = False
+    for pact in matched_pacts:
+        partner_ids = pact.accountability_settings.accountability_partner_ids or []
+        if partner_ids:
+            selected_partner_ids.update(str(partner_id) for partner_id in partner_ids)
+        else:
+            wants_legacy_fallback = True
+
     partners_result = await db.execute(
         select(AccountabilityPartner).where(
             AccountabilityPartner.user_id == user_id,
             AccountabilityPartner.is_active.is_(True),
         )
     )
-    partners = list(partners_result.scalars().all())
+    all_active_partners = list(partners_result.scalars().all())
+    if selected_partner_ids:
+        partners = [
+            partner
+            for partner in all_active_partners
+            if str(partner.id) in selected_partner_ids
+        ]
+    elif wants_legacy_fallback:
+        partners = all_active_partners
+    else:
+        partners = []
+
     if not partners:
         return False
 

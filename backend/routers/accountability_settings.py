@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import async_session
+from ..models.accountability_partner import AccountabilityPartner
 from ..models.user import User
 from ..models.pact import Pact
 from ..models.accountability_settings import AccountabilitySettings
@@ -22,6 +23,31 @@ async def get_db():
         yield session
 
 
+async def _validated_partner_ids(
+    db: AsyncSession,
+    *,
+    user_id,
+    accountability_type: str,
+    partner_ids: list,
+) -> list[str]:
+    if accountability_type != "friend":
+        return []
+
+    if not partner_ids:
+        return []
+
+    result = await db.execute(
+        select(AccountabilityPartner.id).where(
+            AccountabilityPartner.user_id == user_id,
+            AccountabilityPartner.id.in_(partner_ids),
+        )
+    )
+    matched_ids = [row for row in result.scalars().all()]
+    if len(matched_ids) != len(set(partner_ids)):
+        raise HTTPException(status_code=400, detail="One or more accountability partners are invalid")
+    return [str(partner_id) for partner_id in matched_ids]
+
+
 @router.post("", response_model=AccountabilitySettingsOut)
 async def upsert_accountability_settings(
     payload: AccountabilitySettingsCreate,
@@ -39,6 +65,13 @@ async def upsert_accountability_settings(
     if pact is None:
         raise HTTPException(status_code=404, detail="Pact not found")
 
+    partner_ids = await _validated_partner_ids(
+        db,
+        user_id=current_user.id,
+        accountability_type=payload.accountability_type,
+        partner_ids=payload.accountability_partner_ids,
+    )
+
     result = await db.execute(
         select(AccountabilitySettings).where(
             AccountabilitySettings.pact_id == payload.pact_id
@@ -52,12 +85,14 @@ async def upsert_accountability_settings(
             accountability_type=payload.accountability_type,
             discipline_savings_percentage=payload.discipline_savings_percentage,
             accountability_note=payload.accountability_note,
+            accountability_partner_ids=partner_ids,
         )
         db.add(settings)
     else:
         settings.accountability_type = payload.accountability_type
         settings.discipline_savings_percentage = payload.discipline_savings_percentage
         settings.accountability_note = payload.accountability_note
+        settings.accountability_partner_ids = partner_ids
 
     await db.commit()
 
@@ -82,6 +117,7 @@ async def upsert_accountability_settings(
         discipline_savings_percentage=float(
             refreshed_settings.discipline_savings_percentage or 0
         ),
+        accountability_partner_ids=refreshed_settings.accountability_partner_ids or [],
     )
 
 
@@ -120,4 +156,5 @@ async def get_accountability_settings(
         discipline_savings_percentage=float(
             settings.discipline_savings_percentage or 0
         ),
+        accountability_partner_ids=settings.accountability_partner_ids or [],
     )

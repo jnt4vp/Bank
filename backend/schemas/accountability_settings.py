@@ -8,6 +8,7 @@ class AccountabilitySettingsCreate(BaseModel):
     accountability_type: str
     discipline_savings_percentage: float = Field(ge=0, le=100)
     accountability_note: Optional[str] = None
+    accountability_partner_ids: list[UUID] = Field(default_factory=list)
 
 
 class AccountabilitySettingsOut(BaseModel):
@@ -16,6 +17,7 @@ class AccountabilitySettingsOut(BaseModel):
     accountability_type: str
     accountability_note: Optional[str] = None
     discipline_savings_percentage: float
+    accountability_partner_ids: list[UUID] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
