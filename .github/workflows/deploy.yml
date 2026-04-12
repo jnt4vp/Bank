@@ -57,6 +57,9 @@ jobs:
           command_timeout: 30m
           script: |
             set -euo pipefail
+            # The Docker deployment path owns port 80; stop the legacy host stack if it is still present.
+            sudo systemctl stop nginx || true
+            sudo systemctl stop bankapp || true
             sudo git -c safe.directory=/opt/bankapp -C /opt/bankapp pull --ff-only origin main
             sudo docker-compose --env-file /opt/bankapp/.env.prod -f /opt/bankapp/docker-compose.prod.yml up --build -d
             sudo docker image prune -f
