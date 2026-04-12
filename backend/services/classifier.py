@@ -39,6 +39,8 @@ PACT_CATEGORY_KEYWORDS: dict[str, list[str]] = {
         "amazon", "ebay", "shopify", "etsy", "walmart.com", "target.com",
         "wish.com", "aliexpress", "shein", "temu", "wayfair",
         "online purchase", "e-commerce",
+        "tiktok",
+        "tiktok shop",
     ],
     "entertainment": [
         "netflix", "hulu", "spotify", "disney+", "hbo", "paramount",

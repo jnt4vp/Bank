@@ -22,7 +22,16 @@
   transition: box-shadow 0.15s ease;
 }
 
-.goals-card.is-over {
+.goals-card--zone-good {
+  border-color: rgba(120, 160, 90, 0.22);
+}
+
+.goals-card--zone-warn {
+  border-color: rgba(200, 130, 50, 0.35);
+  background: rgba(255, 248, 235, 0.45);
+}
+
+.goals-card--zone-over {
   border-color: rgba(176, 77, 77, 0.28);
   background: rgba(255, 240, 240, 0.38);
 }
@@ -83,12 +92,17 @@
   white-space: nowrap;
 }
 
-.goals-badge.is-ok {
-  background: rgba(120, 180, 80, 0.14);
-  color: #4a7a20;
+.goals-badge--good {
+  background: rgba(90, 150, 70, 0.16);
+  color: #3d6b1e;
 }
 
-.goals-badge.is-over {
+.goals-badge--warn {
+  background: rgba(210, 140, 45, 0.18);
+  color: #a65f0a;
+}
+
+.goals-badge--over {
   background: rgba(176, 77, 77, 0.12);
   color: #9e3e3e;
 }
@@ -110,24 +124,51 @@
   color: #9e3e3e;
 }
 
-/* ── Progress bar ── */
+/* ── Status / progress bar (green → orange → red) ── */
 .goals-bar-track {
   width: 100%;
-  height: 7px;
-  background: rgba(229, 226, 222, 0.9);
+  height: 10px;
+  background: rgba(229, 226, 222, 0.92);
   border-radius: 999px;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.goals-bar-track--good {
+  background: rgba(210, 225, 195, 0.55);
+}
+
+.goals-bar-track--warn {
+  background: rgba(245, 220, 185, 0.65);
+}
+
+.goals-bar-track--over {
+  background: rgba(240, 205, 205, 0.65);
 }
 
 .goals-bar-fill {
   height: 100%;
+  min-width: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, #7a9e20, #a8c234);
-  transition: width 0.5s ease;
+  transition:
+    width 0.45s ease,
+    background 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
-.goals-bar-fill.is-over {
-  background: linear-gradient(90deg, #c04040, #d86060);
+.goals-bar-fill--good {
+  background: linear-gradient(90deg, #5a9a3a, #7ec850);
+  box-shadow: 0 0 12px rgba(100, 170, 60, 0.35);
+}
+
+.goals-bar-fill--warn {
+  background: linear-gradient(90deg, #d97820, #f0a030);
+  box-shadow: 0 0 12px rgba(230, 140, 40, 0.38);
+}
+
+.goals-bar-fill--over {
+  background: linear-gradient(90deg, #b83030, #e04848);
+  box-shadow: 0 0 12px rgba(200, 60, 60, 0.4);
 }
 
 /* ── Add form ── */
@@ -144,6 +185,11 @@
   line-height: 1.55;
   padding-top: 1.2rem;
   border-top: 1px solid rgba(229, 226, 222, 0.55);
+}
+
+.goals-hint--short {
+  margin-top: 1rem;
+  padding-top: 1rem;
 }
 
 @media (max-width: 900px) {

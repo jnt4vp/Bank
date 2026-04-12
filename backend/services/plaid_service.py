@@ -26,7 +26,7 @@ from plaid.model.sandbox_public_token_create_request_options_transactions import
 from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_sync_request_options import TransactionsSyncRequestOptions
-from sqlalchemy import func, select, update as sa_update
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -44,6 +44,7 @@ from ..services.simulated_savings_transfers import (
     record_simulated_savings_transfers_for_transaction,
 )
 from ..services.token_encryption import decrypt_token, encrypt_token
+from .plaid_category_resolution import resolved_plaid_category
 
 logger = logging.getLogger(__name__)
 
@@ -258,15 +259,13 @@ async def sync_transactions(
     # Fetch user's active pact categories once for the entire sync cycle
     user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
 
-    prior_txn_count_result = await db.execute(
-        select(func.count(Transaction.id)).where(Transaction.user_id == plaid_item.user_id)
-    )
-    prior_txn_count = int(prior_txn_count_result.scalar_one() or 0)
-
     while has_more:
         request = TransactionsSyncRequest(
             access_token=_get_access_token(plaid_item),
-            options=TransactionsSyncRequestOptions(include_original_description=True),
+            options=TransactionsSyncRequestOptions(
+                include_original_description=True,
+                include_personal_finance_category=True,
+            ),
             **({"cursor": cursor} if cursor else {}),
         )
         response = await _call_plaid(client.transactions_sync, request)
@@ -287,12 +286,8 @@ async def sync_transactions(
             description = txn.name or plaid_original_description or ""
             amount = float(txn.amount)
 
-            # Use Plaid category as default, then override with classifier if available
-            category = (
-                txn.personal_finance_category.primary
-                if txn.personal_finance_category
-                else (txn.category[0] if txn.category else None)
-            )
+            # Plaid PFC (request include_personal_finance_category), then light text hints
+            category = resolved_plaid_category(merchant, description, txn)
             flagged = False
             flag_reason = None
 
@@ -390,8 +385,11 @@ async def sync_transactions(
                 existing_txn.amount = float(txn.amount)
                 existing_txn.pending = txn.pending
                 existing_txn.date = txn.date
-                if txn.personal_finance_category:
-                    existing_txn.category = txn.personal_finance_category.primary
+                new_cat = resolved_plaid_category(
+                    existing_txn.merchant, existing_txn.description, txn
+                )
+                if new_cat:
+                    existing_txn.category = new_cat
                 # Backfill account_id if it was null (e.g. from a transient accounts_get failure)
                 if existing_txn.account_id is None and txn.account_id:
                     existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
@@ -453,11 +451,7 @@ async def sync_transactions(
         has_more = response.has_more
         cursor = response.next_cursor
 
-    await ensure_discipline_window_after_plaid_sync(
-        db,
-        plaid_item.user_id,
-        prior_txn_count=prior_txn_count,
-    )
+    await ensure_discipline_window_after_plaid_sync(db, plaid_item.user_id)
 
     # Update cursor and last sync time
     plaid_item.transaction_cursor = cursor

@@ -126,6 +126,26 @@ class RuleMatchTransactionToGoalTests(unittest.TestCase):
         )
         self.assertEqual(g, "coffee")
 
+    def test_coffee_goal_name_matches_starbucks_via_preset_alias(self):
+        """Goal named 'Coffee' uses coffee-shops keyword list (includes starbucks)."""
+        specs = [
+            GoalSpec(
+                key="coffee",
+                display="Coffee",
+                keywords=tuple(),
+                merchants=tuple(),
+                subcategories=tuple(),
+            )
+        ]
+        g = rule_match_transaction_to_specs(
+            "STARBUCKS STORE 4921",
+            "Card purchase",
+            None,
+            "FOOD_AND_DRINK",
+            specs,
+        )
+        self.assertEqual(g, "coffee")
+
     def test_map_broad_label_to_goal_via_subcategories(self):
         specs = [
             GoalSpec(

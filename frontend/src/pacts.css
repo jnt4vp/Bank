@@ -81,18 +81,103 @@
 }
 
 .pacts-hero {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.95rem;
   margin-bottom: 1.1rem;
 }
 
-.pacts-page-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.9fr);
-  gap: 1.1rem;
-  align-items: start;
+.pacts-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.2rem;
+  width: 100%;
 }
 
-.pacts-primary-column,
-.pacts-secondary-column {
+.pacts-tab-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.pacts-tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.35rem;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  box-shadow: 0 12px 28px rgba(95, 77, 45, 0.05);
+}
+
+.pacts-tab {
+  border: none;
+  background: transparent;
+  color: #68616a;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 0.72rem 1.15rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.pacts-tab:hover {
+  color: #4a424c;
+}
+
+.pacts-tab.is-active {
+  background: rgba(255, 255, 255, 0.82);
+  color: #2f2932;
+  box-shadow: 0 8px 18px rgba(95, 77, 45, 0.08);
+}
+
+.pacts-tab:focus-visible {
+  outline: 2px solid rgba(168, 131, 58, 0.55);
+  outline-offset: 2px;
+}
+
+.pacts-page-messages {
+  width: 100%;
+  max-width: min(720px, 100%);
+}
+
+.pacts-page-message {
+  margin: 0 0 0.5rem;
+}
+
+.pacts-page-message:last-child {
+  margin-bottom: 0;
+}
+
+.pacts-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.pacts-tab-panel-create {
+  max-width: min(720px, 100%);
+  margin-inline: auto;
+}
+
+.pacts-tab-panel-manage {
+  width: 100%;
+}
+
+.pacts-primary-column {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -896,8 +981,14 @@
 }
 
 @media (max-width: 1180px) {
-  .pacts-page-grid {
-    grid-template-columns: 1fr;
+  .pacts-hero-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pacts-hero-top .dashboard-hero-actions {
+    align-self: flex-start;
+    padding-top: 0.2rem;
   }
 
   .pacts-builder-card {

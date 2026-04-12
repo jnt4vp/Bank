@@ -6,8 +6,10 @@ Attribute transactions to user-defined goals using:
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +21,46 @@ from ..schemas.goals import GoalAttributionSpec
 from .classifier import PACT_CATEGORY_KEYWORDS
 from .discipline import normalize_discipline_start
 
+# User goal names (lowercase) often differ from pact preset keys, e.g. "Coffee" vs "coffee shops".
+# Map goal key → PACT_CATEGORY_KEYWORDS key so Starbucks etc. still match.
+_GOAL_KEY_PRESET_ALIASES: dict[str, str] = {
+    "coffee": "coffee shops",
+    "cafe": "coffee shops",
+    "café": "coffee shops",
+    "espresso": "coffee shops",
+    "latte": "coffee shops",
+    "coffeeshop": "coffee shops",
+    "coffee shop": "coffee shops",
+    "coffee shops": "coffee shops",
+    "restaurant": "dining out",
+    "restaurants": "dining out",
+    "dining": "dining out",
+    "eating out": "dining out",
+    "uber": "ride share",
+    "lyft": "ride share",
+    "rideshare": "ride share",
+    "ride share": "ride share",
+    "amazon": "online shopping",
+    "online shopping": "online shopping",
+    "tiktok": "online shopping",
+    "tiktok shop": "online shopping",
+}
+
+
 _CATEGORY_HINTS: dict[str, tuple[str, ...]] = {
+    "coffee": (
+        "coffee",
+        "cafe",
+        "café",
+        "starbucks",
+        "dunkin",
+        "espresso",
+        "latte",
+        "peet",
+        "philz",
+        "dutch bros",
+        "tim hortons",
+    ),
     "food": ("food", "restaurant", "dining", "grocer", "coffee", "cafe", "fast food", "meal"),
     "shop": ("shop", "retail", "merch", "store", "amazon", "clothing", "apparel"),
     "shopping": ("shop", "retail", "merch", "store", "amazon", "clothing", "apparel", "online"),
@@ -116,7 +157,8 @@ def rule_match_transaction_to_specs(
     for spec in specs:
         goal_key = spec.key
 
-        preset_kw = PACT_CATEGORY_KEYWORDS.get(goal_key, [])
+        preset_bucket = _GOAL_KEY_PRESET_ALIASES.get(goal_key, goal_key)
+        preset_kw = PACT_CATEGORY_KEYWORDS.get(preset_bucket, [])
         if preset_kw:
             hit = _match_keywords(combined, preset_kw)
             if hit:
@@ -221,6 +263,51 @@ def _in_calendar_period(tx: Transaction, period_start: date, period_end: date) -
     return period_start <= d <= period_end
 
 
+def _normalize_llm_goal_label(raw: object) -> str:
+    s = str(raw).strip().strip('"').strip("'").strip()
+    s = s.rstrip(".").strip()
+    return s.lower()
+
+
+def _resolve_gkey_from_llm_label(raw: object, specs: list[GoalSpec]) -> str | None:
+    """Map Ollama assignment text to a goal key; tolerate quotes / minor label drift."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text or text.lower() in ("null", "none", "nil"):
+        return None
+    low = _normalize_llm_goal_label(raw)
+    if not low:
+        return None
+    display_to_key = {s.display.strip().lower(): s.key for s in specs}
+    if low in display_to_key:
+        return display_to_key[low]
+    for s in specs:
+        d = s.display.strip().lower()
+        if d == low:
+            return s.key
+    prefix_hits: list[GoalSpec] = []
+    for s in specs:
+        d = s.display.strip().lower()
+        if low.startswith(d) or d.startswith(low):
+            prefix_hits.append(s)
+    if len(prefix_hits) == 1:
+        return prefix_hits[0].key
+    return None
+
+
+def _goals_fingerprint(order_keys: list[str]) -> str:
+    """Stable hash of current goal names so cache invalidates when the set of goals changes."""
+    raw = ",".join(sorted(order_keys))
+    return hashlib.sha256(raw.encode()).hexdigest()[:24]
+
+
+def _goal_spend_contribution(tx: Transaction) -> float:
+    """Count only outflows toward goal caps (Plaid: amount > 0 = spend). Refunds/credits ignored."""
+    a = float(tx.amount or 0)
+    return a if a > 0 else 0.0
+
+
 def _tx_batch_rows(txs: list[Transaction]) -> list[tuple[str, str, str, str | None, float]]:
     return [
         (
@@ -248,12 +335,15 @@ async def compute_goal_spending(
         assign_broad_category_batch_llm,
         assign_goal_labels_rich_batch_llm,
     )
+    from ..repositories.goal_llm_cache import get_goal_llm_cache_entries, upsert_goal_llm_cache_rows
 
     specs = build_goal_specs(goals)
     if not specs:
         return {}, "rules", 0
 
     order_keys = [s.key for s in specs]
+    order_set = set(order_keys)
+    goals_fp = _goals_fingerprint(order_keys)
     spent: dict[str, float] = {k: 0.0 for k in order_keys}
 
     all_txs = await get_transactions_for_user(db, user.id)
@@ -275,64 +365,101 @@ async def compute_goal_spending(
             specs,
         )
         if g is not None:
-            spent[g] = spent.get(g, 0.0) + float(tx.amount or 0)
+            spent[g] = spent.get(g, 0.0) + _goal_spend_contribution(tx)
         else:
             unmatched.append(tx)
 
     llm_count = 0
     any_subcats = any(spec.subcategories for spec in specs)
+    cache_rows: list[tuple[UUID, str | None]] = []
 
     if unmatched and settings.OLLAMA_ENABLED:
-        batch_payload = _tx_batch_rows(unmatched)
+        cache_entries = await get_goal_llm_cache_entries(
+            db,
+            user_id=user.id,
+            period_start=period_start,
+            period_end=period_end,
+            transaction_ids=[tx.id for tx in unmatched],
+        )
 
-        if any_subcats:
-            broad_map = await assign_broad_category_batch_llm(
-                transactions=batch_payload,
-                settings=settings,
-            )
-            still: list[Transaction] = []
-            for tx in unmatched:
-                broad = broad_map.get(str(tx.id))
-                if broad:
-                    gk = map_broad_to_goal_key(broad, specs)
-                    if gk:
-                        spent[gk] = spent.get(gk, 0.0) + float(tx.amount or 0)
-                        llm_count += 1
-                        continue
-                still.append(tx)
-            unmatched = still
+        u_llm: list[Transaction] = []
+        for tx in unmatched:
+            cid = tx.id
+            contrib = _goal_spend_contribution(tx)
+            ent = cache_entries.get(cid)
+            if ent is None:
+                u_llm.append(tx)
+                continue
+            cached_key, _row_fp = ent
+            if cached_key and cached_key in order_set:
+                spent[cached_key] = spent.get(cached_key, 0.0) + contrib
+                continue
+            # LLM already said "no goal" for this txn in this period — never re-run Ollama
+            # when the user adds another goal (fingerprint change), or Coffee totals jump.
+            if cached_key is None:
+                continue
+            u_llm.append(tx)
 
-        if unmatched:
-            public_goals = [
-                GoalSpecPublic(
-                    display=s.display,
-                    keywords=s.keywords,
-                    merchants=s.merchants,
-                    subcategories=s.subcategories,
+        if u_llm:
+            if any_subcats:
+                broad_map = await assign_broad_category_batch_llm(
+                    transactions=_tx_batch_rows(u_llm),
+                    settings=settings,
                 )
-                for s in specs
-            ]
-            rich_map = await assign_goal_labels_rich_batch_llm(
-                transactions=_tx_batch_rows(unmatched),
-                goals=public_goals,
-                settings=settings,
-            )
-            display_to_key = {s.display.strip().lower(): s.key for s in specs}
-            for tx in unmatched:
-                raw = rich_map.get(str(tx.id))
-                if not raw:
-                    continue
-                low = str(raw).strip().lower()
-                gkey = display_to_key.get(low)
-                if gkey is None:
-                    for s in specs:
-                        if s.display.strip().lower() == low:
-                            gkey = s.key
-                            break
-                if gkey is None:
-                    continue
-                spent[gkey] = spent.get(gkey, 0.0) + float(tx.amount or 0)
-                llm_count += 1
+                still: list[Transaction] = []
+                for tx in u_llm:
+                    broad = broad_map.get(str(tx.id))
+                    gk: str | None = None
+                    if broad:
+                        gk = map_broad_to_goal_key(broad, specs)
+                    if gk:
+                        contrib = _goal_spend_contribution(tx)
+                        spent[gk] = spent.get(gk, 0.0) + contrib
+                        llm_count += 1
+                        cache_rows.append((tx.id, gk))
+                    else:
+                        still.append(tx)
+                u_llm = still
+
+            if u_llm:
+                public_goals = [
+                    GoalSpecPublic(
+                        display=s.display,
+                        keywords=s.keywords,
+                        merchants=s.merchants,
+                        subcategories=s.subcategories,
+                    )
+                    for s in specs
+                ]
+                rich_map = await assign_goal_labels_rich_batch_llm(
+                    transactions=_tx_batch_rows(u_llm),
+                    goals=public_goals,
+                    settings=settings,
+                )
+                for tx in u_llm:
+                    raw = rich_map.get(str(tx.id))
+                    gkey = _resolve_gkey_from_llm_label(raw, specs)
+                    contrib = _goal_spend_contribution(tx)
+                    if gkey:
+                        spent[gkey] = spent.get(gkey, 0.0) + contrib
+                        llm_count += 1
+                        cache_rows.append((tx.id, gkey))
+                    else:
+                        cache_rows.append((tx.id, None))
+
+            if cache_rows:
+                await upsert_goal_llm_cache_rows(
+                    db,
+                    user_id=user.id,
+                    period_start=period_start,
+                    period_end=period_end,
+                    goals_fingerprint=goals_fp,
+                    rows=cache_rows,
+                )
+                await db.commit()
+
+    for k in spent:
+        spent[k] = max(0.0, spent[k])
 
     method = "rules+llm" if llm_count else "rules"
     return spent, method, llm_count

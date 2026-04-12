@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTheme } from '../features/theme/useTheme.js'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import {
+  activityTimelineSortKeyMs,
   formatTransactionAmount,
   formatTransactionCategory,
   formatTransactionDate,
@@ -10,25 +11,13 @@ import {
   sortTransactionsByActivityDate,
 } from '../features/transactions/formatters'
 import { apiRequest } from '../lib/api'
+import { dispatchTransactionsUpdated } from '../lib/transactionsEvents'
 import PlaidConnectButton from '../features/plaid/PlaidConnectButton'
 import { getPlaidItems, syncPlaidItem } from '../features/plaid/api'
 import { filterTransactionsForDisciplineWindow } from '../features/pacts/disciplineState'
 import { computePactSavings } from '../features/pacts/savings'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
-
-const CATEGORY_STYLES = {
-  food: 'dot-food',
-  dining: 'dot-food',
-  restaurant: 'dot-food',
-  groceries: 'dot-food',
-  shopping: 'dot-shopping',
-  retail: 'dot-shopping',
-  subscriptions: 'dot-subscriptions',
-  subscription: 'dot-subscriptions',
-  entertainment: 'dot-subscriptions',
-  other: 'dot-other',
-}
 
 function formatCurrency(value) {
   return `$${Number(value || 0).toFixed(2)}`
@@ -41,9 +30,85 @@ function normalizeCategory(category) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
-function getCategoryDotClass(category) {
-  const key = String(category || '').toLowerCase()
-  return CATEGORY_STYLES[key] || 'dot-other'
+/** Browser local calendar month; activity date prefers bank `date`, then `created_at`. Purchases = positive amount. */
+function filterPurchasesInCurrentMonth(transactions) {
+  if (!Array.isArray(transactions) || transactions.length === 0) return []
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  const startMs = new Date(y, m, 1, 0, 0, 0, 0).getTime()
+  const endMs = new Date(y, m + 1, 0, 23, 59, 59, 999).getTime()
+  return transactions.filter((tx) => {
+    const amt = Number(tx.amount || 0)
+    if (!Number.isFinite(amt) || amt <= 0) return false
+    const t = activityTimelineSortKeyMs(tx)
+    if (t === Number.NEGATIVE_INFINITY) return false
+    return t >= startMs && t <= endMs
+  })
+}
+
+const CATEGORY_COLOR_FALLBACKS = ['#d7aa59', '#5a8ec8', '#8aaa28', '#b07d5a', '#9b7ebd', '#3d9a8e']
+
+function categoryColorForLabel(categoryLabel, index) {
+  const s = String(categoryLabel || '').toLowerCase()
+  if (s === 'other') return '#a89f96'
+  if (/(food|dining|grocery|restaurant|coffee|drink|eat)/.test(s)) return '#d7aa59'
+  if (/(shop|retail|merchand|amazon|store|goods|general)/.test(s)) return '#c9a227'
+  if (/(subscri|entertain|stream|media|game|netflix|spotify)/.test(s)) return '#9b8cb8'
+  if (/(transport|gas|travel|uber|lyft|parking|taxi|auto)/.test(s)) return '#3d9a8e'
+  if (/(health|medical|pharmacy|fitness|gym)/.test(s)) return '#5a8ec8'
+  if (/(bill|rent|util|insurance|loan|fee|mortgage)/.test(s)) return '#8a7a68'
+  if (/(income|transfer|deposit|payment)/.test(s)) return '#6a9a4a'
+  return CATEGORY_COLOR_FALLBACKS[index % CATEGORY_COLOR_FALLBACKS.length]
+}
+
+/** Top categories + optional "Other"; percents sum to 100 for display. */
+function buildDisciplineSpendingBreakdown(transactions, normalizeCategoryFn) {
+  const total = transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+
+  if (!transactions.length || total <= 0) {
+    return { items: [], total: 0 }
+  }
+
+  const totals = {}
+  for (const tx of transactions) {
+    const cat = normalizeCategoryFn(tx.category)
+    totals[cat] = (totals[cat] || 0) + Number(tx.amount || 0)
+  }
+
+  const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1])
+  const top4 = sorted.slice(0, 4)
+  const top4Sum = top4.reduce((s, [, amt]) => s + amt, 0)
+  const remainder = total - top4Sum
+
+  const rawItems = top4.map(([cat, amt], i) => ({
+    category: cat,
+    amount: amt,
+    color: categoryColorForLabel(cat, i),
+  }))
+
+  if (remainder > 0.005) {
+    rawItems.push({
+      category: 'Other',
+      amount: remainder,
+      color: categoryColorForLabel('Other', rawItems.length),
+    })
+  }
+
+  const shares = rawItems.map((it) => (it.amount / total) * 100)
+  const rounded = shares.map((sh) => Math.max(0, Math.round(sh)))
+  let drift = 100 - rounded.reduce((a, b) => a + b, 0)
+  if (rounded.length > 0) {
+    const maxI = rounded.indexOf(Math.max(...rounded))
+    rounded[maxI] += drift
+  }
+
+  const items = rawItems.map((it, i) => ({
+    ...it,
+    percent: rounded[i],
+  }))
+
+  return { items, total }
 }
 
 function normalizeText(value) {
@@ -83,7 +148,7 @@ function transactionMatchesPact(tx, pact) {
 }
 
 export default function Dashboard() {
-  const { user, token } = useAuth()
+  const { user, token, refreshUser } = useAuth()
   const location = useLocation()
   const { bg } = useTheme()
   const firstName = user?.name?.split(' ')[0] || 'there'
@@ -101,9 +166,15 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
 
+  const userIdRef = useRef(user?.id)
+  useEffect(() => {
+    userIdRef.current = user?.id
+  }, [user?.id])
+
   const loadDashboardData = useCallback(async (opts = {}) => {
     const silent = opts.silent === true
-    if (!token || !user?.id) {
+    const uid = userIdRef.current
+    if (!token || !uid) {
       setLoading(false)
       return
     }
@@ -116,7 +187,7 @@ export default function Dashboard() {
 
       const [transactionsData, pactsData, plaidItemsData, savingsPayload] = await Promise.all([
         apiRequest('/api/transactions/', { token }),
-        apiRequest(`/api/pacts/user/${user.id}`, { token }),
+        apiRequest(`/api/pacts/user/${uid}`, { token }),
         getPlaidItems(token),
         apiRequest('/api/simulated-savings-transfers/', { token }).catch(() => null),
       ])
@@ -197,14 +268,17 @@ export default function Dashboard() {
         setLoading(false)
       }
     }
-  }, [token, user?.id])
+  }, [token])
 
   useEffect(() => {
     if (location.pathname !== '/dashboard') {
       return
     }
+    if (!token || !user?.id) {
+      return
+    }
     loadDashboardData()
-  }, [location.pathname, location.key, loadDashboardData])
+  }, [location.pathname, location.key, token, user?.id, loadDashboardData])
 
   useEffect(() => {
     if (location.pathname !== '/dashboard') {
@@ -214,15 +288,22 @@ export default function Dashboard() {
       if (document.visibilityState !== 'visible') {
         return
       }
-      loadDashboardData({ silent: true })
+      void loadDashboardData({ silent: true })
+      void refreshUser(token).catch(() => {})
     }
     document.addEventListener('visibilitychange', refetchWhenVisible)
     return () => document.removeEventListener('visibilitychange', refetchWhenVisible)
-  }, [location.pathname, loadDashboardData])
+  }, [location.pathname, loadDashboardData, refreshUser, token])
 
   const handlePlaidConnected = useCallback(async () => {
     await loadDashboardData()
-  }, [loadDashboardData])
+    try {
+      await refreshUser(token)
+    } catch {
+      /* ignore */
+    }
+    dispatchTransactionsUpdated()
+  }, [loadDashboardData, refreshUser, token])
 
   const handleSyncAll = useCallback(async () => {
     if (!token || plaidItems.length === 0) return
@@ -236,12 +317,18 @@ export default function Dashboard() {
       )
 
       await loadDashboardData()
+      try {
+        await refreshUser(token)
+      } catch {
+        /* ignore */
+      }
+      dispatchTransactionsUpdated()
     } catch (err) {
       setError(err.message || 'Failed to sync Plaid transactions.')
     } finally {
       setSyncing(false)
     }
-  }, [plaidItems, token, loadDashboardData])
+  }, [plaidItems, token, loadDashboardData, refreshUser])
 
   const activePacts = useMemo(
     () => pacts.filter((pact) => String(pact.status).toLowerCase() === 'active'),
@@ -352,29 +439,31 @@ export default function Dashboard() {
 
   const bankConnected = plaidItems.length > 0
 
-  const windowSpendingTotal = useMemo(
-    () => disciplineWindowTransactions.reduce((sum, tx) => sum + tx.amount, 0),
-    [disciplineWindowTransactions]
+  const monthPurchaseTransactions = useMemo(
+    () => filterPurchasesInCurrentMonth(transactions),
+    [transactions]
   )
 
-  const categoryBreakdown = useMemo(() => {
-    if (disciplineWindowTransactions.length === 0) return []
+  const monthCategorySpending = useMemo(
+    () => buildDisciplineSpendingBreakdown(monthPurchaseTransactions, normalizeCategory),
+    [monthPurchaseTransactions]
+  )
 
-    const totals = disciplineWindowTransactions.reduce((acc, tx) => {
-      const category = normalizeCategory(tx.category)
-      acc[category] = (acc[category] || 0) + tx.amount
-      return acc
-    }, {})
+  const monthSpendingTotal = monthCategorySpending.total
+  const monthSpendChartDenominator = monthSpendingTotal > 0 ? monthSpendingTotal : 1
+  const categoryBreakdown = monthCategorySpending.items
 
-    return Object.entries(totals)
-      .map(([category, amount]) => ({
-        category,
-        amount,
-        percent: windowSpendingTotal > 0 ? Math.round((amount / windowSpendingTotal) * 100) : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 4)
-  }, [disciplineWindowTransactions, windowSpendingTotal])
+  const calendarMonthLabel = new Date().toLocaleString('default', {
+    month: 'long',
+    year: 'numeric',
+  })
+
+  const monthSpendAriaLabel =
+    categoryBreakdown.length === 0
+      ? `No category spending recorded for ${calendarMonthLabel}`
+      : `Spending this month (${calendarMonthLabel}): ${categoryBreakdown
+          .map((row) => `${row.category} ${formatCurrency(row.amount)}, ${row.percent} percent`)
+          .join('; ')}`
 
   const pactSavingsFromRules = useMemo(() => {
     return computePactSavings({
@@ -559,181 +648,246 @@ export default function Dashboard() {
               </p>
             </div>
 
-            <div className="dashboard-score-ring">
-              <div className="dashboard-score-ring-inner">
+            <div className="dashboard-score-meter">
+              <p className="dashboard-score-meter-value">
                 {loading || disciplineScore === null ? '—' : `${disciplineScore}%`}
+              </p>
+              <div className="dashboard-score-meter-track" aria-hidden="true">
+                <div
+                  className="dashboard-score-meter-fill"
+                  style={{
+                    width: loading || disciplineScore === null ? '0%' : `${disciplineScore}%`,
+                  }}
+                />
               </div>
             </div>
           </div>
         </section>
 
         <section className="dashboard-content-grid">
-          <div className="dashboard-card dashboard-panel dashboard-panel-hero">
-            <div className="dashboard-panel-header">
-              <h2>Discipline window spending</h2>
-              <span>{formatCurrency(windowSpendingTotal)} total</span>
-            </div>
-
-            <div className="dashboard-analytics-card">
-              <div className="dashboard-donut-wrap">
-                <div className="dashboard-donut">
-                  <div className="dashboard-donut-center">{formatCurrency(windowSpendingTotal)}</div>
-                </div>
+          <div className="dashboard-content-column dashboard-content-column--activity">
+            <div className="dashboard-card dashboard-panel dashboard-panel-hero">
+              <div className="dashboard-panel-header">
+                <h2>This month&apos;s spending</h2>
+                <span>
+                  {calendarMonthLabel} · {formatCurrency(monthSpendingTotal)} total
+                </span>
               </div>
 
-              <div className="dashboard-category-list">
+              <div className="dashboard-analytics-card dashboard-analytics-card--discipline">
                 {categoryBreakdown.length === 0 ? (
-                  <p className="dashboard-empty">
-                    No purchases in your discipline window yet — same window as your score and analytics.
-                  </p>
+                  <div className="discipline-spend-empty">
+                    <p className="dashboard-empty">
+                      No purchases recorded for {calendarMonthLabel} yet (positive amounts, by bank date when
+                      available).
+                    </p>
+                    <p className="discipline-spend-hint">
+                      Connect and sync your bank, or add purchases dated this month, to see your category chart
+                      here. Discipline score still uses your separate score window.
+                    </p>
+                    <Link className="discipline-spend-link" to="/analytics">
+                      Open analytics →
+                    </Link>
+                  </div>
                 ) : (
-                  categoryBreakdown.map((item) => (
-                    <div key={item.category}>
-                      <div className="dashboard-category-row">
-                        <span>
-                          <i className={`dot ${getCategoryDotClass(item.category)}`} />
-                          {item.category}
-                        </span>
-                        <strong>{item.percent}%</strong>
+                  <>
+                    <div className="discipline-spend-summary">
+                      <div>
+                        <p className="discipline-spend-kicker">{calendarMonthLabel}</p>
+                        <p className="discipline-spend-total">{formatCurrency(monthSpendingTotal)}</p>
+                        <p className="discipline-spend-sub">
+                          {monthPurchaseTransactions.length} purchase
+                          {monthPurchaseTransactions.length === 1 ? '' : 's'} · calendar month (local time)
+                        </p>
                       </div>
-                      <div className="dashboard-category-bar">
-                        <span style={{ width: `${item.percent}%` }} />
+                      <Link
+                        className="discipline-spend-link discipline-spend-link--pill"
+                        to="/analytics"
+                      >
+                        Details →
+                      </Link>
+                    </div>
+
+                    <div className="discipline-spend-chart-block">
+                      <div className="discipline-spend-mix-head">
+                        <p className="discipline-spend-mix-label">Spending by category</p>
+                        <span className="discipline-spend-mix-caption">Bar height = share of month</span>
+                      </div>
+                      <div
+                        className="discipline-spend-chart"
+                        role="img"
+                        aria-label={monthSpendAriaLabel}
+                      >
+                        <div className="discipline-spend-chart-plot">
+                          <div
+                            className="discipline-spend-chart-grid"
+                            style={{
+                              minWidth: `max(100%, ${categoryBreakdown.length * 72 + Math.max(0, categoryBreakdown.length - 1) * 8}px)`,
+                            }}
+                          >
+                            {categoryBreakdown.map((item) => {
+                              const sharePct =
+                                (item.amount / monthSpendChartDenominator) * 100
+                              return (
+                                <div key={item.category} className="discipline-spend-chart-col">
+                                  <div className="discipline-spend-chart-track">
+                                    <div
+                                      className="discipline-spend-chart-bar"
+                                      style={{
+                                        height: `${sharePct}%`,
+                                        backgroundColor: item.color,
+                                      }}
+                                      title={`${item.category}: ${formatCurrency(item.amount)} (${item.percent}% of month)`}
+                                    />
+                                  </div>
+                                  <span className="discipline-spend-chart-value">
+                                    {formatCurrency(item.amount)}
+                                  </span>
+                                  <span className="discipline-spend-chart-pct">{item.percent}%</span>
+                                  <span className="discipline-spend-chart-label">{item.category}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  ))
+                  </>
                 )}
               </div>
             </div>
-          </div>
 
-          <div className="dashboard-card dashboard-panel">
-            <div className="dashboard-panel-header">
-              <h2>Your Pact Rules</h2>
-            </div>
+            <div className="dashboard-card dashboard-panel">
+              <div className="dashboard-panel-header">
+                <h2>Recent Activity</h2>
+                <Link className="dashboard-link-button" to="/transactions">
+                  See All →
+                </Link>
+              </div>
 
-            {loading && <p className="dashboard-empty">Loading pact rules...</p>}
+              {loading && <p className="dashboard-empty">Loading transactions...</p>}
+              {error && <p className="dashboard-error">{error}</p>}
 
-            {!loading && activeRuleCards.length === 0 && (
-              <p className="dashboard-empty">No active pact rules yet.</p>
-            )}
+              {!loading && !error && recentPurchases.length === 0 && (
+                <p className="dashboard-empty">
+                  {bankConnected
+                    ? 'Your bank is connected, but no transactions have synced yet. Try Sync Bank.'
+                    : 'No activity yet. Add a purchase or connect your bank to populate this feed.'}
+                </p>
+              )}
 
-            {!loading &&
-              activeRuleCards.length > 0 &&
-              activeRuleCards.map((rule) => (
-                <div className="dashboard-rule-card" key={rule.id}>
-                  <div>
-                    <h3>{rule.title}</h3>
-                    <p>{rule.subtitle}</p>
-                    {rule.note ? <p>{rule.note}</p> : null}
-                  </div>
-                  <button
-                    className={`dashboard-toggle ${rule.enabled ? 'is-on' : ''}`}
-                    aria-label="Rule status"
-                    type="button"
-                  />
+              {!loading && !error && recentPurchases.length > 0 && (
+                <div className="dashboard-activity-list">
+                  {recentPurchases.map((tx) => {
+                    const sid = String(tx.id)
+                    const savingsForTx = savingsTransfersBySourceTxId[sid] || []
+                    return (
+                      <div className="dashboard-activity-group" key={sid}>
+                        <div className="dashboard-activity-row">
+                          <div className="dashboard-activity-main">
+                            <div className="dashboard-activity-merchant">{tx.merchant}</div>
+                            <div className="dashboard-activity-meta">
+                              {formatTransactionDate(tx)} ·{' '}
+                              {formatTransactionCategory(tx.category)}
+                            </div>
+
+                            {tx.flagged && (
+                              <div className="dashboard-activity-flag">
+                                ⚠ {tx.flag_reason || 'Flagged purchase'}
+                              </div>
+                            )}
+
+                            {!tx.flagged && tx.description && (
+                              <div className="dashboard-activity-meta">{tx.description}</div>
+                            )}
+                          </div>
+
+                          <div
+                            className={`dashboard-activity-amount ${
+                              tx.flagged ? 'is-flagged' : ''
+                            }`}
+                          >
+                            {formatTransactionAmount(tx.amount)}
+                          </div>
+                        </div>
+
+                        {savingsForTx.map((tr) => (
+                          <div
+                            className="dashboard-activity-row dashboard-activity-simulated-transfer dashboard-activity-savings-followup"
+                            key={`sim-${tr.id}`}
+                          >
+                            <div className="dashboard-activity-main">
+                              <div className="dashboard-activity-merchant">
+                                {formatCurrency(tr.amount)} moved to savings (simulated)
+                              </div>
+                              <div className="dashboard-activity-meta">
+                                From this purchase · your discipline savings % applied (simulated, not a bank
+                                transfer)
+                              </div>
+                            </div>
+                            <div className="dashboard-activity-amount is-simulated-savings">
+                              {formatCurrency(tr.amount)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
-
-            <Link className="dashboard-link-button" to="/pacts">
-            Manage Rules →
-            </Link>
+              )}
+            </div>
           </div>
 
-          <div className="dashboard-card dashboard-panel">
-            <div className="dashboard-panel-header">
-              <h2>Recent Activity</h2>
-              <Link className="dashboard-link-button" to="/transactions">
-                See All →
+          <div className="dashboard-content-column dashboard-content-column--stack">
+            <div className="dashboard-card dashboard-panel">
+              <div className="dashboard-panel-header">
+                <h2>Your Pact Rules</h2>
+              </div>
+
+              {loading && <p className="dashboard-empty">Loading pact rules...</p>}
+
+              {!loading && activeRuleCards.length === 0 && (
+                <p className="dashboard-empty">No active pact rules yet.</p>
+              )}
+
+              {!loading &&
+                activeRuleCards.length > 0 &&
+                activeRuleCards.map((rule) => (
+                  <div className="dashboard-rule-card" key={rule.id}>
+                    <div>
+                      <h3>{rule.title}</h3>
+                      <p>{rule.subtitle}</p>
+                      {rule.note ? <p>{rule.note}</p> : null}
+                    </div>
+                    <button
+                      className={`dashboard-toggle ${rule.enabled ? 'is-on' : ''}`}
+                      aria-label="Rule status"
+                      type="button"
+                    />
+                  </div>
+                ))}
+
+              <Link className="dashboard-link-button" to="/pacts">
+                Manage Rules →
               </Link>
             </div>
 
-            {loading && <p className="dashboard-empty">Loading transactions...</p>}
-            {error && <p className="dashboard-error">{error}</p>}
-
-            {!loading && !error && recentPurchases.length === 0 && (
-              <p className="dashboard-empty">
-                {bankConnected
-                  ? 'Your bank is connected, but no transactions have synced yet. Try Sync Bank.'
-                  : 'No activity yet. Add a purchase or connect your bank to populate this feed.'}
-              </p>
-            )}
-
-            {!loading && !error && recentPurchases.length > 0 && (
-              <div className="dashboard-activity-list">
-                {recentPurchases.map((tx) => {
-                  const sid = String(tx.id)
-                  const savingsForTx = savingsTransfersBySourceTxId[sid] || []
-                  return (
-                    <div className="dashboard-activity-group" key={sid}>
-                      <div className="dashboard-activity-row">
-                        <div className="dashboard-activity-main">
-                          <div className="dashboard-activity-merchant">{tx.merchant}</div>
-                          <div className="dashboard-activity-meta">
-                            {formatTransactionDate(tx)} ·{' '}
-                            {formatTransactionCategory(tx.category)}
-                          </div>
-
-                          {tx.flagged && (
-                            <div className="dashboard-activity-flag">
-                              ⚠ {tx.flag_reason || 'Flagged purchase'}
-                            </div>
-                          )}
-
-                          {!tx.flagged && tx.description && (
-                            <div className="dashboard-activity-meta">{tx.description}</div>
-                          )}
-                        </div>
-
-                        <div
-                          className={`dashboard-activity-amount ${
-                            tx.flagged ? 'is-flagged' : ''
-                          }`}
-                        >
-                          {formatTransactionAmount(tx.amount)}
-                        </div>
-                      </div>
-
-                      {savingsForTx.map((tr) => (
-                        <div
-                          className="dashboard-activity-row dashboard-activity-simulated-transfer dashboard-activity-savings-followup"
-                          key={`sim-${tr.id}`}
-                        >
-                          <div className="dashboard-activity-main">
-                            <div className="dashboard-activity-merchant">
-                              {formatCurrency(tr.amount)} moved to savings (simulated)
-                            </div>
-                            <div className="dashboard-activity-meta">
-                              From this purchase · your discipline savings % applied (simulated, not a bank
-                              transfer)
-                            </div>
-                          </div>
-                          <div className="dashboard-activity-amount is-simulated-savings">
-                            {formatCurrency(tr.amount)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
+            <div className="dashboard-card dashboard-panel dashboard-panel-insight">
+              <div className="dashboard-panel-header">
+                <h2>Insight</h2>
               </div>
-            )}
-          </div>
 
-          <div className="dashboard-card dashboard-panel dashboard-panel-insight">
-            <div className="dashboard-panel-header">
-              <h2>Insight</h2>
-            </div>
-
-            <div className="dashboard-insight-card">
-              <p className="dashboard-insight-headline">
-                <strong>{insightText.headline}</strong>
-              </p>
-              <div className="dashboard-insight-suggestion-block">
-                <p className="dashboard-insight-suggestion-label">Suggestion</p>
-                <p className="dashboard-insight-suggestion-body">{insightText.suggestion}</p>
-              </div>
-              <div className="dashboard-insight-chart" aria-hidden="true">
-                <div className="dashboard-insight-line" />
+              <div className="dashboard-insight-card">
+                <p className="dashboard-insight-headline">
+                  <strong>{insightText.headline}</strong>
+                </p>
+                <div className="dashboard-insight-suggestion-block">
+                  <p className="dashboard-insight-suggestion-label">Suggestion</p>
+                  <p className="dashboard-insight-suggestion-body">{insightText.suggestion}</p>
+                </div>
+                <div className="dashboard-insight-chart" aria-hidden="true">
+                  <div className="dashboard-insight-line" />
+                </div>
               </div>
             </div>
           </div>

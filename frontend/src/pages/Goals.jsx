@@ -1,36 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { fetchGoalSpendingBreakdown, localCalendarMonthBounds } from '../features/goals/api'
-import { useTransactions } from '../features/transactions/useTransactions'
+import { TRANSACTIONS_UPDATED_EVENT } from '../lib/transactionsEvents'
+import { formatTransactionAmount } from '../features/transactions/formatters'
 import DashboardTopbar from '../components/DashboardTopbar'
 import '../dashboard.css'
 import '../goals.css'
 
 const GOALS_KEY = 'pactbank_goals'
 
-function parseSignalLines(raw) {
-  if (!raw || typeof raw !== 'string') return []
-  return raw
-    .split(/[\n,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
 function normalizeStoredGoal(raw) {
   if (!raw || typeof raw !== 'object') return null
   const category = String(raw.category || '').trim()
   if (!category) return null
-  const limit = Number(raw.limit)
+  const limit = parseFloat(raw.limit)
   if (!Number.isFinite(limit) || limit <= 0) return null
-  const arr = (v) => (Array.isArray(v) ? v.map(String).filter(Boolean) : [])
   return {
     id: raw.id || crypto.randomUUID(),
     category,
     limit,
-    keywords: arr(raw.keywords),
-    merchants: arr(raw.merchants),
-    subcategories: arr(raw.subcategories),
   }
 }
 
@@ -48,43 +37,62 @@ function persist(goals) {
   localStorage.setItem(GOALS_KEY, JSON.stringify(goals))
 }
 
-function formatSignalSummary(goal) {
-  const k = (goal.keywords || []).length
-  const m = (goal.merchants || []).length
-  const s = (goal.subcategories || []).length
-  const parts = []
-  if (k) parts.push(`${k} keyword${k === 1 ? '' : 's'}`)
-  if (m) parts.push(`${m} merchant${m === 1 ? '' : 's'}`)
-  if (s) parts.push(`${s} theme${s === 1 ? '' : 's'}`)
-  return parts.length ? parts.join(' · ') : 'Name-only (add signals below for better matching)'
+/** Case-insensitive lookup — API keys are lowercase goal names. */
+function spentForGoal(spentByGoal, category) {
+  const want = String(category || '').toLowerCase().trim()
+  if (!want) return 0
+  const map = spentByGoal && typeof spentByGoal === 'object' ? spentByGoal : {}
+  let n = 0
+  if (Object.prototype.hasOwnProperty.call(map, want)) {
+    n = Number(map[want])
+  } else {
+    for (const [k, v] of Object.entries(map)) {
+      if (String(k).toLowerCase().trim() === want) {
+        n = Number(v)
+        break
+      }
+    }
+  }
+  if (!Number.isFinite(n)) return 0
+  return Math.max(0, n)
+}
+
+function goalSpendZone(spent, limit) {
+  const lim = Number(limit) || 0
+  if (lim <= 0) return 'good'
+  const ratio = spent / lim
+  if (ratio > 1) return 'over'
+  if (ratio >= 0.8) return 'warn'
+  return 'good'
+}
+
+function goalToApiPayload(g) {
+  return {
+    category: g.category,
+    keywords: [],
+    merchants: [],
+    subcategories: [],
+  }
 }
 
 export default function Goals() {
   const { token } = useAuth()
   const { key: navigationKey } = useLocation()
-  const { loading: txLoading } = useTransactions(token, navigationKey)
   const [goals, setGoals] = useState(loadGoals)
-  const [category, setCategory] = useState('')
-  const [limit, setLimit] = useState('')
-  const [keywordsDraft, setKeywordsDraft] = useState('')
-  const [merchantsDraft, setMerchantsDraft] = useState('')
-  const [subcategoriesDraft, setSubcategoriesDraft] = useState('')
+  const [goalName, setGoalName] = useState('')
+  const [monthlyLimit, setMonthlyLimit] = useState('')
   const [formError, setFormError] = useState('')
   const [spentByGoal, setSpentByGoal] = useState({})
   const [attributionLoading, setAttributionLoading] = useState(false)
   const [attributionError, setAttributionError] = useState(null)
   const [attributionMeta, setAttributionMeta] = useState(null)
 
-  const goalsSignature = useMemo(
+  /** Only goal names drive attribution; changing limits does not refetch or re-run Ollama. */
+  const goalsAttributionSignature = useMemo(
     () =>
       JSON.stringify(
         goals.map((g) => ({
-          id: g.id,
           category: g.category,
-          limit: g.limit,
-          keywords: g.keywords || [],
-          merchants: g.merchants || [],
-          subcategories: g.subcategories || [],
         }))
       ),
     [goals]
@@ -96,72 +104,110 @@ export default function Goals() {
   const showAttributionMeta = hasGoalsToFetch ? attributionMeta : null
   const attributionLoadingUi = hasGoalsToFetch && attributionLoading
 
-  useEffect(() => {
-    if (!hasGoalsToFetch) {
-      return undefined
-    }
+  const goalsRef = useRef(goals)
+  goalsRef.current = goals
 
-    let cancelled = false
-    const { period_start, period_end } = localCalendarMonthBounds()
-    const payload = {
-      goals: goals.map((g) => ({
-        category: g.category,
-        keywords: g.keywords || [],
-        merchants: g.merchants || [],
-        subcategories: g.subcategories || [],
-      })),
-      period_start,
-      period_end,
-    }
+  const attributionRequestIdRef = useRef(0)
 
-    void (async () => {
-      await Promise.resolve()
-      if (cancelled) return
-      setAttributionLoading(true)
-      setAttributionError(null)
+  const loadGoalSpending = useCallback(
+    async (opts = {}) => {
+      const silent = opts.silent === true
+      const g = goalsRef.current
+      if (!token || g.length === 0) return
+
+      const requestId = ++attributionRequestIdRef.current
+      if (!silent) {
+        setAttributionLoading(true)
+        setAttributionError(null)
+      }
+
+      const { period_start, period_end } = localCalendarMonthBounds()
+      const payload = {
+        goals: g.map(goalToApiPayload),
+        period_start,
+        period_end,
+      }
+
       try {
         const data = await fetchGoalSpendingBreakdown(token, payload)
-        if (cancelled) return
-        setSpentByGoal(data.spent_by_goal || {})
+        if (requestId !== attributionRequestIdRef.current) return
+        const raw = data?.spent_by_goal
+        const normalized = {}
+        if (raw && typeof raw === 'object') {
+          for (const [k, v] of Object.entries(raw)) {
+            const key = String(k).toLowerCase().trim()
+            const n = Number(v)
+            if (!key || !Number.isFinite(n)) continue
+            normalized[key] = (normalized[key] || 0) + n
+          }
+        }
+        setSpentByGoal(normalized)
         setAttributionMeta({
-          method: data.method,
-          llm_assigned_count: data.llm_assigned_count ?? 0,
+          method: data?.method,
+          llm_assigned_count: data?.llm_assigned_count ?? 0,
         })
       } catch (err) {
-        if (cancelled) return
-        setSpentByGoal({})
-        setAttributionMeta(null)
-        setAttributionError(err.message || 'Could not load goal spending.')
+        if (requestId !== attributionRequestIdRef.current) return
+        if (!silent) {
+          setSpentByGoal({})
+          setAttributionMeta(null)
+          setAttributionError(err?.message || 'Could not load goal spending.')
+        }
       } finally {
-        if (!cancelled) setAttributionLoading(false)
+        if (requestId === attributionRequestIdRef.current && !silent) {
+          setAttributionLoading(false)
+        }
       }
-    })()
+    },
+    [token]
+  )
 
-    return () => {
-      cancelled = true
+  useEffect(() => {
+    if (!hasGoalsToFetch) return undefined
+    void loadGoalSpending({ silent: false })
+    return undefined
+  }, [hasGoalsToFetch, goalsAttributionSignature, navigationKey, loadGoalSpending])
+
+  useEffect(() => {
+    if (!hasGoalsToFetch) return undefined
+
+    function refetchWhenFresh() {
+      void loadGoalSpending({ silent: true })
     }
-    // goalsSignature tracks goal rows + signals (replaces listing `goals` in deps)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, goalsSignature, navigationKey, hasGoalsToFetch])
 
-  const onTrack = goals.filter(
-    (g) => (displaySpentByGoal[g.category.toLowerCase()] || 0) <= g.limit
-  ).length
+    function onVisible() {
+      if (document.visibilityState === 'visible') {
+        refetchWhenFresh()
+      }
+    }
+
+    window.addEventListener(TRANSACTIONS_UPDATED_EVENT, refetchWhenFresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener(TRANSACTIONS_UPDATED_EVENT, refetchWhenFresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [hasGoalsToFetch, loadGoalSpending])
+
+  const onTrack = goals.filter((g) => {
+    const spent = spentForGoal(displaySpentByGoal, g.category)
+    return goalSpendZone(spent, g.limit) !== 'over'
+  }).length
 
   function addGoal(e) {
     e.preventDefault()
-    const trimmed = category.trim()
-    const limitNum = parseFloat(limit)
+    const trimmed = goalName.trim()
+    const limitNum = parseFloat(monthlyLimit)
     if (!trimmed) {
-      setFormError('Enter a category name.')
+      setFormError('Enter a goal name.')
       return
     }
-    if (!limitNum || limitNum <= 0) {
-      setFormError('Enter a valid dollar limit.')
+    if (!Number.isFinite(limitNum) || limitNum <= 0) {
+      setFormError('Enter a valid monthly limit.')
       return
     }
-    if (goals.find((g) => g.category.toLowerCase() === trimmed.toLowerCase())) {
-      setFormError('A goal for that category already exists.')
+    if (goals.some((g) => g.category.toLowerCase() === trimmed.toLowerCase())) {
+      setFormError('You already have a goal with that name.')
       return
     }
     const updated = [
@@ -170,18 +216,12 @@ export default function Goals() {
         id: crypto.randomUUID(),
         category: trimmed,
         limit: limitNum,
-        keywords: parseSignalLines(keywordsDraft),
-        merchants: parseSignalLines(merchantsDraft),
-        subcategories: parseSignalLines(subcategoriesDraft),
       },
     ]
     setGoals(updated)
     persist(updated)
-    setCategory('')
-    setLimit('')
-    setKeywordsDraft('')
-    setMerchantsDraft('')
-    setSubcategoriesDraft('')
+    setGoalName('')
+    setMonthlyLimit('')
     setFormError('')
   }
 
@@ -202,10 +242,10 @@ export default function Goals() {
           <h1 className="dashboard-title">Goals</h1>
           <p className="dashboard-subtitle">
             {goals.length === 0
-              ? 'Set monthly spending caps and tie each goal to keywords, merchants, or themes.'
-              : txLoading || attributionLoadingUi
-                ? 'Loading your progress...'
-                : `${onTrack} of ${goals.length} goals on track in ${monthLabel}.`}
+              ? 'Name what you want to cap and set a monthly dollar limit. We match spending from your linked accounts.'
+              : attributionLoadingUi
+                ? 'Loading your progress…'
+                : `${onTrack} of ${goals.length} on track in ${monthLabel}.`}
           </p>
         </div>
       </section>
@@ -219,7 +259,7 @@ export default function Goals() {
             </div>
 
             {goals.length === 0 ? (
-              <p className="dashboard-empty">No goals yet. Add one to get started.</p>
+              <p className="dashboard-empty">No goals yet. Add one on the right.</p>
             ) : (
               <div className="goals-list">
                 {showAttributionError && (
@@ -228,27 +268,39 @@ export default function Goals() {
                   </p>
                 )}
                 {goals.map((goal) => {
-                  const spent = displaySpentByGoal[goal.category.toLowerCase()] || 0
-                  const pct = Math.min((spent / goal.limit) * 100, 100)
-                  const over = spent > goal.limit
-                  const remaining = goal.limit - spent
+                  const spent = spentForGoal(displaySpentByGoal, goal.category)
+                  const limit = Number(goal.limit) || 0
+                  const ratio = limit > 0 ? spent / limit : 0
+                  const pctDisplay = Math.min(ratio * 100, 100)
+                  const zone = goalSpendZone(spent, limit)
+                  const over = zone === 'over'
+                  const remaining = limit - spent
+
+                  const badgeLabel =
+                    zone === 'over'
+                      ? `Over by ${formatTransactionAmount(Math.max(0, spent - limit))}`
+                      : zone === 'warn'
+                        ? 'Close to limit'
+                        : 'On track'
 
                   return (
-                    <div key={goal.id} className={`goals-card ${over ? 'is-over' : ''}`}>
+                    <div
+                      key={goal.id}
+                      className={`goals-card goals-card--zone-${zone}`}
+                    >
                       <div className="goals-card-top">
                         <div>
                           <p className="goals-card-category">{goal.category}</p>
-                          <p className="goals-card-signals">{formatSignalSummary(goal)}</p>
                           <p className="goals-card-meta">
-                            ${spent.toFixed(0)} spent
+                            <strong>{formatTransactionAmount(spent)}</strong> spent this month
                             {over
-                              ? ` — $${Math.abs(remaining).toFixed(0)} over`
-                              : ` — $${remaining.toFixed(0)} left`}
+                              ? ` — ${formatTransactionAmount(Math.abs(remaining))} over limit`
+                              : ` — ${formatTransactionAmount(Math.max(0, remaining))} left`}
                           </p>
                         </div>
                         <div className="goals-card-right">
-                          <span className={`goals-badge ${over ? 'is-over' : 'is-ok'}`}>
-                            {over ? `Over by $${(spent - goal.limit).toFixed(0)}` : 'On track'}
+                          <span className={`goals-badge goals-badge--${zone}`}>
+                            {badgeLabel}
                           </span>
                           <button
                             type="button"
@@ -260,13 +312,27 @@ export default function Goals() {
                           </button>
                         </div>
                       </div>
-                      <div className="goals-bar-track">
+                      <div
+                        className={`goals-bar-track goals-bar-track--${zone}`}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(Math.min(ratio * 100, 100))}
+                        aria-valuetext={
+                          zone === 'over'
+                            ? `${Math.round(ratio * 100)}% of limit, over budget`
+                            : `${Math.round(ratio * 100)}% of monthly limit used`
+                        }
+                        aria-label={`${goal.category}: ${zone === 'good' ? 'on track' : zone === 'warn' ? 'close to limit' : 'over limit'}`}
+                      >
                         <div
-                          className={`goals-bar-fill ${over ? 'is-over' : ''}`}
-                          style={{ width: `${pct}%` }}
+                          className={`goals-bar-fill goals-bar-fill--${zone}`}
+                          style={{ width: `${pctDisplay}%` }}
                         />
                       </div>
-                      <p className="goals-card-limit">Limit: ${goal.limit.toFixed(0)} / mo</p>
+                      <p className="goals-card-limit">
+                        Limit: {formatTransactionAmount(limit)} / mo
+                      </p>
                     </div>
                   )
                 })}
@@ -276,18 +342,19 @@ export default function Goals() {
 
           <div className="dashboard-card dashboard-panel goals-form-panel">
             <div className="dashboard-panel-header">
-              <h2>New Goal</h2>
+              <h2>Add goal</h2>
             </div>
 
             <form className="goals-form" onSubmit={addGoal}>
               <label className="pacts-field">
-                <span>Category name</span>
+                <span>Goal</span>
                 <input
                   className="pacts-input"
                   type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="e.g. Fun, Coffee, Beauty"
+                  value={goalName}
+                  onChange={(e) => setGoalName(e.target.value)}
+                  placeholder="e.g. Coffee, Dining out"
+                  autoComplete="off"
                 />
               </label>
               <label className="pacts-field">
@@ -295,65 +362,28 @@ export default function Goals() {
                 <input
                   className="pacts-input"
                   type="number"
-                  min={1}
-                  value={limit}
-                  onChange={(e) => setLimit(e.target.value)}
+                  min={0.01}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={monthlyLimit}
+                  onChange={(e) => setMonthlyLimit(e.target.value)}
                   placeholder="200"
-                />
-              </label>
-
-              <label className="pacts-field">
-                <span>Keywords (optional)</span>
-                <textarea
-                  className="pacts-input goals-textarea"
-                  value={keywordsDraft}
-                  onChange={(e) => setKeywordsDraft(e.target.value)}
-                  placeholder="Comma or line: ticketmaster, arcade, concert, steam"
-                  rows={2}
-                />
-              </label>
-              <label className="pacts-field">
-                <span>Merchants (optional)</span>
-                <textarea
-                  className="pacts-input goals-textarea"
-                  value={merchantsDraft}
-                  onChange={(e) => setMerchantsDraft(e.target.value)}
-                  placeholder="Substring match on merchant: dave and buster, amc, sephora"
-                  rows={2}
-                />
-              </label>
-              <label className="pacts-field">
-                <span>Themes / subcategories (optional)</span>
-                <textarea
-                  className="pacts-input goals-textarea"
-                  value={subcategoriesDraft}
-                  onChange={(e) => setSubcategoriesDraft(e.target.value)}
-                  placeholder={
-                    'For abstract goals — match bank text & map AI labels.\n' +
-                    'e.g. entertainment, shopping, gaming, nightlife'
-                  }
-                  rows={2}
                 />
               </label>
 
               {formError && <p className="dashboard-error">{formError}</p>}
               <button type="submit" className="dashboard-button">
-                Add Goal
+                Save goal
               </button>
             </form>
 
-            <p className="goals-hint">
-              Rules run first (keywords, merchants, themes, then preset lists like fast food). If Ollama
-              is enabled, we classify into broad themes (entertainment, shopping, …) and map them using
-              your theme list, then use a second pass with full context for anything still unclear.
+            <p className="goals-hint goals-hint--short">
+              Totals use transactions in the current calendar month.
+              {showAttributionMeta?.method === 'rules+llm' &&
+              showAttributionMeta.llm_assigned_count > 0
+                ? ` AI helped match ${showAttributionMeta.llm_assigned_count} transaction${showAttributionMeta.llm_assigned_count === 1 ? '' : 's'}.`
+                : null}
             </p>
-            {showAttributionMeta?.method === 'rules+llm' &&
-            showAttributionMeta.llm_assigned_count > 0 ? (
-              <p className="goals-hint">
-                AI matched {showAttributionMeta.llm_assigned_count} transaction
-                {showAttributionMeta.llm_assigned_count === 1 ? '' : 's'} this month (Ollama).
-              </p>
-            ) : null}
           </div>
         </section>
       </section>

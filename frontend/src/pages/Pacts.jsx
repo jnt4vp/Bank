@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { apiRequest } from '../lib/api'
@@ -555,8 +555,6 @@ function CreatePactCard({
   onTogglePartner,
   onSavePartner,
   onCancelPartnerEdit,
-  error,
-  success,
   submitting,
   onSubmit,
 }) {
@@ -703,9 +701,6 @@ function CreatePactCard({
           <PactPreviewBox previewSentence={previewSentence} />
         </section>
 
-        {error ? <p className="dashboard-error">{error}</p> : null}
-        {success ? <p className="pacts-success">{success}</p> : null}
-
         <button type="submit" className="dashboard-button pacts-create-button" disabled={submitting}>
           {submitting ? 'Creating...' : 'Create Pact'}
         </button>
@@ -756,6 +751,9 @@ export default function Pacts() {
     if (typeof window === 'undefined') return true
     return window.localStorage.getItem(PACTS_SKIP_INTRO_KEY) !== '0'
   })
+
+  const [pactsMainTab, setPactsMainTab] = useState('manage')
+  const pactsInitialTabApplied = useRef(false)
 
   const disciplineModeEnabled = (user?.discipline_ui_mode || 'discipline') === 'discipline'
   const disciplineScore = Number(user?.discipline_score ?? 100)
@@ -952,6 +950,14 @@ export default function Pacts() {
     loadPartners()
   }, [loadPartners])
 
+  useEffect(() => {
+    if (loading || pactsInitialTabApplied.current) return
+    pactsInitialTabApplied.current = true
+    if (pacts.length === 0) {
+      setPactsMainTab('create')
+    }
+  }, [loading, pacts.length])
+
   const lockPact = useCallback(
     async (pact) => {
       if (!token || !pact?.id) return
@@ -1042,6 +1048,7 @@ export default function Pacts() {
       setNewAccountabilityPartnerIds([])
       setSuccess('Pact created.')
       await loadPacts()
+      setPactsMainTab('manage')
     } catch (err) {
       setError(err?.message || 'Failed to create pact.')
     } finally {
@@ -1259,6 +1266,7 @@ export default function Pacts() {
     setCustomCategory('')
     setError(null)
     setSuccess('')
+    setPactsMainTab('create')
   }
 
   function openPactsMain() {
@@ -1361,245 +1369,78 @@ export default function Pacts() {
 
       {/* Hero keeps the page aligned with the rest of the app while clarifying the main task. */}
       <section className="dashboard-hero pacts-hero">
-        <div className="dashboard-hero-copy">
-          <h1 className="dashboard-title">Manage your pacts, {firstName}</h1>
-          <p className="dashboard-subtitle">
-            Build a rule, choose a consequence, and keep your spending habits intentional.
-          </p>
+        <div className="pacts-hero-top">
+          <div className="dashboard-hero-copy">
+            <h1 className="dashboard-title">Manage your pacts, {firstName}</h1>
+            <p className="dashboard-subtitle">
+              Build a rule, choose a consequence, and keep your spending habits intentional.
+            </p>
+          </div>
+
+          <div className="dashboard-hero-actions">
+            <div className="dashboard-pill">
+              {loading ? 'Loading pacts...' : `${activePacts.length} Active Pacts`}
+            </div>
+            <Link className="dashboard-pill dashboard-pill-action" to="/dashboard">
+              Back to Dashboard →
+            </Link>
+          </div>
         </div>
 
-        <div className="dashboard-hero-actions">
-          <div className="dashboard-pill">
-            {loading ? 'Loading pacts...' : `${activePacts.length} Active Pacts`}
+        <div className="pacts-tab-toolbar">
+          <div className="pacts-tab-row" role="tablist" aria-label="Pacts">
+            <button
+              type="button"
+              role="tab"
+              id="pacts-tab-create"
+              aria-selected={pactsMainTab === 'create'}
+              aria-controls="pacts-panel-create"
+              className={`pacts-tab ${pactsMainTab === 'create' ? 'is-active' : ''}`}
+              onClick={() => setPactsMainTab('create')}
+            >
+              Create Pact
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="pacts-tab-manage"
+              aria-selected={pactsMainTab === 'manage'}
+              aria-controls="pacts-panel-manage"
+              className={`pacts-tab ${pactsMainTab === 'manage' ? 'is-active' : ''}`}
+              onClick={() => setPactsMainTab('manage')}
+            >
+              Manage Pacts
+            </button>
           </div>
-          <Link className="dashboard-pill dashboard-pill-action" to="/dashboard">
-            Back to Dashboard →
-          </Link>
+
+          {error || success ? (
+            <div className="pacts-page-messages" aria-live="polite">
+              {error ? <p className="dashboard-error pacts-page-message">{error}</p> : null}
+              {success ? <p className="pacts-success pacts-page-message">{success}</p> : null}
+            </div>
+          ) : null}
         </div>
       </section>
 
       <section className="dashboard-overview-shell">
-        <StatsRow
-          totalPacts={pacts.length}
-          presetPactCount={presetPactCount}
-          customPactCount={customPactCount}
-          activePacts={activePacts.length}
-          disciplineModeEnabled={disciplineModeEnabled}
-          disciplineUiState={disciplineUiState}
-        />
+        {pactsMainTab === 'manage' ? (
+          <StatsRow
+            totalPacts={pacts.length}
+            presetPactCount={presetPactCount}
+            customPactCount={customPactCount}
+            activePacts={activePacts.length}
+            disciplineModeEnabled={disciplineModeEnabled}
+            disciplineUiState={disciplineUiState}
+          />
+        ) : null}
 
-        <section className="pacts-page-grid">
-          {/* Left column gives more visual weight to current pact management and weekly context. */}
-          <div className="pacts-primary-column">
-            <div className="dashboard-card dashboard-panel pacts-your-pacts-card">
-              <div className="dashboard-panel-header">
-                <h2>Your Pacts</h2>
-                <span>{pacts.length} total</span>
-              </div>
-
-              {loading ? <p className="dashboard-empty">Loading pacts...</p> : null}
-
-              {!loading && pacts.length === 0 ? (
-                <EmptyPactsCard
-                  onSuggestionSelect={handleQuickSuggestion}
-                  onShowIntro={showPactsIntro}
-                />
-              ) : null}
-
-              {!loading && pacts.length > 0 ? (
-                <div className="pacts-library-list">
-                  {pacts.map((pact) => {
-                    const lockedUntil = pact.locked_until ? new Date(pact.locked_until) : null
-                    const isLocked = lockedUntil ? lockedUntil > now : false
-                    const remainingMs = lockedUntil ? lockedUntil.getTime() - now.getTime() : 0
-                    const remainingLabel = lockedUntil ? formatRemaining(remainingMs) : null
-                    const settings = settingsFormState[pact.id] || {
-                      accountability_type: 'email',
-                      discipline_savings_percentage: 0,
-                    }
-
-                    return (
-                      <div key={pact.id} className="pacts-library-stack">
-                        {/* Existing pacts are presented as premium cards so the page feels product-ready. */}
-                        <PactCard
-                          pact={pact}
-                          settings={settings}
-                          isLocked={isLocked}
-                          remainingLabel={remainingLabel}
-                          onEdit={() => startEditingPact(pact)}
-                          onToggleStatus={() => handleTogglePactStatus(pact)}
-                          onDelete={() => handleDeletePact(pact.id, isLocked)}
-                          statusSaving={statusSavingId === pact.id}
-                          deleting={deletingId === pact.id}
-                        />
-
-                        {editingPactId === pact.id ? (
-                          <div className="pacts-edit-shell">
-                            <div className="pacts-edit-card">
-                              <h4 className="pacts-edit-title">Edit pact</h4>
-
-                              {settingsLoading[pact.id] ? (
-                                <p className="pacts-accountability-loading">Loading settings…</p>
-                              ) : (
-                                <>
-                                  {settingsError[pact.id] ? (
-                                    <p className="dashboard-error">{settingsError[pact.id]}</p>
-                                  ) : null}
-
-                                  {pact.preset_category ? (
-                                    <label className="pacts-field">
-                                      <span>Preset category</span>
-                                      <select
-                                        value={editingValues.preset_category}
-                                        onChange={(event) =>
-                                          setEditingValues((prev) => ({
-                                            ...prev,
-                                            preset_category: event.target.value,
-                                          }))
-                                        }
-                                        className="pacts-input"
-                                        disabled={isLocked}
-                                      >
-                                        {PRESET_OPTIONS.map((option) => (
-                                          <option key={option} value={option}>
-                                            {option}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    </label>
-                                  ) : (
-                                    <label className="pacts-field">
-                                      <span>Track a merchant or keyword</span>
-                                      <input
-                                        type="text"
-                                        value={editingValues.custom_category}
-                                        onChange={(event) =>
-                                          setEditingValues((prev) => ({
-                                            ...prev,
-                                            custom_category: event.target.value,
-                                          }))
-                                        }
-                                        className="pacts-input"
-                                        disabled={isLocked}
-                                      />
-                                    </label>
-                                  )}
-
-                                  <div className="pacts-builder-grid">
-                                    <label className="pacts-field">
-                                      <span>Penalty savings (%)</span>
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        max={100}
-                                        value={settings.discipline_savings_percentage}
-                                        onChange={(event) =>
-                                          updateFormState(pact.id, {
-                                            discipline_savings_percentage: event.target.value,
-                                          })
-                                        }
-                                        className="pacts-input"
-                                        disabled={isLocked}
-                                      />
-                                    </label>
-
-                                    <label className="pacts-field">
-                                      <span>Lock card</span>
-                                      <select
-                                        value={editingValues.lockDays}
-                                        onChange={(event) =>
-                                          setEditingValues((prev) => ({
-                                            ...prev,
-                                            lockDays: Number(event.target.value),
-                                          }))
-                                        }
-                                        className="pacts-input"
-                                        disabled={isLocked}
-                                      >
-                                        <option value={0}>No lock</option>
-                                        <option value={1}>1 day</option>
-                                        <option value={7}>1 week</option>
-                                        <option value={30}>30 days</option>
-                                      </select>
-                                    </label>
-                                  </div>
-
-                                  <label className="pacts-field">
-                                    <span>Alert recipient</span>
-                                    <select
-                                      value={settings.accountability_type}
-                                      onChange={(event) =>
-                                        updateFormState(pact.id, {
-                                          accountability_type: event.target.value,
-                                        })
-                                      }
-                                      className="pacts-input"
-                                      disabled={isLocked}
-                                    >
-                                      <option value="email">Email yourself</option>
-                                      <option value="friend">Accountability partner</option>
-                                      <option value="none">None</option>
-                                    </select>
-                                  </label>
-
-                                  {settings.accountability_type === 'friend' ? (
-                                    <div className="pacts-helper-card">
-                                      <BuilderPartnerManager
-                                        partners={partners}
-                                        selectedPartnerIds={settings.accountability_partner_ids || []}
-                                        onTogglePartner={(partnerId) =>
-                                          toggleEditPartnerSelection(pact.id, partnerId)
-                                        }
-                                        partnersLoading={partnersLoading}
-                                        partnerSaving={partnerSaving}
-                                        partnerForm={partnerForm}
-                                        setPartnerForm={setPartnerForm}
-                                        editingPartnerId={editingPartnerId}
-                                        onStartAdd={handleStartAddPartner}
-                                        onEditPartner={beginEditPartner}
-                                        onSavePartner={handleSavePartner}
-                                        onCancel={resetPartnerForm}
-                                        showComposer={showPartnerComposer}
-                                        disabled={isLocked}
-                                      />
-                                    </div>
-                                  ) : null}
-
-                                  <div className="pacts-edit-actions">
-                                    <button
-                                      type="button"
-                                      className="dashboard-button"
-                                      disabled={libraryPactSaving === pact.id || isLocked}
-                                      onClick={() => handleSavePact(pact)}
-                                    >
-                                      {libraryPactSaving === pact.id ? 'Saving...' : 'Save'}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="pacts-secondary-button"
-                                      onClick={cancelEditing}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : null}
-            </div>
-
-            <WeeklySummaryCard />
-            <DisciplineTipsCard />
-          </div>
-
-          {/* Right column keeps creation guided and calmer than a typical stacked settings form. */}
-          <div className="pacts-secondary-column">
+        {pactsMainTab === 'create' ? (
+          <div
+            id="pacts-panel-create"
+            role="tabpanel"
+            aria-labelledby="pacts-tab-create"
+            className="pacts-tab-panel pacts-tab-panel-create"
+          >
             <CreatePactCard
               selectedPreset={selectedPreset}
               setSelectedPreset={setSelectedPreset}
@@ -1627,14 +1468,229 @@ export default function Pacts() {
               onTogglePartner={toggleBuilderPartnerSelection}
               onSavePartner={handleSavePartner}
               onCancelPartnerEdit={resetPartnerForm}
-              error={error}
-              success={success}
               submitting={submitting}
               onSubmit={handleCreatePact}
             />
             <QuickLinksCard />
           </div>
-        </section>
+        ) : null}
+
+        {pactsMainTab === 'manage' ? (
+          <div
+            id="pacts-panel-manage"
+            role="tabpanel"
+            aria-labelledby="pacts-tab-manage"
+            className="pacts-tab-panel pacts-tab-panel-manage"
+          >
+            <div className="pacts-primary-column">
+              <div className="dashboard-card dashboard-panel pacts-your-pacts-card">
+                <div className="dashboard-panel-header">
+                  <h2>Your Pacts</h2>
+                  <span>{pacts.length} total</span>
+                </div>
+
+                {loading ? <p className="dashboard-empty">Loading pacts...</p> : null}
+
+                {!loading && pacts.length === 0 ? (
+                  <EmptyPactsCard
+                    onSuggestionSelect={handleQuickSuggestion}
+                    onShowIntro={showPactsIntro}
+                  />
+                ) : null}
+
+                {!loading && pacts.length > 0 ? (
+                  <div className="pacts-library-list">
+                    {pacts.map((pact) => {
+                      const lockedUntil = pact.locked_until ? new Date(pact.locked_until) : null
+                      const isLocked = lockedUntil ? lockedUntil > now : false
+                      const remainingMs = lockedUntil ? lockedUntil.getTime() - now.getTime() : 0
+                      const remainingLabel = lockedUntil ? formatRemaining(remainingMs) : null
+                      const settings = settingsFormState[pact.id] || {
+                        accountability_type: 'email',
+                        discipline_savings_percentage: 0,
+                      }
+
+                      return (
+                        <div key={pact.id} className="pacts-library-stack">
+                          <PactCard
+                            pact={pact}
+                            settings={settings}
+                            isLocked={isLocked}
+                            remainingLabel={remainingLabel}
+                            onEdit={() => startEditingPact(pact)}
+                            onToggleStatus={() => handleTogglePactStatus(pact)}
+                            onDelete={() => handleDeletePact(pact.id, isLocked)}
+                            statusSaving={statusSavingId === pact.id}
+                            deleting={deletingId === pact.id}
+                          />
+
+                          {editingPactId === pact.id ? (
+                            <div className="pacts-edit-shell">
+                              <div className="pacts-edit-card">
+                                <h4 className="pacts-edit-title">Edit pact</h4>
+
+                                {settingsLoading[pact.id] ? (
+                                  <p className="pacts-accountability-loading">Loading settings…</p>
+                                ) : (
+                                  <>
+                                    {settingsError[pact.id] ? (
+                                      <p className="dashboard-error">{settingsError[pact.id]}</p>
+                                    ) : null}
+
+                                    {pact.preset_category ? (
+                                      <label className="pacts-field">
+                                        <span>Preset category</span>
+                                        <select
+                                          value={editingValues.preset_category}
+                                          onChange={(event) =>
+                                            setEditingValues((prev) => ({
+                                              ...prev,
+                                              preset_category: event.target.value,
+                                            }))
+                                          }
+                                          className="pacts-input"
+                                          disabled={isLocked}
+                                        >
+                                          {PRESET_OPTIONS.map((option) => (
+                                            <option key={option} value={option}>
+                                              {option}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </label>
+                                    ) : (
+                                      <label className="pacts-field">
+                                        <span>Track a merchant or keyword</span>
+                                        <input
+                                          type="text"
+                                          value={editingValues.custom_category}
+                                          onChange={(event) =>
+                                            setEditingValues((prev) => ({
+                                              ...prev,
+                                              custom_category: event.target.value,
+                                            }))
+                                          }
+                                          className="pacts-input"
+                                          disabled={isLocked}
+                                        />
+                                      </label>
+                                    )}
+
+                                    <div className="pacts-builder-grid">
+                                      <label className="pacts-field">
+                                        <span>Penalty savings (%)</span>
+                                        <input
+                                          type="number"
+                                          min={0}
+                                          max={100}
+                                          value={settings.discipline_savings_percentage}
+                                          onChange={(event) =>
+                                            updateFormState(pact.id, {
+                                              discipline_savings_percentage: event.target.value,
+                                            })
+                                          }
+                                          className="pacts-input"
+                                          disabled={isLocked}
+                                        />
+                                      </label>
+
+                                      <label className="pacts-field">
+                                        <span>Lock card</span>
+                                        <select
+                                          value={editingValues.lockDays}
+                                          onChange={(event) =>
+                                            setEditingValues((prev) => ({
+                                              ...prev,
+                                              lockDays: Number(event.target.value),
+                                            }))
+                                          }
+                                          className="pacts-input"
+                                          disabled={isLocked}
+                                        >
+                                          <option value={0}>No lock</option>
+                                          <option value={1}>1 day</option>
+                                          <option value={7}>1 week</option>
+                                          <option value={30}>30 days</option>
+                                        </select>
+                                      </label>
+                                    </div>
+
+                                    <label className="pacts-field">
+                                      <span>Alert recipient</span>
+                                      <select
+                                        value={settings.accountability_type}
+                                        onChange={(event) =>
+                                          updateFormState(pact.id, {
+                                            accountability_type: event.target.value,
+                                          })
+                                        }
+                                        className="pacts-input"
+                                        disabled={isLocked}
+                                      >
+                                        <option value="email">Email yourself</option>
+                                        <option value="friend">Accountability partner</option>
+                                        <option value="none">None</option>
+                                      </select>
+                                    </label>
+
+                                    {settings.accountability_type === 'friend' ? (
+                                      <div className="pacts-helper-card">
+                                        <BuilderPartnerManager
+                                          partners={partners}
+                                          selectedPartnerIds={settings.accountability_partner_ids || []}
+                                          onTogglePartner={(partnerId) =>
+                                            toggleEditPartnerSelection(pact.id, partnerId)
+                                          }
+                                          partnersLoading={partnersLoading}
+                                          partnerSaving={partnerSaving}
+                                          partnerForm={partnerForm}
+                                          setPartnerForm={setPartnerForm}
+                                          editingPartnerId={editingPartnerId}
+                                          onStartAdd={handleStartAddPartner}
+                                          onEditPartner={beginEditPartner}
+                                          onSavePartner={handleSavePartner}
+                                          onCancel={resetPartnerForm}
+                                          showComposer={showPartnerComposer}
+                                          disabled={isLocked}
+                                        />
+                                      </div>
+                                    ) : null}
+
+                                    <div className="pacts-edit-actions">
+                                      <button
+                                        type="button"
+                                        className="dashboard-button"
+                                        disabled={libraryPactSaving === pact.id || isLocked}
+                                        onClick={() => handleSavePact(pact)}
+                                      >
+                                        {libraryPactSaving === pact.id ? 'Saving...' : 'Save'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="pacts-secondary-button"
+                                        onClick={cancelEditing}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              <WeeklySummaryCard />
+              <DisciplineTipsCard />
+              <QuickLinksCard />
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
   )

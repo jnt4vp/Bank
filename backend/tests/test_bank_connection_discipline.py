@@ -1,4 +1,4 @@
-"""Discipline baseline opens only after bank link + first empty-ledger sync."""
+"""Discipline baseline opens after bank link + first sync that finishes with window still unset."""
 from __future__ import annotations
 
 import unittest
@@ -25,12 +25,12 @@ class EnsureDisciplineAfterPlaidTest(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         session.execute = AsyncMock(return_value=r1)
 
-        await ensure_discipline_window_after_plaid_sync(session, uid, prior_txn_count=0)
+        await ensure_discipline_window_after_plaid_sync(session, uid)
 
         self.assertIsNone(user.discipline_score_started_at)
         self.assertEqual(session.execute.await_count, 1)
 
-    async def test_skips_second_bank_when_prior_txns_exist(self):
+    async def test_sets_cutoff_when_ledger_already_had_rows(self):
         uid = uuid4()
         user = SimpleNamespace(
             discipline_score_started_at=None,
@@ -38,12 +38,31 @@ class EnsureDisciplineAfterPlaidTest(unittest.IsolatedAsyncioTestCase):
         )
         r1 = MagicMock()
         r1.scalar_one_or_none.return_value = user
+        r2 = MagicMock()
+        r2.scalar_one.return_value = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=[r1, r2])
+
+        await ensure_discipline_window_after_plaid_sync(session, uid)
+
+        self.assertIsNotNone(user.discipline_score_started_at)
+        self.assertEqual(session.execute.await_count, 2)
+
+    async def test_skips_when_discipline_window_already_open(self):
+        uid = uuid4()
+        existing = datetime(2026, 1, 15, tzinfo=timezone.utc)
+        user = SimpleNamespace(
+            discipline_score_started_at=existing,
+            bank_connected_at=datetime.now(timezone.utc),
+        )
+        r1 = MagicMock()
+        r1.scalar_one_or_none.return_value = user
         session = AsyncMock()
         session.execute = AsyncMock(return_value=r1)
 
-        await ensure_discipline_window_after_plaid_sync(session, uid, prior_txn_count=4)
+        await ensure_discipline_window_after_plaid_sync(session, uid)
 
-        self.assertIsNone(user.discipline_score_started_at)
+        self.assertIs(user.discipline_score_started_at, existing)
         self.assertEqual(session.execute.await_count, 1)
 
     async def test_sets_cutoff_when_bank_linked_and_ledger_was_empty(self):
@@ -59,7 +78,7 @@ class EnsureDisciplineAfterPlaidTest(unittest.IsolatedAsyncioTestCase):
         session = AsyncMock()
         session.execute = AsyncMock(side_effect=[r1, r2])
 
-        await ensure_discipline_window_after_plaid_sync(session, uid, prior_txn_count=0)
+        await ensure_discipline_window_after_plaid_sync(session, uid)
 
         self.assertIsNotNone(user.discipline_score_started_at)
         self.assertEqual(session.execute.await_count, 2)

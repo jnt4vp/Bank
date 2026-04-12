@@ -26,22 +26,19 @@ def normalize_discipline_start(value: datetime) -> datetime:
 
 def resolve_discipline_score_cutoff_after_bank_sync(
     *,
-    prior_txn_count: int,
     clock_now: datetime,
     max_transaction_created_at: datetime | None,
-) -> datetime | None:
-    """Compute ``discipline_score_started_at`` after the first post-link sync(s).
+) -> datetime:
+    """Compute discipline window cutoff right after a Plaid sync completes.
 
-    Only the user's **first** ledger population (``prior_txn_count == 0``) opens the
-    window so a second linked bank does not reset the baseline.
+    Uses wall-clock ``clock_now``. If the latest transaction ``created_at`` is still
+    at or after that instant (same microsecond batch), bump to ``max + 1µs`` so the
+    just-imported rows stay **outside** the window. Only transactions ingested on later
+    syncs count — whether the ledger was empty or already had rows before this sync.
 
-    The cutoff is the wall-clock completion of sync (bank connection), not derived from
-    imported historical rows. If every inserted row shares the same ``created_at`` as
-    ``clock_now``, bump just past ``max_transaction_created_at`` so backfill rows are
-    excluded.
+    Call only when ``user.discipline_score_started_at`` is still ``NULL``; once set,
+    a second bank link must not reset it.
     """
-    if prior_txn_count != 0:
-        return None
     cutoff = normalize_discipline_start(clock_now)
     if max_transaction_created_at is None:
         return cutoff
@@ -79,18 +76,13 @@ async def count_transactions_for_discipline_score(
 async def ensure_discipline_window_after_plaid_sync(
     db: AsyncSession,
     user_id: UUID,
-    *,
-    prior_txn_count: int,
 ) -> None:
-    """Set discipline baseline after bank link + sync (first empty-ledger sync only)."""
+    """Set discipline baseline after bank link + sync when the window is still unset."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or user.discipline_score_started_at is not None:
         return
     if user.bank_connected_at is None:
-        return
-
-    if prior_txn_count != 0:
         return
 
     max_result = await db.execute(
@@ -99,12 +91,9 @@ async def ensure_discipline_window_after_plaid_sync(
     max_ca = max_result.scalar_one()
 
     cutoff = resolve_discipline_score_cutoff_after_bank_sync(
-        prior_txn_count=prior_txn_count,
         clock_now=datetime.now(timezone.utc),
         max_transaction_created_at=max_ca,
     )
-    if cutoff is None:
-        return
     user.discipline_score_started_at = cutoff
 
 

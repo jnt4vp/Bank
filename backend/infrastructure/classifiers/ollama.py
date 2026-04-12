@@ -65,7 +65,8 @@ class OllamaClassifierAdapter:
         prompt = _build_prompt(merchant, description, amount, user_categories)
 
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            timeout = httpx.Timeout(settings.OLLAMA_TIMEOUT)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     f"{settings.OLLAMA_URL}/api/generate",
                     json={
@@ -102,7 +103,8 @@ class OllamaClassifierAdapter:
             return None
         except httpx.TimeoutException:
             logger.warning(
-                "Ollama request timed out (10s) at %s — skipping LLM classification",
+                "Ollama request timed out (%.0fs) at %s — skipping LLM classification",
+                settings.OLLAMA_TIMEOUT,
                 settings.OLLAMA_URL,
             )
             return None

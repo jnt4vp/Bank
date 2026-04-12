@@ -7,7 +7,11 @@ class GoalAttributionSpec(BaseModel):
     """User goal with optional detectable signals (not name-only)."""
 
     category: str = Field(..., min_length=1, max_length=120)
-    keywords: list[str] = Field(default_factory=list, max_length=40)
+    keywords: list[str] = Field(
+        default_factory=list,
+        max_length=1,
+        description="At most one extra hint for rule/AI matching; Ollama handles broader categorization.",
+    )
     merchants: list[str] = Field(default_factory=list, max_length=40)
     subcategories: list[str] = Field(
         default_factory=list,
@@ -23,7 +27,22 @@ class GoalAttributionSpec(BaseModel):
             raise ValueError("category must not be empty")
         return s
 
-    @field_validator("keywords", "merchants", "subcategories", mode="before")
+    @field_validator("keywords", mode="before")
+    @classmethod
+    def clean_keywords(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            return []
+        out: list[str] = []
+        for item in value:
+            s = str(item).strip()
+            if s and len(s) <= 80:
+                out.append(s)
+                break
+        return out[:1]
+
+    @field_validator("merchants", "subcategories", mode="before")
     @classmethod
     def clean_string_lists(cls, value: object) -> list[str]:
         if value is None:

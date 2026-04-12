@@ -44,21 +44,21 @@ class UserUpdateDashboardForceSkyTest(unittest.TestCase):
 
 
 class ResolveDisciplineCutoffTest(unittest.TestCase):
-    def test_prior_ledger_skips_cutoff(self):
+    def test_max_before_clock_uses_wall_clock(self):
         t = datetime(2026, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
-        self.assertIsNone(
+        older = datetime(2026, 3, 1, 12, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(
             resolve_discipline_score_cutoff_after_bank_sync(
-                prior_txn_count=3,
                 clock_now=t,
-                max_transaction_created_at=t,
+                max_transaction_created_at=older,
             ),
+            t,
         )
 
-    def test_first_link_empty_ledger_uses_wall_clock(self):
+    def test_no_transactions_uses_wall_clock(self):
         t = datetime(2026, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
         self.assertEqual(
             resolve_discipline_score_cutoff_after_bank_sync(
-                prior_txn_count=0,
                 clock_now=t,
                 max_transaction_created_at=None,
             ),
@@ -69,7 +69,6 @@ class ResolveDisciplineCutoffTest(unittest.TestCase):
         clock = datetime(2026, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
         max_ca = datetime(2026, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
         out = resolve_discipline_score_cutoff_after_bank_sync(
-            prior_txn_count=0,
             clock_now=clock,
             max_transaction_created_at=max_ca,
         )
