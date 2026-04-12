@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -25,9 +26,9 @@ class PlaidItem(Base):
     )
     item_id: Mapped[str] = mapped_column(String(255), unique=True)
     access_token: Mapped[str] = mapped_column(Text)
-    institution_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    transaction_cursor: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_synced_at: Mapped[datetime | None] = mapped_column(
+    institution_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    transaction_cursor: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(

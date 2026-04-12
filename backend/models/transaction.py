@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime, timezone
+from typing import Optional
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -26,7 +27,7 @@ class Transaction(Base):
     merchant: Mapped[str] = mapped_column(String(255))
     description: Mapped[str] = mapped_column(Text)
     amount: Mapped[float] = mapped_column(Numeric(10, 2))
-    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     flagged: Mapped[bool] = mapped_column(default=False)
     flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     alert_sent: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -36,15 +37,15 @@ class Transaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     # Plaid-sourced fields (nullable — null means manually created)
-    plaid_transaction_id: Mapped[str | None] = mapped_column(
+    plaid_transaction_id: Mapped[Optional[str]] = mapped_column(
         String(255), unique=True, nullable=True
     )
-    plaid_original_description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    account_id: Mapped[uuid.UUID | None] = mapped_column(
+    plaid_original_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    account_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("accounts.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     pending: Mapped[bool] = mapped_column(Boolean, default=False)

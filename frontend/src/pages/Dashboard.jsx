@@ -62,6 +62,32 @@ function categoryColorForLabel(categoryLabel, index) {
   return CATEGORY_COLOR_FALLBACKS[index % CATEGORY_COLOR_FALLBACKS.length]
 }
 
+/** Groups purchases by calendar month for the last N months. */
+function buildMonthlySpendingData(transactions, numMonths = 6) {
+  const now = new Date()
+  const months = []
+  for (let i = numMonths - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push({
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      label: d.toLocaleString('default', { month: 'short' }),
+      total: 0,
+    })
+  }
+  for (const tx of transactions) {
+    const amt = Number(tx.amount || 0)
+    if (!Number.isFinite(amt) || amt <= 0) continue
+    const dateStr = tx.date || tx.created_at
+    if (!dateStr) continue
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) continue
+    const bucket = months.find((b) => b.year === d.getFullYear() && b.month === d.getMonth())
+    if (bucket) bucket.total += amt
+  }
+  return months
+}
+
 /** Top categories + optional "Other"; percents sum to 100 for display. */
 function buildDisciplineSpendingBreakdown(transactions, normalizeCategoryFn) {
   const total = transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
@@ -453,6 +479,29 @@ export default function Dashboard() {
   const monthSpendChartDenominator = monthSpendingTotal > 0 ? monthSpendingTotal : 1
   const categoryBreakdown = monthCategorySpending.items
 
+  const monthlySpendingData = useMemo(
+    () => buildMonthlySpendingData(transactions, 6),
+    [transactions]
+  )
+
+  const disciplineWindowSpendTotal = useMemo(
+    () =>
+      disciplineWindowTransactions.reduce((sum, tx) => {
+        const amt = Number(tx.amount || 0)
+        return sum + (Number.isFinite(amt) && amt > 0 ? amt : 0)
+      }, 0),
+    [disciplineWindowTransactions]
+  )
+
+  const disciplineWindowCategorySpending = useMemo(
+    () =>
+      buildDisciplineSpendingBreakdown(
+        disciplineWindowTransactions.filter((tx) => Number(tx.amount || 0) > 0),
+        normalizeCategory
+      ),
+    [disciplineWindowTransactions]
+  )
+
   const calendarMonthLabel = new Date().toLocaleString('default', {
     month: 'long',
     year: 'numeric',
@@ -624,8 +673,11 @@ export default function Dashboard() {
               </div>
 
               <div className="dashboard-card">
-                <p className="dashboard-card-label">Transactions (window)</p>
-                <p className="dashboard-stat">{disciplineWindowTransactions.length}</p>
+                <p className="dashboard-card-label">Window Spending</p>
+                <p className="dashboard-stat">{formatCurrency(disciplineWindowSpendTotal)}</p>
+                <p className="dashboard-card-footnote">
+                  {disciplineWindowTransactions.length} transaction{disciplineWindowTransactions.length === 1 ? '' : 's'} · discipline window
+                </p>
               </div>
             </>
           )}
@@ -757,6 +809,69 @@ export default function Dashboard() {
               </div>
             </div>
 
+            <div className="dashboard-card dashboard-panel dashboard-window-spend-panel">
+              <div className="dashboard-panel-header">
+                <h2>Discipline Window Spending</h2>
+                <span>{formatCurrency(disciplineWindowSpendTotal)} total</span>
+              </div>
+
+              {disciplineWindowTransactions.length === 0 ? (
+                <p className="dashboard-empty">
+                  No transactions in your discipline window yet. Spending is tracked from your score start date forward.
+                </p>
+              ) : (
+                <div className="dashboard-window-spend-body">
+                  <div className="dashboard-window-spend-stats">
+                    <div className="dashboard-window-spend-stat">
+                      <span className="dashboard-window-spend-stat-value">{formatCurrency(disciplineWindowSpendTotal)}</span>
+                      <span className="dashboard-window-spend-stat-label">Total spend</span>
+                    </div>
+                    <div className="dashboard-window-spend-stat">
+                      <span className="dashboard-window-spend-stat-value">{disciplineWindowTransactions.length}</span>
+                      <span className="dashboard-window-spend-stat-label">Purchases</span>
+                    </div>
+                    <div className="dashboard-window-spend-stat">
+                      <span className="dashboard-window-spend-stat-value is-flagged">{flaggedTransactions.length}</span>
+                      <span className="dashboard-window-spend-stat-label">Flagged</span>
+                    </div>
+                    <div className="dashboard-window-spend-stat">
+                      <span className="dashboard-window-spend-stat-value">
+                        {disciplineWindowTransactions.length > 0
+                          ? formatCurrency(disciplineWindowSpendTotal / disciplineWindowTransactions.length)
+                          : '—'}
+                      </span>
+                      <span className="dashboard-window-spend-stat-label">Avg / purchase</span>
+                    </div>
+                  </div>
+
+                  {disciplineWindowCategorySpending.items.length > 0 && (
+                    <div className="dashboard-window-spend-categories">
+                      <p className="dashboard-window-spend-cat-label">Breakdown by category</p>
+                      {disciplineWindowCategorySpending.items.map((item) => (
+                        <div key={item.category} className="dashboard-window-spend-cat-row">
+                          <div className="dashboard-window-spend-cat-info">
+                            <span
+                              className="dashboard-window-spend-cat-dot"
+                              style={{ background: item.color }}
+                            />
+                            <span className="dashboard-window-spend-cat-name">{item.category}</span>
+                          </div>
+                          <div className="dashboard-window-spend-cat-bar-wrap">
+                            <div
+                              className="dashboard-window-spend-cat-bar"
+                              style={{ width: `${item.percent}%`, background: item.color }}
+                            />
+                          </div>
+                          <span className="dashboard-window-spend-cat-amount">{formatCurrency(item.amount)}</span>
+                          <span className="dashboard-window-spend-cat-pct">{item.percent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="dashboard-card dashboard-panel">
               <div className="dashboard-panel-header">
                 <h2>Recent Activity</h2>
@@ -839,6 +954,71 @@ export default function Dashboard() {
           </div>
 
           <div className="dashboard-content-column dashboard-content-column--stack">
+            <div className="dashboard-card dashboard-panel">
+              <div className="dashboard-panel-header">
+                <h2>Monthly Spending</h2>
+                <span>Last 6 months</span>
+              </div>
+              {monthlySpendingData.every((m) => m.total === 0) ? (
+                <p className="dashboard-empty">No spending data yet — sync your bank to populate this chart.</p>
+              ) : (() => {
+                const W = 260, H = 96
+                const PAD_L = 38, PAD_R = 8, PAD_T = 8, PAD_B = 22
+                const chartW = W - PAD_L - PAD_R
+                const chartH = H - PAD_T - PAD_B
+                const maxTotal = Math.max(...monthlySpendingData.map((d) => d.total), 1)
+                const n = monthlySpendingData.length
+                const pts = monthlySpendingData.map((d, i) => ({
+                  ...d,
+                  x: PAD_L + (n > 1 ? i / (n - 1) : 0.5) * chartW,
+                  y: PAD_T + chartH - (d.total / maxTotal) * chartH,
+                }))
+                const lineStr = pts
+                  .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+                  .join(' ')
+                const areaStr =
+                  lineStr +
+                  ` L${pts[n - 1].x.toFixed(1)},${(PAD_T + chartH).toFixed(1)}` +
+                  ` L${pts[0].x.toFixed(1)},${(PAD_T + chartH).toFixed(1)} Z`
+                const fmtAxis = (v) =>
+                  v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`
+                return (
+                  <svg
+                    viewBox={`0 0 ${W} ${H}`}
+                    style={{ width: '100%', height: 'auto', overflow: 'visible', display: 'block', marginTop: '0.5rem' }}
+                    aria-label={`Monthly spending chart: ${monthlySpendingData.map((m) => `${m.label} $${m.total.toFixed(2)}`).join(', ')}`}
+                  >
+                    <defs>
+                      <linearGradient id="ms-area-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#d4a24c" stopOpacity="0.32" />
+                        <stop offset="100%" stopColor="#d4a24c" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <text x={PAD_L - 5} y={PAD_T + 4} textAnchor="end" fontSize="7.5" fill="#8a828c">
+                      {fmtAxis(maxTotal)}
+                    </text>
+                    <text x={PAD_L - 5} y={PAD_T + chartH} textAnchor="end" fontSize="7.5" fill="#8a828c">
+                      $0
+                    </text>
+                    <line x1={PAD_L} y1={PAD_T} x2={PAD_L + chartW} y2={PAD_T} stroke="rgba(60,45,35,0.07)" strokeWidth="1" />
+                    <line x1={PAD_L} y1={PAD_T + chartH} x2={PAD_L + chartW} y2={PAD_T + chartH} stroke="rgba(60,45,35,0.15)" strokeWidth="1.5" />
+                    <path d={areaStr} fill="url(#ms-area-grad)" />
+                    <path d={lineStr} fill="none" stroke="#c9963a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    {pts.map((p, i) => (
+                      <g key={i}>
+                        <circle cx={p.x} cy={p.y} r="3.2" fill="#c9963a" stroke="white" strokeWidth="1.5">
+                          <title>{`${p.label}: $${p.total.toFixed(2)}`}</title>
+                        </circle>
+                        <text x={p.x} y={H - 2} textAnchor="middle" fontSize="7.5" fill="#6d6670">
+                          {p.label}
+                        </text>
+                      </g>
+                    ))}
+                  </svg>
+                )
+              })()}
+            </div>
+
             <div className="dashboard-card dashboard-panel">
               <div className="dashboard-panel-header">
                 <h2>Your Pact Rules</h2>
