@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, String, Float, ForeignKey
+from sqlalchemy import Column, String, Float, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -16,5 +16,6 @@ class AccountabilitySettings(Base):
     accountability_type = Column(String, nullable=False)
     discipline_savings_percentage = Column(Float, nullable=False)
     accountability_note = Column(String, nullable=True)
+    accountability_partner_ids = Column(JSON, nullable=False, default=list)
 
     pact = relationship("Pact", back_populates="accountability_settings")

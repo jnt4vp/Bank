@@ -25,6 +25,9 @@ class _ListResult:
     def all(self):
         return self._items
 
+    def unique(self):
+        return self
+
 
 class AccountabilityAlertsTest(unittest.IsolatedAsyncioTestCase):
     async def test_sends_once_and_sets_tracking_fields(self):
@@ -46,11 +49,22 @@ class AccountabilityAlertsTest(unittest.IsolatedAsyncioTestCase):
             custom_body_template="Merchant: {merchant}; Message: {custom_message}",
             custom_message="Please keep me accountable.",
         )
-        partner = SimpleNamespace(partner_name="Alex", partner_email="alex@test.com")
+        partner = SimpleNamespace(id=uuid4(), partner_name="Alex", partner_email="alex@test.com")
+        pact_settings = SimpleNamespace(
+            accountability_type="friend",
+            accountability_partner_ids=[str(partner.id)],
+        )
+        pact = SimpleNamespace(
+            custom_category=None,
+            category="gambling",
+            preset_category=None,
+            accountability_settings=pact_settings,
+        )
         db = SimpleNamespace(
             execute=AsyncMock(side_effect=[
                 _ScalarResult(user),
                 _ScalarResult(settings),
+                _ListResult([pact]),
                 _ListResult([partner]),
             ])
         )
@@ -86,3 +100,53 @@ class AccountabilityAlertsTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(sent)
         notifier.send_accountability_alert.assert_not_awaited()
+
+    async def test_legacy_friend_settings_fall_back_to_all_active_partners(self):
+        txn = SimpleNamespace(
+            id=uuid4(),
+            flagged=True,
+            accountability_alert_sent=False,
+            accountability_alert_sent_at=None,
+            category="shopping",
+            amount=18.00,
+            merchant="Mall",
+            description="Store purchase",
+            date=date(2026, 4, 10),
+        )
+        user = SimpleNamespace(name="Test User", email="user@test.com")
+        settings = SimpleNamespace(
+            alerts_enabled=True,
+            custom_subject_template=None,
+            custom_body_template=None,
+            custom_message=None,
+        )
+        partner = SimpleNamespace(id=uuid4(), partner_name="Jordan", partner_email="jordan@test.com")
+        pact_settings = SimpleNamespace(
+            accountability_type="friend",
+            accountability_partner_ids=[],
+        )
+        pact = SimpleNamespace(
+            custom_category=None,
+            category="shopping",
+            preset_category=None,
+            accountability_settings=pact_settings,
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(side_effect=[
+                _ScalarResult(user),
+                _ScalarResult(settings),
+                _ListResult([pact]),
+                _ListResult([partner]),
+            ])
+        )
+        notifier = SimpleNamespace(send_accountability_alert=AsyncMock())
+
+        sent = await send_accountability_alerts_for_transaction(
+            db,
+            notifier=notifier,
+            transaction=txn,
+            user_id=uuid4(),
+        )
+
+        self.assertTrue(sent)
+        notifier.send_accountability_alert.assert_awaited_once()
