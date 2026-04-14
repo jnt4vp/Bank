@@ -82,6 +82,56 @@ class AccountabilityAlertsTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(txn.accountability_alert_sent)
         self.assertIsNotNone(txn.accountability_alert_sent_at)
 
+    async def test_sends_when_partner_ids_exist_without_friend_type_flag(self):
+        txn = SimpleNamespace(
+            id=uuid4(),
+            flagged=True,
+            accountability_alert_sent=False,
+            accountability_alert_sent_at=None,
+            category="gambling",
+            amount=42.50,
+            merchant="Test Merchant",
+            description="Bet",
+            date=date(2026, 4, 7),
+        )
+        user = SimpleNamespace(name="Test User", email="user@test.com")
+        settings = SimpleNamespace(
+            alerts_enabled=True,
+            custom_subject_template=None,
+            custom_body_template=None,
+            custom_message=None,
+        )
+        partner = SimpleNamespace(id=uuid4(), partner_name="Alex", partner_email="alex@test.com")
+        pact_settings = SimpleNamespace(
+            accountability_type=None,
+            accountability_partner_ids=[str(partner.id)],
+        )
+        pact = SimpleNamespace(
+            custom_category=None,
+            category="gambling",
+            preset_category=None,
+            accountability_settings=pact_settings,
+        )
+        db = SimpleNamespace(
+            execute=AsyncMock(side_effect=[
+                _ScalarResult(user),
+                _ScalarResult(settings),
+                _ListResult([pact]),
+                _ListResult([partner]),
+            ])
+        )
+        notifier = SimpleNamespace(send_accountability_alert=AsyncMock(return_value=True))
+
+        sent = await send_accountability_alerts_for_transaction(
+            db,
+            notifier=notifier,
+            transaction=txn,
+            user_id=uuid4(),
+        )
+
+        self.assertTrue(sent)
+        notifier.send_accountability_alert.assert_awaited_once()
+
     async def test_skips_when_already_sent(self):
         txn = SimpleNamespace(
             flagged=True,
