@@ -93,20 +93,16 @@ async def send_accountability_alerts_for_transaction(
         pact
         for pact in pacts_result.scalars().unique().all()
         if pact.accountability_settings
-        and pact.accountability_settings.accountability_type == "friend"
+        and pact.accountability_settings.accountability_partner_ids
         and _transaction_matches_pact(transaction, pact)
     ]
     if not matched_pacts:
         return False
 
     selected_partner_ids: set[str] = set()
-    wants_legacy_fallback = False
     for pact in matched_pacts:
         partner_ids = pact.accountability_settings.accountability_partner_ids or []
-        if partner_ids:
-            selected_partner_ids.update(str(partner_id) for partner_id in partner_ids)
-        else:
-            wants_legacy_fallback = True
+        selected_partner_ids.update(str(partner_id) for partner_id in partner_ids)
 
     partners_result = await db.execute(
         select(AccountabilityPartner).where(
@@ -115,16 +111,11 @@ async def send_accountability_alerts_for_transaction(
         )
     )
     all_active_partners = list(partners_result.scalars().all())
-    if selected_partner_ids:
-        partners = [
-            partner
-            for partner in all_active_partners
-            if str(partner.id) in selected_partner_ids
-        ]
-    elif wants_legacy_fallback:
-        partners = all_active_partners
-    else:
-        partners = []
+    partners = [
+        partner
+        for partner in all_active_partners
+        if str(partner.id) in selected_partner_ids
+    ]
 
     if not partners:
         return False
