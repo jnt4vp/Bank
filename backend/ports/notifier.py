@@ -29,5 +29,5 @@ class NotifierPort(Protocol):
         to_email: str,
         subject: str,
         body: str,
-    ) -> None:
-        """Send an accountability partner alert."""
+    ) -> bool:
+        """Send an accountability partner alert. Return True when delivered."""

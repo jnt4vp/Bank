@@ -133,7 +133,7 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> Non
 
 
 async def ensure_dev_seed_user(db: AsyncSession):
-    """Create the documented example user automatically unless explicitly disabled."""
+    """Create or reconcile the documented example user outside production."""
     if settings.APP_ENV == "production":
         logger.info("Skipping dev seed user in production")
         return None
@@ -143,6 +143,9 @@ async def ensure_dev_seed_user(db: AsyncSession):
 
     existing_user = await get_user_by_email(db, settings.DEV_SEED_EXAMPLE_EMAIL)
     if existing_user:
+        if not verify_password(settings.DEV_SEED_EXAMPLE_PASSWORD, existing_user.password_hash):
+            existing_user.password_hash = hash_password(settings.DEV_SEED_EXAMPLE_PASSWORD)
+            logger.info("Reset seed user password to configured dev default: %s", existing_user.email)
         return existing_user
 
     user = await create_user(

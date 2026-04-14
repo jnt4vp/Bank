@@ -140,13 +140,22 @@ class SmtpNotifier:
         to_email: str,
         subject: str,
         body: str,
-    ) -> None:
+    ) -> bool:
         settings = get_settings()
         if not settings.GMAIL_USER or not settings.GMAIL_APP_PASSWORD:
-            logger.warning("Gmail credentials not configured — skipping accountability alert email")
-            return
+            logger.warning(
+                "Gmail credentials not configured — skipping accountability alert email to %s",
+                to_email,
+            )
+            return False
 
-        await asyncio.to_thread(
+        logger.info(
+            "Attempting accountability alert email to %s with subject %r",
+            to_email,
+            subject,
+        )
+
+        return await asyncio.to_thread(
             self._send_message,
             from_email=settings.GMAIL_USER,
             to_email=to_email,
@@ -165,7 +174,7 @@ class SmtpNotifier:
         subject: str,
         body: str,
         success_message: str,
-    ) -> None:
+    ) -> bool:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = from_email
@@ -179,7 +188,13 @@ class SmtpNotifier:
                 smtp.login(from_email, password)
                 smtp.sendmail(from_email, to_email, msg.as_string())
             logger.info(success_message)
+            return True
         except smtplib.SMTPAuthenticationError:
             logger.error("Gmail authentication failed — check GMAIL_USER and GMAIL_APP_PASSWORD")
+            return False
         except smtplib.SMTPException as exc:
             logger.error("Failed to send email: %s", exc)
+            return False
+        except Exception:
+            logger.exception("Unexpected email delivery failure for %s", to_email)
+            return False

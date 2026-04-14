@@ -9,7 +9,12 @@ from uuid import uuid4
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("AUTO_CREATE_TABLES", "false")
 
-from backend.application.auth import login_account, register_account, send_password_reset_link
+from backend.application.auth import (
+    ensure_dev_seed_user_exists,
+    login_account,
+    register_account,
+    send_password_reset_link,
+)
 from backend.application.counter import get_counter_value, increment_counter_value
 from backend.application.transactions import ingest_user_transaction
 from backend.ports.classifier import ClassificationResult
@@ -97,6 +102,28 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
             reset_url="http://localhost:5173/reset-password?token=reset-token",
         )
 
+    async def test_ensure_dev_seed_user_exists_commits_modified_user(self):
+        user = SimpleNamespace(email="test@example.com")
+        db = SimpleNamespace(
+            commit=AsyncMock(),
+            rollback=AsyncMock(),
+            refresh=AsyncMock(),
+        )
+
+        with patch(
+            "backend.application.auth.seed_dev_user",
+            new=AsyncMock(return_value=user),
+        ) as seed_dev_user_mock, patch(
+            "backend.application.auth.inspect",
+            return_value=SimpleNamespace(pending=False, modified=True),
+        ):
+            result = await ensure_dev_seed_user_exists(db)
+
+        seed_dev_user_mock.assert_awaited_once_with(db)
+        db.commit.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(user)
+        self.assertEqual(result, user)
+
 
 class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
     async def test_ensure_dev_seed_user_skips_in_production(self):
@@ -155,6 +182,40 @@ class AuthServiceTest(unittest.IsolatedAsyncioTestCase):
             name="Test User",
             phone=None,
         )
+        self.assertEqual(result, user)
+
+    async def test_ensure_dev_seed_user_resets_existing_password_drift(self):
+        user = SimpleNamespace(email="test@example.com", password_hash="old-hash")
+
+        with patch(
+            "backend.services.auth.settings",
+            new=SimpleNamespace(
+                APP_ENV="development",
+                DEV_SEED_EXAMPLE_USER=True,
+                DEV_SEED_EXAMPLE_EMAIL="test@example.com",
+                DEV_SEED_EXAMPLE_PASSWORD="Password123!",
+                DEV_SEED_EXAMPLE_NAME="Test User",
+            ),
+        ), patch(
+            "backend.services.auth.get_user_by_email",
+            new=AsyncMock(return_value=user),
+        ) as get_user_by_email_mock, patch(
+            "backend.services.auth.verify_password",
+            return_value=False,
+        ) as verify_password_mock, patch(
+            "backend.services.auth.hash_password",
+            return_value="new-hash",
+        ) as hash_password_mock, patch(
+            "backend.services.auth.create_user",
+            new=AsyncMock(),
+        ) as create_user_mock:
+            result = await ensure_dev_seed_user(object())
+
+        get_user_by_email_mock.assert_awaited_once_with(unittest.mock.ANY, "test@example.com")
+        verify_password_mock.assert_called_once_with("Password123!", "old-hash")
+        hash_password_mock.assert_called_once_with("Password123!")
+        create_user_mock.assert_not_awaited()
+        self.assertEqual(user.password_hash, "new-hash")
         self.assertEqual(result, user)
 
     async def test_reset_password_accepts_legacy_naive_expiry_values(self):

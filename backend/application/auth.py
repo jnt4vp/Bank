@@ -162,7 +162,8 @@ async def ensure_dev_seed_user_exists(db: AsyncSession) -> User | None:
     if user is None:
         return None
 
-    if inspect(user).pending:
+    state = inspect(user)
+    if state.pending or state.modified:
         try:
             await db.commit()
         except Exception:

@@ -64,13 +64,33 @@ async def send_accountability_alerts_for_transaction(
     user_id: UUID,
 ) -> bool:
     if not hasattr(db, "execute"):
+        logger.warning(
+            "Accountability alerts skipped for txn %s: db session does not support execute()",
+            getattr(transaction, "id", "unknown"),
+        )
         return False
-    if not transaction.flagged or transaction.accountability_alert_sent:
+
+    txn_id = getattr(transaction, "id", "unknown")
+    logger.info(
+        "Accountability alert check | txn=%s | user=%s | flagged=%s | already_sent=%s",
+        txn_id,
+        user_id,
+        transaction.flagged,
+        transaction.accountability_alert_sent,
+    )
+
+    if not transaction.flagged:
+        logger.info("Accountability alerts skipped for txn %s: transaction is not flagged", txn_id)
+        return False
+
+    if transaction.accountability_alert_sent:
+        logger.info("Accountability alerts skipped for txn %s: alerts already sent", txn_id)
         return False
 
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if user is None:
+        logger.warning("Accountability alerts skipped for txn %s: user %s was not found", txn_id, user_id)
         return False
 
     settings_result = await db.execute(
@@ -79,6 +99,7 @@ async def send_accountability_alerts_for_transaction(
     settings = settings_result.scalar_one_or_none()
     alerts_enabled = settings.alerts_enabled if settings else True
     if not alerts_enabled:
+        logger.info("Accountability alerts skipped for txn %s: user alerts are disabled", txn_id)
         return False
 
     pacts_result = await db.execute(
@@ -89,15 +110,27 @@ async def send_accountability_alerts_for_transaction(
             Pact.status == "active",
         )
     )
+    active_pacts = pacts_result.scalars().unique().all()
     matched_pacts = [
         pact
-        for pact in pacts_result.scalars().unique().all()
+        for pact in active_pacts
         if pact.accountability_settings
         and pact.accountability_settings.accountability_type == "friend"
         and _transaction_matches_pact(transaction, pact)
     ]
     if not matched_pacts:
+        logger.info(
+            "Accountability alerts skipped for txn %s: no matching friend-accountability pacts among %d active pact(s)",
+            txn_id,
+            len(active_pacts),
+        )
         return False
+
+    logger.info(
+        "Accountability alert pact resolution | txn=%s | matched_pacts=%d",
+        txn_id,
+        len(matched_pacts),
+    )
 
     selected_partner_ids: set[str] = set()
     wants_legacy_fallback = False
@@ -127,12 +160,29 @@ async def send_accountability_alerts_for_transaction(
         partners = []
 
     if not partners:
+        active_partner_ids = [str(partner.id) for partner in all_active_partners]
+        logger.warning(
+            "Accountability alerts skipped for txn %s: no eligible active partners were resolved "
+            "(selected_ids=%s, legacy_fallback=%s, active_partner_ids=%s)",
+            txn_id,
+            sorted(selected_partner_ids),
+            wants_legacy_fallback,
+            active_partner_ids,
+        )
         return False
+
+    logger.info(
+        "Accountability partner resolution | txn=%s | partners=%d | selected_ids=%d | legacy_fallback=%s",
+        txn_id,
+        len(partners),
+        len(selected_partner_ids),
+        wants_legacy_fallback,
+    )
 
     subject_template = (settings.custom_subject_template if settings else None) or DEFAULT_SUBJECT
     body_template = (settings.custom_body_template if settings else None) or DEFAULT_BODY
     custom_message = (settings.custom_message if settings and settings.custom_message else "I want to stay on track.")
-    sent_any = False
+    delivered_count = 0
 
     for partner in partners:
         values = {
@@ -148,20 +198,51 @@ async def send_accountability_alerts_for_transaction(
         subject = _safe_template(subject_template, values)
         body = _safe_template(body_template, values)
         try:
-            await notifier.send_accountability_alert(
+            logger.info(
+                "Sending accountability alert | txn=%s | partner_id=%s | to=%s",
+                txn_id,
+                getattr(partner, "id", "unknown"),
+                partner.partner_email,
+            )
+            delivered = await notifier.send_accountability_alert(
                 to_email=partner.partner_email,
                 subject=subject,
                 body=body,
             )
-            sent_any = True
+            if delivered:
+                delivered_count += 1
+                logger.info(
+                    "Delivered accountability alert | txn=%s | to=%s",
+                    txn_id,
+                    partner.partner_email,
+                )
+            else:
+                logger.warning(
+                    "Notifier reported accountability alert not delivered | txn=%s | to=%s",
+                    txn_id,
+                    partner.partner_email,
+                )
         except Exception:
             logger.exception(
                 "Failed accountability alert for txn %s partner %s",
-                transaction.id,
+                txn_id,
                 partner.partner_email,
             )
 
-    if sent_any:
+    if delivered_count:
         transaction.accountability_alert_sent = True
         transaction.accountability_alert_sent_at = datetime.now(timezone.utc)
-    return sent_any
+        logger.info(
+            "Accountability alert summary | txn=%s | delivered=%d | attempted=%d",
+            txn_id,
+            delivered_count,
+            len(partners),
+        )
+        return True
+
+    logger.warning(
+        "Accountability alerts not delivered for txn %s after %d attempt(s)",
+        txn_id,
+        len(partners),
+    )
+    return False
