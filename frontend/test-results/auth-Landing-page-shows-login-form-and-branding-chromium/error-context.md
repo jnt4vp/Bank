@@ -1,0 +1,42 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e6]:
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - img [ref=e10]
+        - generic [ref=e13]: PactBank
+      - generic [ref=e14]: Accountability Banking
+      - heading "Commit to your pact." [level=1] [ref=e15]
+      - heading "Build discipline. Earn freedom." [level=2] [ref=e16]
+      - paragraph [ref=e17]: PactBank helps you stay accountable to your goals. Build habits, enforce discipline, and grow your future.
+    - generic [ref=e19]:
+      - generic [ref=e20]: Email
+      - textbox "Email" [ref=e21]
+      - generic [ref=e22]: Password
+      - textbox "Password" [ref=e23]
+      - link "Forgot password?" [ref=e24] [cursor=pointer]:
+        - /url: /forgot-password
+      - button "Sign In" [ref=e25] [cursor=pointer]
+      - paragraph [ref=e26]:
+        - text: Don't have an account?
+        - link "Sign Up" [ref=e27] [cursor=pointer]:
+          - /url: /register
+  - generic [ref=e29]:
+    - generic [ref=e30]:
+      - img [ref=e31]
+      - generic [ref=e34]:
+        - generic [ref=e35]: —
+        - generic [ref=e36]: Your live discipline score
+        - generic [ref=e37]: Shown on your dashboard after sign in
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - strong [ref=e40]: $145
+        - text: automatically
+        - text: transferred to savings
+      - generic [ref=e41]:
+        - text: 3 penalties triggered
+        - text: this month
+    - img [ref=e43]
+```

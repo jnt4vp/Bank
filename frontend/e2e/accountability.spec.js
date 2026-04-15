@@ -33,15 +33,15 @@ test.describe("Accountability partners on Pacts page", () => {
     await expect(page).toHaveURL(/pacts/);
   });
 
-  test("shows helper text about partner alerts", async ({ page }) => {
+  test("shows accountability partner section with helper text", async ({ page }) => {
     await expect(
-      page.getByText(/partner emails are sent only when a flagged purchase/i)
+      page.getByText(/choose one or more accountability partners/i)
     ).toBeVisible();
   });
 
   test("shows empty state for accountability partner", async ({ page }) => {
     await expect(
-      page.getByText(/no accountability partner/i).first()
+      page.getByText(/no accountability partner yet/i).first()
     ).toBeVisible();
   });
 

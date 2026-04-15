@@ -8,6 +8,7 @@ import {
   createTransaction,
   listSavingsTransfers,
   updateMe,
+  getMe,
 } from "./helpers/api.js";
 import { FLAGGED_MERCHANTS } from "./helpers/fixtures.js";
 
@@ -32,27 +33,23 @@ test.describe("Savings percentage configuration", () => {
   test("can set savings percentage on accountability settings via API", async ({ request }) => {
     const settings = await upsertAccountabilitySettings(request, token, {
       pact_id: pactId,
-      accountability_type: "savings_percentage",
+      accountability_type: "email",
       discipline_savings_percentage: 25,
       accountability_note: null,
       accountability_partner_ids: [],
     });
 
     expect(settings.discipline_savings_percentage).toBe(25);
-    expect(settings.accountability_type).toBe("savings_percentage");
+    expect(settings.accountability_type).toBe("email");
   });
 
-  test("savings percentage persists on user profile", async ({ page, request }) => {
+  test("savings percentage persists on user profile", async ({ request }) => {
     // Set savings % on user profile
     await updateMe(request, token, { discipline_savings_percentage: 15 });
 
-    await login(page);
-    await page.getByRole("link", { name: /settings/i }).click();
-    await expect(page).toHaveURL(/settings/);
-
-    // Reload and verify it persists
-    await page.reload();
-    await expect(page).toHaveURL(/settings/);
+    // Verify it persists
+    const me = await getMe(request, token);
+    expect(me.discipline_savings_percentage).toBe(15);
   });
 
   test.afterEach(async ({ request }) => {
@@ -82,7 +79,7 @@ test.describe("Simulated savings transfers", () => {
 
     await upsertAccountabilitySettings(request, token, {
       pact_id: pactId,
-      accountability_type: "savings_percentage",
+      accountability_type: "email",
       discipline_savings_percentage: 10,
       accountability_note: null,
       accountability_partner_ids: [],
@@ -140,7 +137,7 @@ test.describe("Simulated savings transfers", () => {
     // Set to 20%
     await upsertAccountabilitySettings(request, token, {
       pact_id: pactId,
-      accountability_type: "savings_percentage",
+      accountability_type: "email",
       discipline_savings_percentage: 20,
       accountability_note: null,
       accountability_partner_ids: [],

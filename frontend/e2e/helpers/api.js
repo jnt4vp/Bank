@@ -114,13 +114,15 @@ export async function upsertAccountabilitySettings(request, token, { pact_id, ac
 // ── Simulated Savings ─────────────────────────────────────────
 
 export async function listSavingsTransfers(request, token) {
-  const res = await request.get(`${API_URL}/api/simulated-savings-transfers`, {
+  const res = await request.get(`${API_URL}/api/simulated-savings-transfers/`, {
     headers: headers(token),
   });
   if (!res.ok()) {
     throw new Error(`listSavingsTransfers failed (${res.status()}): ${await res.text()}`);
   }
-  return res.json();
+  const body = await res.json();
+  // Response is SimulatedSavingsTransfersSummary { transfers: [...], total_recorded, simulated_transfers_enabled }
+  return body.transfers;
 }
 
 // ── User ──────────────────────────────────────────────────────

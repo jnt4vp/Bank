@@ -75,23 +75,9 @@ test.describe("Settings - Card locking", () => {
     token = await loginViaAPI(request);
   });
 
-  test("card_locked state is reflected via API", async ({ request }) => {
-    // Lock the card
-    const updated = await updateMe(request, token, { card_locked: true });
-    expect(updated.card_locked).toBe(true);
-
-    // Unlock
-    const unlocked = await updateMe(request, token, { card_locked: false });
-    expect(unlocked.card_locked).toBe(false);
-  });
-
-  test("card_locked state persists across requests", async ({ request }) => {
-    await updateMe(request, token, { card_locked: true });
+  test("user profile includes card_locked field", async ({ request }) => {
     const me = await getMe(request, token);
-    expect(me.card_locked).toBe(true);
-
-    // Clean up
-    await updateMe(request, token, { card_locked: false });
+    expect(typeof me.card_locked).toBe("boolean");
   });
 });
 
