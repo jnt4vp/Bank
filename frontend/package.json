@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vite build",
     "test:e2e": "npx playwright test",
+    "test:e2e:smoke": "npx playwright test --grep @smoke",
     "test:e2e:headed": "npx playwright test --headed",
     "preview": "vite preview"
   },

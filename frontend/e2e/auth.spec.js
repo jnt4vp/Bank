@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { TEST_USER, uniqueEmail } from "./helpers/fixtures.js";
 
 test.describe("Landing page", () => {
-  test("shows login form and branding", async ({ page }) => {
+  test("shows login form and branding", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText("PactBank", { exact: true })).toBeVisible();
     await expect(page.getByPlaceholder(/email/i)).toBeVisible();
@@ -10,7 +10,7 @@ test.describe("Landing page", () => {
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
   });
 
-  test("has links to signup and forgot password", async ({ page }) => {
+  test("has links to signup and forgot password", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await expect(page.getByText(/don.*t have an account/i)).toBeVisible();
     await expect(page.getByText(/forgot password/i)).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("Login", () => {
     await expect(page.getByText(/invalid|incorrect|error/i)).toBeVisible({ timeout: 5_000 });
   });
 
-  test("trims whitespace in email before submitting", async ({ page }) => {
+  test("trims whitespace in email before submitting", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await page.getByPlaceholder(/email/i).fill(`  ${TEST_USER.email}  `);
     await page.getByPlaceholder(/password/i).fill(TEST_USER.password);
@@ -61,7 +61,7 @@ test.describe("Login", () => {
 });
 
 test.describe("Signup", () => {
-  test("navigates to signup page", async ({ page }) => {
+  test("navigates to signup page", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await page.getByRole("link", { name: /sign up/i }).click();
 
@@ -142,7 +142,7 @@ test.describe("Signup", () => {
 });
 
 test.describe("Forgot password", () => {
-  test("navigates to forgot password page", async ({ page }) => {
+  test("navigates to forgot password page", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await page.getByText(/forgot password/i).click();
 
@@ -161,7 +161,7 @@ test.describe("Forgot password", () => {
 });
 
 test.describe("Protected routes", () => {
-  test("redirects unauthenticated users from dashboard to landing", async ({ page }) => {
+  test("redirects unauthenticated users from dashboard to landing", { tag: "@smoke" }, async ({ page }) => {
     await page.goto("/");
     await page.evaluate(() => localStorage.clear());
 
