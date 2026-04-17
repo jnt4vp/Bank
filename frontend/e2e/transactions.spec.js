@@ -3,7 +3,6 @@ import { login, loginViaAPI } from "./helpers/auth.js";
 import {
   createTransaction,
   createPact,
-  deletePact,
   getUserPacts,
 } from "./helpers/api.js";
 import { FLAGGED_MERCHANTS, UNFLAGGED_TRANSACTION } from "./helpers/fixtures.js";
@@ -33,7 +32,6 @@ test.describe("Transactions page", () => {
 
 test.describe("Transaction classification", () => {
   let token;
-  let pactId;
 
   test.beforeEach(async ({ request }) => {
     token = await loginViaAPI(request);
@@ -44,12 +42,9 @@ test.describe("Transaction classification", () => {
       (p) => p.category?.toLowerCase() === "coffee shops"
     );
     if (!coffeePact) {
-      const pact = await createPact(request, token, {
+      await createPact(request, token, {
         preset_category: "Coffee Shops",
       });
-      pactId = pact.id;
-    } else {
-      pactId = coffeePact.id;
     }
   });
 
@@ -131,7 +126,7 @@ test.describe("Transaction classification", () => {
   });
 
   test("transaction row shows amount, date, and category", async ({ page, request }) => {
-    const txn = await createTransaction(request, token, FLAGGED_MERCHANTS.coffee);
+    await createTransaction(request, token, FLAGGED_MERCHANTS.coffee);
 
     await login(page);
     await page.getByRole("link", { name: /transactions/i }).click();

@@ -84,7 +84,6 @@ test.describe("Accountability partners on Pacts page", () => {
 
 test.describe("Accountability partner CRUD via API + UI verification", () => {
   let token;
-  let partnerId;
 
   test.beforeEach(async ({ request }) => {
     token = await loginViaAPI(request);
@@ -96,12 +95,11 @@ test.describe("Accountability partner CRUD via API + UI verification", () => {
     }
 
     // Create a partner via API
-    const partner = await createPartner(request, token, {
+    await createPartner(request, token, {
       partner_name: "Jane Doe",
       partner_email: "jane@example.com",
       relationship_label: "Sibling",
     });
-    partnerId = partner.id;
   });
 
   test("partner created via API shows up in UI", async ({ page }) => {
