@@ -1,5 +1,5 @@
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 
 
@@ -19,5 +19,4 @@ class AccountabilitySettingsOut(BaseModel):
     discipline_savings_percentage: float
     accountability_partner_ids: list[UUID] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

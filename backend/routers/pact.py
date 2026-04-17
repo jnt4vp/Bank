@@ -58,18 +58,32 @@ async def create_pact(
 
 
 @router.get("/{pact_id}", response_model=PactResponse)
-async def get_pact(pact_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_pact(
+    pact_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(select(Pact).where(Pact.id == pact_id))
     pact = result.scalar_one_or_none()
 
     if not pact:
         raise HTTPException(status_code=404, detail="Pact not found")
 
+    if pact.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this pact")
+
     return pact
 
 
 @router.get("/user/{user_id}", response_model=List[PactResponse])
-async def get_user_pacts(user_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_user_pacts(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view these pacts")
+
     result = await db.execute(
         select(Pact)
         .where(Pact.user_id == user_id)

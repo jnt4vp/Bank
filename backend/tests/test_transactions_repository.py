@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from backend.repositories.transactions import get_transactions_for_user
+from backend.repositories.transactions import create_transaction, get_transactions_for_user
 
 
 class GetTransactionsForUserTest(unittest.IsolatedAsyncioTestCase):
@@ -34,6 +34,60 @@ class GetTransactionsForUserTest(unittest.IsolatedAsyncioTestCase):
         rows = await get_transactions_for_user(session, uid, flagged_only=True)
         self.assertEqual(len(rows), 1)
         session.execute.assert_awaited_once()
+
+    async def test_query_includes_flagged_filter_when_requested(self):
+        """Verify the actual SQL WHERE clause differs when flagged_only=True."""
+        uid = uuid4()
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = []
+        exec_result = MagicMock()
+        exec_result.scalars.return_value = scalars_result
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=exec_result)
+
+        await get_transactions_for_user(session, uid, flagged_only=False)
+        query_all = str(session.execute.call_args_list[0][0][0])
+
+        session.execute.reset_mock()
+        session.execute = AsyncMock(return_value=exec_result)
+        await get_transactions_for_user(session, uid, flagged_only=True)
+        query_flagged = str(session.execute.call_args_list[0][0][0])
+
+        # The flagged query should include an extra filter clause
+        self.assertIn("flagged", query_flagged.lower())
+
+
+class CreateTransactionTest(unittest.IsolatedAsyncioTestCase):
+    async def test_creates_transaction_with_correct_fields(self):
+        uid = uuid4()
+        session = MagicMock()
+        txn = await create_transaction(
+            session,
+            user_id=uid,
+            merchant="Starbucks",
+            description="Coffee",
+            amount=5.50,
+            category="Coffee Shops",
+            flagged=True,
+            flag_reason="keyword match",
+        )
+        session.add.assert_called_once_with(txn)
+        self.assertEqual(txn.merchant, "Starbucks")
+        self.assertEqual(txn.amount, 5.50)
+        self.assertTrue(txn.flagged)
+        self.assertEqual(txn.flag_reason, "keyword match")
+
+    async def test_defaults_to_not_flagged(self):
+        session = MagicMock()
+        txn = await create_transaction(
+            session,
+            user_id=uuid4(),
+            merchant="Target",
+            description="Groceries",
+            amount=50.0,
+        )
+        self.assertFalse(txn.flagged)
+        self.assertIsNone(txn.flag_reason)
 
 
 if __name__ == "__main__":

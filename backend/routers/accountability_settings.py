@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..database import async_session
+from ..database import get_db
 from ..models.accountability_partner import AccountabilityPartner
 from ..models.user import User
 from ..models.pact import Pact
@@ -11,16 +11,11 @@ from ..schemas.accountability_settings import (
     AccountabilitySettingsCreate,
     AccountabilitySettingsOut,
 )
-from ..application.auth import get_current_user
+from ..dependencies.auth import get_current_user
 from ..services.simulated_savings_transfers import backfill_simulated_savings_for_user
 
 
 router = APIRouter()
-
-
-async def get_db():
-    async with async_session() as session:
-        yield session
 
 
 async def _validated_partner_ids(
@@ -87,13 +82,14 @@ async def upsert_accountability_settings(
             accountability_note=payload.accountability_note,
             accountability_partner_ids=partner_ids,
         )
-        db.add(settings)
+        pact.accountability_settings = settings
     else:
         settings.accountability_type = payload.accountability_type
         settings.discipline_savings_percentage = payload.discipline_savings_percentage
         settings.accountability_note = payload.accountability_note
         settings.accountability_partner_ids = partner_ids
 
+    await db.flush()
     await db.commit()
 
     ledger_added = await backfill_simulated_savings_for_user(
@@ -102,22 +98,17 @@ async def upsert_accountability_settings(
     if ledger_added:
         await db.commit()
 
-    refreshed_result = await db.execute(
-        select(AccountabilitySettings).where(
-            AccountabilitySettings.pact_id == payload.pact_id
-        )
-    )
-    refreshed_settings = refreshed_result.scalar_one()
+    response_settings = pact.accountability_settings or settings
 
     return AccountabilitySettingsOut(
-        id=refreshed_settings.id,
-        pact_id=refreshed_settings.pact_id,
-        accountability_type=refreshed_settings.accountability_type,
-        accountability_note=refreshed_settings.accountability_note,
+        id=response_settings.id,
+        pact_id=response_settings.pact_id,
+        accountability_type=response_settings.accountability_type,
+        accountability_note=response_settings.accountability_note,
         discipline_savings_percentage=float(
-            refreshed_settings.discipline_savings_percentage or 0
+            response_settings.discipline_savings_percentage or 0
         ),
-        accountability_partner_ids=refreshed_settings.accountability_partner_ids or [],
+        accountability_partner_ids=response_settings.accountability_partner_ids or [],
     )
 
 

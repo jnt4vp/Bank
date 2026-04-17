@@ -225,6 +225,207 @@ async def _resolve_account_id(
     return row
 
 
+async def _process_added_transaction(
+    db: AsyncSession,
+    txn,
+    *,
+    user_id: uuid.UUID,
+    classifier: ClassifierPort | None,
+    notifier: NotifierPort | None,
+    user_email: str | None,
+    user_categories: list[str] | None,
+    is_initial_backfill: bool,
+) -> bool:
+    """Handle a single added Plaid transaction. Returns True if a new row was inserted."""
+    existing = await db.execute(
+        select(Transaction).where(
+            Transaction.plaid_transaction_id == txn.transaction_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        return False
+
+    account_id = await _resolve_account_id(db, txn.account_id)
+    plaid_original_description = txn.original_description or None
+    merchant = txn.merchant_name or txn.name or "Unknown"
+    description = txn.name or plaid_original_description or ""
+    amount = float(txn.amount)
+
+    category = resolved_plaid_category(merchant, description, txn)
+    flagged = False
+    flag_reason = None
+
+    if classifier:
+        try:
+            classification = await classify_transaction(
+                classifier,
+                merchant=merchant,
+                description=description,
+                amount=amount,
+                user_categories=user_categories,
+            )
+            if classification.category:
+                category = classification.category
+            flagged = classification.flagged
+            flag_reason = classification.flag_reason
+        except Exception:
+            logger.warning(
+                "Classification failed for plaid txn %s, storing without flag",
+                txn.transaction_id,
+            )
+
+    new_txn = Transaction(
+        user_id=user_id,
+        merchant=merchant,
+        description=description,
+        amount=amount,
+        category=category,
+        flagged=flagged,
+        flag_reason=flag_reason,
+        plaid_transaction_id=txn.transaction_id,
+        plaid_original_description=plaid_original_description,
+        account_id=account_id,
+        pending=txn.pending,
+        date=txn.date,
+    )
+    db.add(new_txn)
+    await db.flush()
+
+    await record_simulated_savings_transfers_for_transaction(
+        db,
+        user_id=user_id,
+        transaction=new_txn,
+        skip_for_initial_plaid_backfill=is_initial_backfill,
+    )
+
+    if flagged and notifier and not is_initial_backfill:
+        try:
+            await notifier.send_transaction_alert(
+                to_email=user_email,
+                merchant=merchant,
+                amount=amount,
+                category=category,
+                flag_reason=flag_reason,
+            )
+            new_txn.alert_sent = True
+            new_txn.alert_sent_at = datetime.now(timezone.utc)
+        except Exception:
+            logger.warning("Failed to send alert for plaid txn %s", txn.transaction_id)
+
+        try:
+            await send_accountability_alerts_for_transaction(
+                db,
+                notifier=notifier,
+                transaction=new_txn,
+                user_id=user_id,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to send accountability alerts for plaid txn %s",
+                txn.transaction_id,
+            )
+
+    return True
+
+
+async def _process_modified_transaction(
+    db: AsyncSession,
+    txn,
+    *,
+    user_id: uuid.UUID,
+    notifier: NotifierPort | None,
+    user_email: str | None,
+    is_initial_backfill: bool,
+) -> bool:
+    """Handle a single modified Plaid transaction. Returns True if an existing row was updated."""
+    result = await db.execute(
+        select(Transaction).where(
+            Transaction.plaid_transaction_id == txn.transaction_id
+        )
+    )
+    existing_txn = result.scalar_one_or_none()
+    if not existing_txn:
+        return False
+
+    was_flagged = bool(existing_txn.flagged)
+    plaid_original_description = txn.original_description or None
+    existing_txn.merchant = txn.merchant_name or txn.name or existing_txn.merchant
+    existing_txn.description = txn.name or plaid_original_description or existing_txn.description
+    existing_txn.plaid_original_description = plaid_original_description
+    existing_txn.amount = float(txn.amount)
+    existing_txn.pending = txn.pending
+    existing_txn.date = txn.date
+    new_cat = resolved_plaid_category(
+        existing_txn.merchant, existing_txn.description, txn
+    )
+    if new_cat:
+        existing_txn.category = new_cat
+    if existing_txn.account_id is None and txn.account_id:
+        existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
+
+    if (
+        notifier
+        and existing_txn.flagged
+        and not was_flagged
+        and not existing_txn.alert_sent
+        and not is_initial_backfill
+    ):
+        try:
+            await notifier.send_transaction_alert(
+                to_email=user_email,
+                merchant=existing_txn.merchant,
+                amount=float(existing_txn.amount),
+                category=existing_txn.category,
+                flag_reason=existing_txn.flag_reason,
+            )
+            existing_txn.alert_sent = True
+            existing_txn.alert_sent_at = datetime.now(timezone.utc)
+        except Exception:
+            logger.warning(
+                "Failed to send alert for modified plaid txn %s",
+                txn.transaction_id,
+            )
+    if (
+        notifier
+        and existing_txn.flagged
+        and not existing_txn.accountability_alert_sent
+        and not is_initial_backfill
+    ):
+        try:
+            await send_accountability_alerts_for_transaction(
+                db,
+                notifier=notifier,
+                transaction=existing_txn,
+                user_id=user_id,
+            )
+        except Exception:
+            logger.warning(
+                "Failed accountability alerts for modified plaid txn %s",
+                txn.transaction_id,
+            )
+
+    return True
+
+
+async def _process_removed_transactions(
+    db: AsyncSession,
+    removed_txns: list,
+) -> int:
+    """Delete local rows for Plaid-removed transactions. Returns count of deleted rows."""
+    removed_count = 0
+    for txn in removed_txns:
+        result = await db.execute(
+            select(Transaction).where(
+                Transaction.plaid_transaction_id == txn.transaction_id
+            )
+        )
+        existing_txn = result.scalar_one_or_none()
+        if existing_txn:
+            await db.delete(existing_txn)
+            removed_count += 1
+    return removed_count
+
+
 async def sync_transactions(
     db: AsyncSession,
     plaid_item: PlaidItem,
@@ -238,8 +439,6 @@ async def sync_transactions(
         plaid_item.transaction_cursor is None and plaid_item.last_synced_at is None
     )
 
-    # Refresh accounts every sync cycle so balances stay current and
-    # transient link-time failures don't leave accounts missing forever.
     await _sync_accounts(db, plaid_item)
 
     cursor = plaid_item.transaction_cursor
@@ -248,7 +447,6 @@ async def sync_transactions(
     removed_count = 0
     has_more = True
 
-    # Look up user email once for alert notifications
     user_email: str | None = None
     if notifier:
         result = await db.execute(
@@ -256,7 +454,6 @@ async def sync_transactions(
         )
         user_email = result.scalar_one_or_none()
 
-    # Fetch user's active pact categories once for the entire sync cycle
     user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
 
     while has_more:
@@ -270,190 +467,35 @@ async def sync_transactions(
         )
         response = await _call_plaid(client.transactions_sync, request)
 
-        # Process added transactions
         for txn in response.added:
-            existing = await db.execute(
-                select(Transaction).where(
-                    Transaction.plaid_transaction_id == txn.transaction_id
-                )
-            )
-            if existing.scalar_one_or_none():
-                continue
-
-            account_id = await _resolve_account_id(db, txn.account_id)
-            plaid_original_description = txn.original_description or None
-            merchant = txn.merchant_name or txn.name or "Unknown"
-            description = txn.name or plaid_original_description or ""
-            amount = float(txn.amount)
-
-            # Plaid PFC (request include_personal_finance_category), then light text hints
-            category = resolved_plaid_category(merchant, description, txn)
-            flagged = False
-            flag_reason = None
-
-            if classifier:
-                try:
-                    classification = await classify_transaction(
-                        classifier,
-                        merchant=merchant,
-                        description=description,
-                        amount=amount,
-                        user_categories=user_categories,
-                    )
-                    if classification.category:
-                        category = classification.category
-                    flagged = classification.flagged
-                    flag_reason = classification.flag_reason
-                except Exception:
-                    logger.warning(
-                        "Classification failed for plaid txn %s, storing without flag",
-                        txn.transaction_id,
-                    )
-
-            new_txn = Transaction(
+            if await _process_added_transaction(
+                db, txn,
                 user_id=plaid_item.user_id,
-                merchant=merchant,
-                description=description,
-                amount=amount,
-                category=category,
-                flagged=flagged,
-                flag_reason=flag_reason,
-                plaid_transaction_id=txn.transaction_id,
-                plaid_original_description=plaid_original_description,
-                account_id=account_id,
-                pending=txn.pending,
-                date=txn.date,
-            )
-            db.add(new_txn)
-            await db.flush()
+                classifier=classifier,
+                notifier=notifier,
+                user_email=user_email,
+                user_categories=user_categories,
+                is_initial_backfill=is_initial_backfill,
+            ):
+                added_count += 1
 
-            await record_simulated_savings_transfers_for_transaction(
-                db,
-                user_id=plaid_item.user_id,
-                transaction=new_txn,
-                skip_for_initial_plaid_backfill=is_initial_backfill,
-            )
-
-            if flagged and notifier and not is_initial_backfill:
-                try:
-                    await notifier.send_transaction_alert(
-                        to_email=user_email,
-                        merchant=merchant,
-                        amount=amount,
-                        category=category,
-                        flag_reason=flag_reason,
-                    )
-                    new_txn.alert_sent = True
-                    new_txn.alert_sent_at = datetime.now(timezone.utc)
-                except Exception:
-                    logger.warning("Failed to send alert for plaid txn %s", txn.transaction_id)
-
-            if flagged and notifier and not is_initial_backfill:
-                try:
-                    await send_accountability_alerts_for_transaction(
-                        db,
-                        notifier=notifier,
-                        transaction=new_txn,
-                        user_id=plaid_item.user_id,
-                    )
-                except Exception:
-                    logger.warning(
-                        "Failed to send accountability alerts for plaid txn %s",
-                        txn.transaction_id,
-                    )
-
-            added_count += 1
-
-        # Process modified transactions (pending → posted, amount changes, etc.)
         for txn in response.modified:
-            result = await db.execute(
-                select(Transaction).where(
-                    Transaction.plaid_transaction_id == txn.transaction_id
-                )
-            )
-            existing_txn = result.scalar_one_or_none()
-            if existing_txn:
-                was_flagged = bool(existing_txn.flagged)
-                plaid_original_description = txn.original_description or None
-                existing_txn.merchant = (
-                    txn.merchant_name or txn.name or existing_txn.merchant
-                )
-                existing_txn.description = (
-                    txn.name or plaid_original_description or existing_txn.description
-                )
-                existing_txn.plaid_original_description = plaid_original_description
-                existing_txn.amount = float(txn.amount)
-                existing_txn.pending = txn.pending
-                existing_txn.date = txn.date
-                new_cat = resolved_plaid_category(
-                    existing_txn.merchant, existing_txn.description, txn
-                )
-                if new_cat:
-                    existing_txn.category = new_cat
-                # Backfill account_id if it was null (e.g. from a transient accounts_get failure)
-                if existing_txn.account_id is None and txn.account_id:
-                    existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
-
-                if (
-                    notifier
-                    and existing_txn.flagged
-                    and not was_flagged
-                    and not existing_txn.alert_sent
-                    and not is_initial_backfill
-                ):
-                    try:
-                        await notifier.send_transaction_alert(
-                            to_email=user_email,
-                            merchant=existing_txn.merchant,
-                            amount=float(existing_txn.amount),
-                            category=existing_txn.category,
-                            flag_reason=existing_txn.flag_reason,
-                        )
-                        existing_txn.alert_sent = True
-                        existing_txn.alert_sent_at = datetime.now(timezone.utc)
-                    except Exception:
-                        logger.warning(
-                            "Failed to send alert for modified plaid txn %s",
-                            txn.transaction_id,
-                        )
-                if (
-                    notifier
-                    and existing_txn.flagged
-                    and not existing_txn.accountability_alert_sent
-                    and not is_initial_backfill
-                ):
-                    try:
-                        await send_accountability_alerts_for_transaction(
-                            db,
-                            notifier=notifier,
-                            transaction=existing_txn,
-                            user_id=plaid_item.user_id,
-                        )
-                    except Exception:
-                        logger.warning(
-                            "Failed accountability alerts for modified plaid txn %s",
-                            txn.transaction_id,
-                        )
+            if await _process_modified_transaction(
+                db, txn,
+                user_id=plaid_item.user_id,
+                notifier=notifier,
+                user_email=user_email,
+                is_initial_backfill=is_initial_backfill,
+            ):
                 modified_count += 1
 
-        # Process removed transactions
-        for txn in response.removed:
-            result = await db.execute(
-                select(Transaction).where(
-                    Transaction.plaid_transaction_id == txn.transaction_id
-                )
-            )
-            existing_txn = result.scalar_one_or_none()
-            if existing_txn:
-                await db.delete(existing_txn)
-                removed_count += 1
+        removed_count += await _process_removed_transactions(db, response.removed)
 
         has_more = response.has_more
         cursor = response.next_cursor
 
     await ensure_discipline_window_after_plaid_sync(db, plaid_item.user_id)
 
-    # Update cursor and last sync time
     plaid_item.transaction_cursor = cursor
     plaid_item.last_synced_at = datetime.now(timezone.utc)
     await db.commit()

@@ -14,6 +14,7 @@ from ..application.auth import (
 from ..database import get_db
 from ..dependencies.auth import get_current_user
 from ..dependencies.integrations import get_notifier
+from ..dependencies.rate_limit import rate_limit_auth
 from ..models.user import User
 from ..ports.notifier import NotifierPort
 from ..schemas.auth import AuthResponse, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, Token
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=AuthResponse, dependencies=[Depends(rate_limit_auth)])
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     try:
         result = await register_account(
@@ -62,7 +63,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(rate_limit_auth)])
 async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
     try:
         result = await login_account(
@@ -146,7 +147,7 @@ async def update_me(
     return current_user
 
 
-@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+@router.post("/forgot-password", status_code=status.HTTP_200_OK, dependencies=[Depends(rate_limit_auth)])
 async def forgot_password(
     payload: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 from typing import Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class PactCreate(BaseModel):
@@ -63,5 +63,4 @@ class PactResponse(BaseModel):
     status: str
     locked_until: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

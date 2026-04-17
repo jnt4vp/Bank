@@ -41,3 +41,7 @@ backend/venv/
 .env.*
 !**/.env*.example
 bankenv/
+
+# Test results
+frontend/test-results/
+frontend/playwright-report/
