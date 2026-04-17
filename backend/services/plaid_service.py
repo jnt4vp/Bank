@@ -235,6 +235,7 @@ async def _process_added_transaction(
     user_email: str | None,
     user_categories: list[str] | None,
     is_initial_backfill: bool,
+    card_locked: bool = False,
 ) -> bool:
     """Handle a single added Plaid transaction. Returns True if a new row was inserted."""
     existing = await db.execute(
@@ -273,6 +274,10 @@ async def _process_added_transaction(
                 "Classification failed for plaid txn %s, storing without flag",
                 txn.transaction_id,
             )
+
+    if card_locked and not is_initial_backfill:
+        flagged = True
+        flag_reason = "card_was_locked"
 
     new_txn = Transaction(
         user_id=user_id,
@@ -426,6 +431,70 @@ async def _process_removed_transactions(
     return removed_count
 
 
+async def _gather_sync_context(
+    db: AsyncSession,
+    plaid_item: PlaidItem,
+    notifier: NotifierPort | None,
+) -> tuple[str | None, list[str] | None, bool]:
+    """Fetch the user_email, active pact categories, and card_locked flag for a sync cycle."""
+    user_email: str | None = None
+    if notifier:
+        result = await db.execute(
+            select(User.email).where(User.id == plaid_item.user_id)
+        )
+        user_email = result.scalar_one_or_none()
+
+    lock_result = await db.execute(
+        select(User.card_locked).where(User.id == plaid_item.user_id)
+    )
+    card_locked = bool(lock_result.scalar_one_or_none())
+
+    user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
+    return user_email, user_categories, card_locked
+
+
+async def _process_sync_page(
+    db: AsyncSession,
+    response,
+    *,
+    user_id: uuid.UUID,
+    classifier: ClassifierPort | None,
+    notifier: NotifierPort | None,
+    user_email: str | None,
+    user_categories: list[str] | None,
+    is_initial_backfill: bool,
+    card_locked: bool = False,
+) -> tuple[int, int, int]:
+    """Process one /transactions/sync response page. Returns (added, modified, removed) counts."""
+    added = 0
+    modified = 0
+    for txn in response.added:
+        if await _process_added_transaction(
+            db, txn,
+            user_id=user_id,
+            classifier=classifier,
+            notifier=notifier,
+            user_email=user_email,
+            user_categories=user_categories,
+            is_initial_backfill=is_initial_backfill,
+            card_locked=card_locked,
+        ):
+            added += 1
+
+    for txn in response.modified:
+        if await _process_modified_transaction(
+            db, txn,
+            user_id=user_id,
+            notifier=notifier,
+            user_email=user_email,
+            is_initial_backfill=is_initial_backfill,
+        ):
+            modified += 1
+
+    removed = await _process_removed_transactions(db, response.removed)
+    return added, modified, removed
+
+
 async def sync_transactions(
     db: AsyncSession,
     plaid_item: PlaidItem,
@@ -440,21 +509,15 @@ async def sync_transactions(
     )
 
     await _sync_accounts(db, plaid_item)
+    user_email, user_categories, card_locked = await _gather_sync_context(
+        db, plaid_item, notifier
+    )
 
     cursor = plaid_item.transaction_cursor
     added_count = 0
     modified_count = 0
     removed_count = 0
     has_more = True
-
-    user_email: str | None = None
-    if notifier:
-        result = await db.execute(
-            select(User.email).where(User.id == plaid_item.user_id)
-        )
-        user_email = result.scalar_one_or_none()
-
-    user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
 
     while has_more:
         request = TransactionsSyncRequest(
@@ -467,29 +530,19 @@ async def sync_transactions(
         )
         response = await _call_plaid(client.transactions_sync, request)
 
-        for txn in response.added:
-            if await _process_added_transaction(
-                db, txn,
-                user_id=plaid_item.user_id,
-                classifier=classifier,
-                notifier=notifier,
-                user_email=user_email,
-                user_categories=user_categories,
-                is_initial_backfill=is_initial_backfill,
-            ):
-                added_count += 1
-
-        for txn in response.modified:
-            if await _process_modified_transaction(
-                db, txn,
-                user_id=plaid_item.user_id,
-                notifier=notifier,
-                user_email=user_email,
-                is_initial_backfill=is_initial_backfill,
-            ):
-                modified_count += 1
-
-        removed_count += await _process_removed_transactions(db, response.removed)
+        a, m, r = await _process_sync_page(
+            db, response,
+            user_id=plaid_item.user_id,
+            classifier=classifier,
+            notifier=notifier,
+            user_email=user_email,
+            user_categories=user_categories,
+            is_initial_backfill=is_initial_backfill,
+            card_locked=card_locked,
+        )
+        added_count += a
+        modified_count += m
+        removed_count += r
 
         has_more = response.has_more
         cursor = response.next_cursor

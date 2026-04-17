@@ -200,6 +200,60 @@ class SyncTransactionsAddedTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(call_kwargs["skip_for_initial_plaid_backfill"])
 
 
+class SyncTransactionsCardLockTest(unittest.IsolatedAsyncioTestCase):
+    @patch("backend.services.plaid_service._sync_accounts", new=AsyncMock())
+    @patch("backend.services.plaid_service.ensure_discipline_window_after_plaid_sync", new=AsyncMock())
+    @patch("backend.services.plaid_service.record_simulated_savings_transfers_for_transaction", new=AsyncMock(return_value=0))
+    @patch("backend.services.plaid_service.send_accountability_alerts_for_transaction", new=AsyncMock())
+    @patch("backend.services.plaid_service.resolved_plaid_category", return_value="Shopping")
+    @patch("backend.services.plaid_service._resolve_account_id", new=AsyncMock(return_value=None))
+    @patch("backend.services.plaid_service.get_active_pact_categories", new=AsyncMock(return_value=[]))
+    async def test_flags_added_txn_when_card_locked(self, _resolved_cat):
+        item = _make_plaid_item(cursor="cursor-1", last_synced_at=datetime.now(timezone.utc))
+        txn1 = _make_plaid_txn(amount=12.0, merchant_name="Unexpected Store")
+        sync_resp = _make_sync_response(added=[txn1])
+
+        # db.execute returns True for the card_locked lookup, None otherwise
+        def _make_result(value):
+            r = MagicMock()
+            r.scalar_one_or_none.return_value = value
+            return r
+
+        lock_consumed = [False]
+
+        async def _execute(query, *args, **kwargs):
+            if not lock_consumed[0]:
+                lock_consumed[0] = True
+                return _make_result(True)  # card_locked = True
+            return _make_result(None)  # No existing txn
+
+        db = AsyncMock()
+        db.execute = AsyncMock(side_effect=_execute)
+
+        captured_txns = []
+        original_add = db.add
+
+        def capture_add(obj):
+            captured_txns.append(obj)
+            return original_add(obj)
+
+        db.add = MagicMock(side_effect=capture_add)
+
+        with (
+            patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
+            patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
+            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+        ):
+            from backend.services.plaid_service import sync_transactions
+            counts = await sync_transactions(db, item, classifier=None, notifier=None)
+
+        self.assertEqual(counts["added"], 1)
+        self.assertEqual(len(captured_txns), 1)
+        inserted = captured_txns[0]
+        self.assertTrue(inserted.flagged)
+        self.assertEqual(inserted.flag_reason, "card_was_locked")
+
+
 class SyncTransactionsRemovedTest(unittest.IsolatedAsyncioTestCase):
     @patch("backend.services.plaid_service._sync_accounts", new=AsyncMock())
     @patch("backend.services.plaid_service.ensure_discipline_window_after_plaid_sync", new=AsyncMock())
