@@ -247,6 +247,22 @@
   padding-inline: 0.35rem;
 }
 
+.dashboard-card-lock-banner {
+  margin: 0.6rem 0.35rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 14px;
+  background: rgba(169, 78, 85, 0.12);
+  border: 1px solid rgba(169, 78, 85, 0.35);
+  color: #7a2d33;
+  font-size: 0.95rem;
+}
+
+.dashboard-card-lock-banner a {
+  color: #7a2d33;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
 .dashboard-hero-copy {
   max-width: 46rem;
 }

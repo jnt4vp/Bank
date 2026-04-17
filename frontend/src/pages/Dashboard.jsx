@@ -617,6 +617,14 @@ export default function Dashboard() {
     <div className="dashboard-shell">
       <DashboardTopbar navAriaLabel="Dashboard" />
 
+      {user?.card_locked ? (
+        <div className="dashboard-card-lock-banner" role="status">
+          <strong>Card is locked.</strong> New purchases are blocked. Plaid-synced charges will be flagged.
+          {' '}
+          <Link to="/settings">Unlock in Settings</Link>
+        </div>
+      ) : null}
+
       <section className="dashboard-hero">
         <div className="dashboard-hero-copy">
           <h1 className="dashboard-title">{greeting.title}</h1>

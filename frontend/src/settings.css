@@ -340,6 +340,16 @@
   color: #5e7a4c;
 }
 
+.settings-inline-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #6f6871;
+}
+
+.settings-inline-note.is-error {
+  color: #a94e55;
+}
+
 .settings-list {
   display: flex;
   flex-direction: column;

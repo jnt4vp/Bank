@@ -16,7 +16,7 @@ from backend.application.auth import (
     send_password_reset_link,
 )
 from backend.application.counter import get_counter_value, increment_counter_value
-from backend.application.transactions import ingest_user_transaction
+from backend.application.transactions import CardLockedError, ingest_user_transaction
 from backend.ports.classifier import ClassificationResult
 from backend.services.auth import ensure_dev_seed_user, reset_password
 
@@ -394,6 +394,37 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(transaction.alert_sent)
         self.assertIsNotNone(transaction.alert_sent_at)
         self.assertEqual(result, transaction)
+
+    async def test_ingest_user_transaction_raises_when_card_locked(self):
+        classifier = SimpleNamespace(classify_transaction=AsyncMock())
+        notifier = SimpleNamespace(send_transaction_alert=AsyncMock())
+        db = SimpleNamespace(
+            flush=AsyncMock(), commit=AsyncMock(),
+            rollback=AsyncMock(), refresh=AsyncMock(),
+        )
+        with patch(
+            "backend.application.transactions.get_active_pact_categories",
+            new=AsyncMock(return_value=[]),
+        ), patch(
+            "backend.application.transactions.create_transaction",
+            new=AsyncMock(),
+        ) as create_mock:
+            with self.assertRaises(CardLockedError):
+                await ingest_user_transaction(
+                    db,
+                    user_id=uuid4(),
+                    user_email="u@example.com",
+                    merchant="Any",
+                    description="Any",
+                    amount=10.0,
+                    classifier=classifier,
+                    notifier=notifier,
+                    card_locked=True,
+                )
+        classifier.classify_transaction.assert_not_awaited()
+        create_mock.assert_not_awaited()
+        db.flush.assert_not_awaited()
+        db.commit.assert_not_awaited()
 
 
 class CounterUseCaseTest(unittest.IsolatedAsyncioTestCase):

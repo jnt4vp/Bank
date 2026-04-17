@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { login, loginViaAPI } from "./helpers/auth.js";
-import { getMe, updateMe } from "./helpers/api.js";
+import { createTransaction, getMe, updateMe } from "./helpers/api.js";
+import { API_URL } from "./helpers/fixtures.js";
 
 /**
  * Navigate to the settings page after logging in.
@@ -76,11 +77,70 @@ test.describe("Settings - Card locking", () => {
 
   test.beforeEach(async ({ request }) => {
     token = await loginViaAPI(request);
+    // Ensure a clean starting state regardless of what a previous test left.
+    await updateMe(request, token, { card_locked: false });
+  });
+
+  test.afterEach(async ({ request }) => {
+    await updateMe(request, token, { card_locked: false });
   });
 
   test("user profile includes card_locked field", async ({ request }) => {
     const me = await getMe(request, token);
     expect(typeof me.card_locked).toBe("boolean");
+  });
+
+  test("can toggle card_locked via API", async ({ request }) => {
+    const locked = await updateMe(request, token, { card_locked: true });
+    expect(locked.card_locked).toBe(true);
+
+    const unlocked = await updateMe(request, token, { card_locked: false });
+    expect(unlocked.card_locked).toBe(false);
+  });
+
+  test("locked card blocks manual transaction ingest with 423", async ({ request }) => {
+    await updateMe(request, token, { card_locked: true });
+
+    const res = await request.post(`${API_URL}/api/transactions/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      data: { merchant: "Test Store", description: "Blocked test purchase", amount: 9.99 },
+    });
+    expect(res.status()).toBe(423);
+    const body = await res.json();
+    expect(String(body.detail || "").toLowerCase()).toContain("locked");
+  });
+
+  test("unlocked card allows manual transaction ingest", async ({ request }) => {
+    await updateMe(request, token, { card_locked: false });
+    const txn = await createTransaction(request, token, {
+      merchant: "Test Unlock Store",
+      description: "Allowed test purchase",
+      amount: 4.25,
+    });
+    expect(txn.id).toBeTruthy();
+  });
+
+  test("toggle in Settings UI persists and shows Dashboard banner", async ({ page, request }) => {
+    await goToSettings(page);
+
+    const toggle = page.getByRole("button", { name: /lock card|card is locked/i }).first();
+    await expect(toggle).toBeVisible({ timeout: 5_000 });
+    await toggle.click();
+
+    // Give the PATCH a moment to settle and the user state to refresh.
+    await expect(toggle).toHaveAttribute("aria-pressed", "true", { timeout: 5_000 });
+
+    // Confirm server state actually flipped.
+    const me = await getMe(request, token);
+    expect(me.card_locked).toBe(true);
+
+    // Dashboard should render the banner now.
+    await page.getByRole("link", { name: /dashboard/i }).first().click();
+    await expect(page).toHaveURL(/dashboard/);
+    await expect(page.getByText(/card is locked/i).first()).toBeVisible({ timeout: 5_000 });
   });
 });
 

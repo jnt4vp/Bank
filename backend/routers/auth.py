@@ -131,6 +131,8 @@ async def update_me(
         current_user.discipline_ui_mode = next_mode
     if payload.dashboard_force_sky is not None:
         current_user.dashboard_force_sky = payload.dashboard_force_sky
+    if payload.card_locked is not None:
+        current_user.card_locked = payload.card_locked
     if payload.reset_discipline_window is True:
         current_user.discipline_score_started_at = datetime.now(timezone.utc)
         total_rw, flagged_rw = await count_transactions_for_discipline_score(

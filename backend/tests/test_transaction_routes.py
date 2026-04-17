@@ -11,13 +11,20 @@ from uuid import uuid4
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("AUTO_CREATE_TABLES", "false")
 
+from fastapi import HTTPException
+
+from backend.application.transactions import CardLockedError
 from backend.routers.transactions import ingest_transaction, list_transactions
 from backend.schemas.transaction import TransactionCreate
 
 
+def _make_user(*, card_locked: bool = False):
+    return SimpleNamespace(id=uuid4(), email="u@example.com", card_locked=card_locked)
+
+
 class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
     async def test_calls_ingest_use_case_with_correct_args(self):
-        user = SimpleNamespace(id=uuid4(), email="u@example.com")
+        user = _make_user()
         txn = SimpleNamespace(
             id=uuid4(), user_id=user.id, merchant="Starbucks",
             description="Coffee", amount=Decimal("5.50"), category="Coffee Shops",
@@ -53,11 +60,12 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
             amount=5.50,
             classifier=classifier,
             notifier=notifier,
+            card_locked=False,
         )
         self.assertEqual(result, txn)
 
     async def test_returns_transaction_on_success(self):
-        user = SimpleNamespace(id=uuid4(), email="u@example.com")
+        user = _make_user()
         txn = SimpleNamespace(id=uuid4(), merchant="Target")
         with patch(
             "backend.routers.transactions.ingest_user_transaction",
@@ -72,10 +80,45 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(result.merchant, "Target")
 
+    async def test_card_locked_returns_423(self):
+        user = _make_user(card_locked=True)
+        with patch(
+            "backend.routers.transactions.ingest_user_transaction",
+            new=AsyncMock(side_effect=CardLockedError("Card is locked.")),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                await ingest_transaction(
+                    TransactionCreate(merchant="Target", description="X", amount=10.0),
+                    db=AsyncMock(),
+                    current_user=user,
+                    classifier=SimpleNamespace(),
+                    notifier=SimpleNamespace(),
+                )
+        self.assertEqual(ctx.exception.status_code, 423)
+        self.assertIn("locked", ctx.exception.detail.lower())
+
+    async def test_card_locked_flag_is_forwarded(self):
+        user = _make_user(card_locked=True)
+        txn = SimpleNamespace(id=uuid4())
+        with patch(
+            "backend.routers.transactions.ingest_user_transaction",
+            new=AsyncMock(return_value=txn),
+        ) as ingest_mock:
+            # Still call it so we can see card_locked was passed through;
+            # the handler's real check happens inside the use-case.
+            await ingest_transaction(
+                TransactionCreate(merchant="X", description="Y", amount=1.0),
+                db=AsyncMock(),
+                current_user=user,
+                classifier=SimpleNamespace(),
+                notifier=SimpleNamespace(),
+            )
+        self.assertTrue(ingest_mock.await_args.kwargs["card_locked"])
+
 
 class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):
     async def test_calls_repo_with_flagged_filter(self):
-        user = SimpleNamespace(id=uuid4())
+        user = _make_user()
         txns = [SimpleNamespace(id=uuid4(), flagged=True)]
         with patch(
             "backend.routers.transactions.get_transactions_for_user",
@@ -94,7 +137,7 @@ class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 1)
 
     async def test_default_returns_all(self):
-        user = SimpleNamespace(id=uuid4())
+        user = _make_user()
         txns = [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
         with patch(
             "backend.routers.transactions.get_transactions_for_user",
@@ -113,7 +156,7 @@ class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 2)
 
     async def test_pagination_params_forwarded(self):
-        user = SimpleNamespace(id=uuid4())
+        user = _make_user()
         with patch(
             "backend.routers.transactions.get_transactions_for_user",
             new=AsyncMock(return_value=[]),

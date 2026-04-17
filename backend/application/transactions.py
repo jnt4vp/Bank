@@ -20,6 +20,10 @@ from ..services.simulated_savings_transfers import (
 logger = logging.getLogger("bank.transactions")
 
 
+class CardLockedError(Exception):
+    """Raised when a user tries to record a purchase while their card is locked."""
+
+
 def _format_active_pacts(user_categories: list[str] | None) -> str:
     categories = [category.strip() for category in (user_categories or []) if category and category.strip()]
     return ", ".join(categories) if categories else "-"
@@ -42,7 +46,15 @@ async def ingest_user_transaction(
     amount: float,
     classifier: ClassifierPort,
     notifier: NotifierPort,
+    card_locked: bool = False,
 ) -> Transaction:
+    if card_locked:
+        logger.info(
+            "BLOCKED PURCHASE  |  user=%s  |  merchant=%s  |  amount=$%.2f  |  reason=card_locked",
+            user_id, merchant, amount,
+        )
+        raise CardLockedError("Card is locked. Unlock it in Settings to record purchases.")
+
     user_categories = await get_active_pact_categories(db, user_id)
     logger.info(
         "CLASSIFICATION CHECK  |  user=%s  |  merchant=%s  |  description=%s  |  amount=$%.2f  |  active_pacts=%s  |  ai=%s",

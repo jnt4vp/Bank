@@ -16,6 +16,7 @@ class UserUpdate(BaseModel):
     discipline_savings_percentage: float | None = Field(default=None, ge=0, le=100)
     discipline_ui_mode: str | None = None
     dashboard_force_sky: bool | None = None
+    card_locked: bool | None = None
     reset_discipline_window: bool | None = Field(
         default=None,
         description="When true, moves the discipline scoring window to now and recomputes score.",

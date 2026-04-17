@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from ..application.transactions import ingest_user_transaction
+from ..application.transactions import CardLockedError, ingest_user_transaction
 from ..database import get_db
 from ..dependencies.auth import get_current_user
 from ..dependencies.integrations import get_classifier, get_notifier
@@ -23,16 +23,23 @@ async def ingest_transaction(
     classifier: ClassifierPort = Depends(get_classifier),
     notifier: NotifierPort = Depends(get_notifier),
 ):
-    return await ingest_user_transaction(
-        db,
-        user_id=current_user.id,
-        user_email=current_user.email,
-        merchant=payload.merchant,
-        description=payload.description,
-        amount=payload.amount,
-        classifier=classifier,
-        notifier=notifier,
-    )
+    try:
+        return await ingest_user_transaction(
+            db,
+            user_id=current_user.id,
+            user_email=current_user.email,
+            merchant=payload.merchant,
+            description=payload.description,
+            amount=payload.amount,
+            classifier=classifier,
+            notifier=notifier,
+            card_locked=bool(current_user.card_locked),
+        )
+    except CardLockedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=str(exc),
+        ) from exc
 
 @router.get("/", response_model=List[TransactionResponse])
 async def list_transactions(

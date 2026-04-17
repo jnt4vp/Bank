@@ -201,6 +201,26 @@ export default function Settings() {
   const [dashboardSkySaving, setDashboardSkySaving] = useState(false)
   const [resetDisciplineSaving, setResetDisciplineSaving] = useState(false)
   const [uiPrefsMessage, setUiPrefsMessage] = useState({ type: '', text: '' })
+  const [cardLockSaving, setCardLockSaving] = useState(false)
+  const [cardLockError, setCardLockError] = useState('')
+
+  async function handleToggleCardLock() {
+    if (!token || cardLockSaving) return
+    setCardLockSaving(true)
+    setCardLockError('')
+    try {
+      await apiRequest('/api/auth/me', {
+        method: 'PATCH',
+        token,
+        body: { card_locked: !user?.card_locked },
+      })
+      await refreshUser(token)
+    } catch (err) {
+      setCardLockError(err?.message || 'Could not update card lock.')
+    } finally {
+      setCardLockSaving(false)
+    }
+  }
   const [partners, setPartners] = useState([])
   const [partnerForm, setPartnerForm] = useState({
     partner_name: '',
@@ -818,6 +838,26 @@ export default function Settings() {
             </div>
 
             <div className="settings-list settings-stack">
+              <ToggleRow
+                label={
+                  user?.card_locked
+                    ? 'Card is locked'
+                    : 'Lock card (simulation)'
+                }
+                description={
+                  user?.card_locked
+                    ? 'New purchases are blocked. Plaid-synced charges will be flagged with "card_was_locked".'
+                    : 'Block new simulated purchases and flag any real Plaid charges while locked. Useful for testing discipline.'
+                }
+                checked={Boolean(user?.card_locked)}
+                onChange={handleToggleCardLock}
+              />
+              {cardLockSaving ? (
+                <p className="settings-inline-note">Saving...</p>
+              ) : null}
+              {cardLockError ? (
+                <p className="settings-inline-note is-error">{cardLockError}</p>
+              ) : null}
               {securityRows.map((row) => (
                 <RowAction
                   key={row.label}
