@@ -7,15 +7,18 @@ import { getMe, updateMe } from "./helpers/api.js";
  */
 async function goToSettings(page) {
   await login(page);
-  await page.getByRole("link", { name: /settings/i }).click();
+  const profileTrigger = page.locator(".dashboard-profile-trigger");
+  await expect(profileTrigger).toBeVisible();
+  await profileTrigger.click();
+  await page.getByRole("link", { name: /^Settings$/i }).click();
   await expect(page).toHaveURL(/settings/);
 }
 
 test.describe("Settings - Profile", () => {
   test("shows profile section with user email", async ({ page }) => {
     await goToSettings(page);
-    await expect(page.getByText(/profile/i)).toBeVisible();
-    await expect(page.getByText(/email/i)).toBeVisible();
+    await expect(page.getByText(/^Profile$/)).toBeVisible();
+    await expect(page.getByText(/^Email$/)).toBeVisible();
   });
 
   test("shows security section", async ({ page }) => {
@@ -111,7 +114,7 @@ test.describe("Settings - UI mode", () => {
     // The dashboard should render in discipline mode (the exact visual
     // difference varies, but the page should load without errors)
     await expect(page.getByText(/dashboard/i).first()).toBeVisible();
-    await expect(page.getByText(/discipline score/i)).toBeVisible();
+    await expect(page.getByText(/^Discipline Score$/)).toBeVisible();
 
     // Clean up
     await updateMe(request, token, { discipline_ui_mode: "classic" });

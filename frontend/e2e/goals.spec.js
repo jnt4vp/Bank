@@ -14,9 +14,9 @@ test.describe("Goals page", () => {
   });
 
   test("shows empty state when no goals exist", async ({ page }) => {
-    await expect(
-      page.getByText(/no goals yet|add one|name what you want/i)
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/no goals yet\. add one on the right\./i)).toBeVisible({
+      timeout: 5_000,
+    });
   });
 
   test("shows add goal form", async ({ page }) => {

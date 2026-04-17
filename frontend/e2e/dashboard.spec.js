@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 import { login } from "./helpers/auth.js";
 
+async function openProfileMenu(page) {
+  const trigger = page.locator(".dashboard-profile-trigger");
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+}
+
 test.describe("Dashboard", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
@@ -11,16 +17,18 @@ test.describe("Dashboard", () => {
   });
 
   test("shows financial overview cards", async ({ page }) => {
-    await expect(page.getByText(/balance/i)).toBeVisible();
-    await expect(page.getByText(/savings/i)).toBeVisible();
-    await expect(page.getByText(/discipline score/i)).toBeVisible();
+    await expect(page.getByText(/linked banks|connect your bank/i).first()).toBeVisible();
+    await expect(page.getByText(/pact savings/i)).toBeVisible();
+    await expect(page.getByText(/^Discipline Score$/)).toBeVisible();
   });
 
   test("discipline score shows a value between 0 and 100 or a dash", async ({ page }) => {
-    const scoreCard = page.getByText(/discipline score/i).locator("..");
+    const scoreCard = page.locator(".dashboard-score-card");
     await expect(scoreCard).toBeVisible();
-    // The score area should contain a number or a dash placeholder
-    await expect(scoreCard.getByText(/\d{1,3}%|—|--/)).toBeVisible({ timeout: 5_000 });
+    await expect(scoreCard.getByText(/discipline score/i)).toBeVisible();
+    await expect(scoreCard.locator(".dashboard-score-meter-value")).toHaveText(/\d{1,3}%|—|--/, {
+      timeout: 5_000,
+    });
   });
 
   test("shows recent activity section", async ({ page }) => {
@@ -34,6 +42,7 @@ test.describe("Dashboard", () => {
   });
 
   test("logout returns to landing page", async ({ page }) => {
+    await openProfileMenu(page);
     const signOutBtn = page.getByRole("button", { name: /sign out|log ?out/i });
     await expect(signOutBtn).toBeVisible();
     await signOutBtn.click();
@@ -46,10 +55,11 @@ test.describe("Dashboard", () => {
     await page.reload();
 
     await expect(page).toHaveURL(/dashboard/, { timeout: 10_000 });
-    await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+    await expect(page.locator(".dashboard-profile-trigger")).toBeVisible();
   });
 
   test("after logout, dashboard redirects to landing", async ({ page }) => {
+    await openProfileMenu(page);
     await page.getByRole("button", { name: /sign out|log ?out/i }).click();
     await expect(page).not.toHaveURL(/dashboard/);
 
@@ -64,36 +74,37 @@ test.describe("Navbar", () => {
   });
 
   test("shows navigation links", async ({ page }) => {
-    await expect(page.getByRole("link", { name: /dashboard/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /transactions/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /pacts/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /goals/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /analytics/i })).toBeVisible();
+    const nav = page.locator("nav.dashboard-nav");
+    await expect(nav.getByRole("link", { name: /^Dashboard$/i })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Transactions$/i })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Pacts$/i })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Goals$/i })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Analytics$/i })).toBeVisible();
   });
 
   test("navigates to settings page", async ({ page }) => {
-    // Settings is in the profile dropdown
+    await openProfileMenu(page);
     await page.getByRole("link", { name: /settings/i }).click();
     await expect(page).toHaveURL(/settings/);
   });
 
   test("navigates to transactions page", async ({ page }) => {
-    await page.getByRole("link", { name: /transactions/i }).click();
+    await page.locator("nav.dashboard-nav").getByRole("link", { name: /^Transactions$/i }).click();
     await expect(page).toHaveURL(/transactions/);
   });
 
   test("navigates to pacts page", async ({ page }) => {
-    await page.getByRole("link", { name: /pacts/i }).click();
+    await page.locator("nav.dashboard-nav").getByRole("link", { name: /^Pacts$/i }).click();
     await expect(page).toHaveURL(/pacts/);
   });
 
   test("navigates to goals page", async ({ page }) => {
-    await page.getByRole("link", { name: /goals/i }).click();
+    await page.locator("nav.dashboard-nav").getByRole("link", { name: /^Goals$/i }).click();
     await expect(page).toHaveURL(/goals/);
   });
 
   test("navigates to analytics page", async ({ page }) => {
-    await page.getByRole("link", { name: /analytics/i }).click();
+    await page.locator("nav.dashboard-nav").getByRole("link", { name: /^Analytics$/i }).click();
     await expect(page).toHaveURL(/analytics/);
   });
 });

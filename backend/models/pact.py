@@ -25,5 +25,5 @@ class Pact(Base):
         "AccountabilitySettings",
         back_populates="pact",
         uselist=False,
-        cascade="all, delete-orphan",
+        passive_deletes=True,
     )

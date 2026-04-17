@@ -95,7 +95,9 @@ test.describe("Transaction classification", () => {
 
     // Starbucks should be visible, City Water should not
     await expect(page.getByText(/starbucks/i).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/city water utility/i)).not.toBeVisible({ timeout: 3_000 });
+    await expect(
+      page.locator(".transactions-ledger-row", { hasText: /city water utility/i })
+    ).toHaveCount(0, { timeout: 3_000 });
   });
 
   test("clear-only filter hides flagged transactions", async ({ page, request }) => {
@@ -106,10 +108,10 @@ test.describe("Transaction classification", () => {
     await page.getByRole("link", { name: /transactions/i }).click();
 
     // Click "Clear only"
-    await page.getByText(/clear only/i).click();
+    await page.getByRole("button", { name: /^Clear only$/i }).click();
 
     await expect(page.getByText(/city water utility/i).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/starbucks/i)).not.toBeVisible({ timeout: 3_000 });
+    await expect(page.getByText(/flagged review/i)).toHaveCount(0, { timeout: 3_000 });
   });
 
   test("search filters by merchant name", async ({ page, request }) => {
@@ -123,7 +125,9 @@ test.describe("Transaction classification", () => {
     await searchInput.fill("Starbucks");
 
     await expect(page.getByText(/starbucks/i).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/city water utility/i)).not.toBeVisible({ timeout: 3_000 });
+    await expect(
+      page.locator(".transactions-ledger-row", { hasText: /city water utility/i })
+    ).toHaveCount(0, { timeout: 3_000 });
   });
 
   test("transaction row shows amount, date, and category", async ({ page, request }) => {

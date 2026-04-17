@@ -3,11 +3,21 @@ import { login, loginViaAPI } from "./helpers/auth.js";
 import { createPact, deletePact, getUserPacts } from "./helpers/api.js";
 import { PRESET_CATEGORIES } from "./helpers/fixtures.js";
 
+async function goToPacts(page) {
+  await page.getByRole("link", { name: /^Pacts$/i }).click();
+  await expect(page).toHaveURL(/pacts/);
+
+  const skipIntro = page.getByRole("button", { name: /skip intro/i });
+  if (await skipIntro.count()) {
+    await skipIntro.click();
+  }
+}
+
 test.describe("Pacts page", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
-    await page.getByRole("link", { name: /pacts/i }).click();
-    await expect(page).toHaveURL(/pacts/);
+    await goToPacts(page);
+    await page.getByRole("tab", { name: /manage pacts/i }).click();
   });
 
   test("shows pacts page with stats row", async ({ page }) => {
@@ -25,7 +35,10 @@ test.describe("Pacts page", () => {
     }
 
     await page.reload();
-    await expect(page.getByText(/create your first pact|your pacts/i)).toBeVisible({ timeout: 5_000 });
+    await page.getByRole("tab", { name: /manage pacts/i }).click();
+    await expect(page.getByRole("heading", { name: /create your first pact/i })).toBeVisible({
+      timeout: 5_000,
+    });
   });
 });
 
@@ -42,43 +55,29 @@ test.describe("Pact creation via UI", () => {
     }
 
     await login(page);
-    await page.getByRole("link", { name: /pacts/i }).click();
-    await expect(page).toHaveURL(/pacts/);
+    await goToPacts(page);
+    await page.getByRole("tab", { name: /create pact/i }).click();
   });
 
   test("creates a pact with a preset category", async ({ page }) => {
-    // Step 1: Select a preset category
-    const categorySelect = page.locator("select").filter({ hasText: /select a category/i });
-    await categorySelect.selectOption({ label: "Coffee Shops" });
+    await page.getByLabel(/preset category/i).selectOption("Coffee Shops");
 
-    // Step 2: Configure consequences
-    const alertMethodSelect = page.locator("select").filter({ hasText: /email alert|no alert/i });
-    if (await alertMethodSelect.isVisible()) {
-      await alertMethodSelect.selectOption({ label: "Email alert" });
-    }
-
-    // Submit
     await page.getByRole("button", { name: /create pact/i }).click();
 
-    // Verify the new pact appears
-    await expect(page.getByText(/coffee shops/i)).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/active/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Coffee Shops" })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Active", { exact: true }).first()).toBeVisible();
   });
 
   test("creates a pact with a custom category", async ({ page }) => {
-    // Fill in custom merchant/keyword
-    const customInput = page.getByPlaceholder(/uber|sephora|target/i);
-    await customInput.fill("Sephora");
+    await page.getByLabel(/merchant or keyword/i).fill("Sephora");
 
-    // Submit
     await page.getByRole("button", { name: /create pact/i }).click();
 
-    // Verify
     await expect(page.getByText(/sephora/i)).toBeVisible({ timeout: 5_000 });
   });
 
   test("preset category dropdown shows all expected options", async ({ page }) => {
-    const categorySelect = page.locator("select").filter({ hasText: /select a category/i });
+    const categorySelect = page.getByLabel(/preset category/i);
     await categorySelect.click();
 
     for (const category of PRESET_CATEGORIES) {
@@ -103,14 +102,14 @@ test.describe("Pact management", () => {
     pactId = pact.id;
 
     await login(page);
-    await page.getByRole("link", { name: /pacts/i }).click();
-    await expect(page).toHaveURL(/pacts/);
+    await goToPacts(page);
+    await page.getByRole("tab", { name: /manage pacts/i }).click();
   });
 
   test("displays the created pact with correct info", async ({ page }) => {
-    await expect(page.getByText(/fast food/i)).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/preset/i).first()).toBeVisible();
-    await expect(page.getByText(/active/i).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Fast Food" })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Preset", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Active", { exact: true }).first()).toBeVisible();
   });
 
   test("can pause and resume a pact", async ({ page }) => {
@@ -120,13 +119,13 @@ test.describe("Pact management", () => {
     await pauseBtn.click();
 
     // Should now show "Paused" status and "Resume" button
-    await expect(page.getByText(/paused/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Paused", { exact: true })).toBeVisible({ timeout: 5_000 });
     const resumeBtn = page.getByRole("button", { name: /resume/i });
     await expect(resumeBtn).toBeVisible();
 
     // Resume it
     await resumeBtn.click();
-    await expect(page.getByText(/active/i).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("Active", { exact: true }).first()).toBeVisible({ timeout: 5_000 });
   });
 
   test("can delete a pact", async ({ page }) => {
@@ -135,7 +134,7 @@ test.describe("Pact management", () => {
     await deleteBtn.click();
 
     // After deletion, pact should disappear
-    await expect(page.getByText(/fast food/i)).not.toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: "Fast Food" })).not.toBeVisible({ timeout: 5_000 });
   });
 
   test("locked pact disables edit and delete buttons", async ({ page, request }) => {
@@ -148,7 +147,7 @@ test.describe("Pact management", () => {
     });
 
     await page.reload();
-    await expect(page.getByText(/alcohol/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole("heading", { name: "Alcohol" })).toBeVisible({ timeout: 5_000 });
 
     // Edit and Delete should be disabled
     const editBtn = page.getByRole("button", { name: /edit/i });
@@ -161,7 +160,7 @@ test.describe("Pact management", () => {
     }
 
     // Should show locked indicator
-    await expect(page.getByText(/locked/i)).toBeVisible();
+    await expect(page.getByText(/locked for/i)).toBeVisible();
   });
 
   test.afterEach(async ({ request }) => {

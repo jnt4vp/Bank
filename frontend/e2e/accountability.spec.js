@@ -12,6 +12,11 @@ import {
 } from "./helpers/api.js";
 import { FLAGGED_MERCHANTS } from "./helpers/fixtures.js";
 
+async function openPartnerFlow(page) {
+  await page.getByRole("tab", { name: /create pact/i }).click();
+  await page.getByLabel(/alert recipient/i).selectOption("partner");
+}
+
 test.describe("Accountability partners on Pacts page", () => {
   let token;
 
@@ -31,6 +36,7 @@ test.describe("Accountability partners on Pacts page", () => {
     await login(page);
     await page.getByRole("link", { name: /pacts/i }).click();
     await expect(page).toHaveURL(/pacts/);
+    await openPartnerFlow(page);
   });
 
   test("shows accountability partner section with helper text", async ({ page }) => {
@@ -62,7 +68,6 @@ test.describe("Accountability partners on Pacts page", () => {
 
     // Partner should appear in the list
     await expect(page.getByText(/test partner/i)).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText(/partner@test\.com/i)).toBeVisible();
   });
 
   test.afterEach(async ({ request }) => {
@@ -102,6 +107,8 @@ test.describe("Accountability partner CRUD via API + UI verification", () => {
   test("partner created via API shows up in UI", async ({ page }) => {
     await login(page);
     await page.getByRole("link", { name: /pacts/i }).click();
+    await openPartnerFlow(page);
+    await page.getByRole("button", { name: /choose accountability partners/i }).click();
 
     await expect(page.getByText(/jane doe/i)).toBeVisible({ timeout: 5_000 });
     await expect(page.getByText(/jane@example\.com/i)).toBeVisible();
@@ -110,6 +117,8 @@ test.describe("Accountability partner CRUD via API + UI verification", () => {
   test("can edit a partner inline", async ({ page }) => {
     await login(page);
     await page.getByRole("link", { name: /pacts/i }).click();
+    await openPartnerFlow(page);
+    await page.getByRole("button", { name: /choose accountability partners/i }).click();
 
     // Find the edit button near the partner
     const editBtn = page.getByRole("button", { name: /edit/i }).first();

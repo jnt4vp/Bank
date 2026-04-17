@@ -4,7 +4,7 @@ import { TEST_USER, uniqueEmail } from "./helpers/fixtures.js";
 test.describe("Landing page", () => {
   test("shows login form and branding", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByText("PactBank")).toBeVisible();
+    await expect(page.getByText("PactBank", { exact: true })).toBeVisible();
     await expect(page.getByPlaceholder(/email/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
@@ -25,7 +25,7 @@ test.describe("Login", () => {
     await page.getByRole("button", { name: /sign in/i }).click();
 
     await expect(page).toHaveURL(/dashboard/, { timeout: 10_000 });
-    await expect(page.getByText(/sign out/i)).toBeVisible();
+    await expect(page.getByText("Discipline Score", { exact: true })).toBeVisible();
   });
 
   test("shows error for invalid credentials", async ({ page }) => {
@@ -117,7 +117,7 @@ test.describe("Signup", () => {
     await page.getByLabel(/password/i).fill("Testpassword123!");
     await page.getByRole("button", { name: /sign up/i }).click();
 
-    await expect(page.getByText(/already|exists|duplicate|registered/i)).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/email already registered/i)).toBeVisible({ timeout: 5_000 });
   });
 
   test("register then login with the new account", async ({ page }) => {
