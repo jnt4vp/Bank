@@ -42,9 +42,22 @@ async def list_transactions(
         False,
         description="When true, return only flagged transactions (optional filter).",
     ),
+    limit: int = Query(
+        500,
+        ge=1,
+        le=1000,
+        description="Max rows to return (default 500, hard cap 1000).",
+    ),
+    offset: int = Query(
+        0,
+        ge=0,
+        description="Rows to skip for pagination.",
+    ),
 ):
     return await get_transactions_for_user(
         db,
         current_user.id,
         flagged_only=flagged_only,
+        limit=limit,
+        offset=offset,
     )

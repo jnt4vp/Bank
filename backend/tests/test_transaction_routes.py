@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 os.environ.setdefault("APP_ENV", "test")
@@ -85,8 +85,12 @@ class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):
                 db=AsyncMock(),
                 current_user=user,
                 flagged_only=True,
+                limit=500,
+                offset=0,
             )
-        repo_mock.assert_awaited_once_with(unittest.mock.ANY, user.id, flagged_only=True)
+        repo_mock.assert_awaited_once_with(
+            unittest.mock.ANY, user.id, flagged_only=True, limit=500, offset=0
+        )
         self.assertEqual(len(result), 1)
 
     async def test_default_returns_all(self):
@@ -100,9 +104,30 @@ class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):
                 db=AsyncMock(),
                 current_user=user,
                 flagged_only=False,
+                limit=500,
+                offset=0,
             )
-        repo_mock.assert_awaited_once_with(unittest.mock.ANY, user.id, flagged_only=False)
+        repo_mock.assert_awaited_once_with(
+            unittest.mock.ANY, user.id, flagged_only=False, limit=500, offset=0
+        )
         self.assertEqual(len(result), 2)
+
+    async def test_pagination_params_forwarded(self):
+        user = SimpleNamespace(id=uuid4())
+        with patch(
+            "backend.routers.transactions.get_transactions_for_user",
+            new=AsyncMock(return_value=[]),
+        ) as repo_mock:
+            await list_transactions(
+                db=AsyncMock(),
+                current_user=user,
+                flagged_only=False,
+                limit=100,
+                offset=50,
+            )
+        repo_mock.assert_awaited_once_with(
+            unittest.mock.ANY, user.id, flagged_only=False, limit=100, offset=50
+        )
 
 
 if __name__ == "__main__":

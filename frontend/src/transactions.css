@@ -150,6 +150,31 @@
   color: #6f6871;
 }
 
+.transactions-ledger-more {
+  display: flex;
+  justify-content: center;
+  padding: 1rem 0 0.25rem;
+}
+
+.transactions-load-more {
+  padding: 0.75rem 1.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--pb-glass-border);
+  background: var(--pb-glass-card-bg);
+  color: #2c2730;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    transform 0.18s ease;
+}
+
+.transactions-load-more:hover {
+  background: rgba(255, 249, 239, 0.82);
+  border-color: rgba(201, 150, 58, 0.42);
+  transform: translateY(-1px);
+}
+
 .transactions-ledger {
   display: flex;
   flex-direction: column;

@@ -47,6 +47,8 @@ export default function Transactions() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const PAGE_SIZE = 50
+  const [visibleRows, setVisibleRows] = useState(PAGE_SIZE)
 
   const categories = useMemo(
     () =>
@@ -177,7 +179,8 @@ export default function Transactions() {
         </div>
 
         <p className="transactions-results-summary">
-          Showing {filteredTransactions.length} of {transactions.length} transactions
+          Showing {Math.min(visibleRows, filteredTransactions.length)} of{' '}
+          {filteredTransactions.length} matching ({transactions.length} total)
         </p>
 
         {loading && <p className="dashboard-empty">Loading transactions...</p>}
@@ -197,7 +200,7 @@ export default function Transactions() {
 
         {!loading && !error && filteredTransactions.length > 0 && (
           <div className="transactions-ledger">
-            {filteredTransactions.map((transaction) => {
+            {filteredTransactions.slice(0, visibleRows).map((transaction) => {
               const isPlaidTransaction = Boolean(transaction.plaid_transaction_id)
               const primaryLabel = isPlaidTransaction
                 ? transaction.description ||
@@ -271,6 +274,17 @@ export default function Transactions() {
                 </article>
               )
             })}
+            {visibleRows < filteredTransactions.length && (
+              <div className="transactions-ledger-more">
+                <button
+                  type="button"
+                  className="transactions-load-more"
+                  onClick={() => setVisibleRows((n) => n + PAGE_SIZE)}
+                >
+                  Show more ({filteredTransactions.length - visibleRows} remaining)
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>

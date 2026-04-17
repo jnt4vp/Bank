@@ -35,6 +35,8 @@ async def get_transactions_for_user(
     user_id: UUID,
     *,
     flagged_only: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[Transaction]:
     q = select(Transaction).where(Transaction.user_id == user_id)
     if flagged_only:
@@ -43,5 +45,9 @@ async def get_transactions_for_user(
         Transaction.date.desc().nullslast(),
         Transaction.created_at.desc(),
     )
+    if offset:
+        q = q.offset(offset)
+    if limit is not None:
+        q = q.limit(limit)
     result = await db.execute(q)
     return list(result.scalars().all())
