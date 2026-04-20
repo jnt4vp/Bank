@@ -13,7 +13,7 @@ os.environ.setdefault("AUTO_CREATE_TABLES", "false")
 from backend.ports.classifier import ClassificationResult
 
 
-def _make_plaid_item(*, cursor=None, last_synced_at=None):
+def _make_plaid_item(*, cursor=None, last_synced_at=None, needs_reauth=False):
     return SimpleNamespace(
         id=uuid4(),
         user_id=uuid4(),
@@ -21,6 +21,7 @@ def _make_plaid_item(*, cursor=None, last_synced_at=None):
         shared_source_id=None,
         transaction_cursor=cursor,
         last_synced_at=last_synced_at,
+        needs_reauth=needs_reauth,
     )
 
 
@@ -88,6 +89,12 @@ def _build_smart_db(*, user_email="u@example.com", existing_txn=None, has_notifi
 
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=_execute)
+    # begin_nested() is used as an async context manager around txn inserts;
+    # the mock needs __aenter__/__aexit__ so `async with` works.
+    savepoint_cm = MagicMock()
+    savepoint_cm.__aenter__ = AsyncMock(return_value=savepoint_cm)
+    savepoint_cm.__aexit__ = AsyncMock(return_value=None)
+    db.begin_nested = MagicMock(return_value=savepoint_cm)
     return db
 
 
@@ -238,6 +245,11 @@ class SyncTransactionsCardLockTest(unittest.IsolatedAsyncioTestCase):
 
         db = AsyncMock()
         db.execute = AsyncMock(side_effect=_execute)
+
+        savepoint_cm = MagicMock()
+        savepoint_cm.__aenter__ = AsyncMock(return_value=savepoint_cm)
+        savepoint_cm.__aexit__ = AsyncMock(return_value=None)
+        db.begin_nested = MagicMock(return_value=savepoint_cm)
 
         captured_txns = []
         original_add = db.add

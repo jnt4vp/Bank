@@ -30,11 +30,14 @@ def _build_prompt(
 
     return f"""You classify bank transactions for a pact system.
 
-Only flag a transaction if it clearly matches one of the user's active pact categories:
+Only flag a transaction if the MERCHANT genuinely belongs to one of these active pact categories:
 
 {all_categories}
 
-If the transaction does not match one of those active pact categories, it is not flagged.
+Strict rules — false positives are worse than false negatives:
+- Flag only if the merchant's primary business clearly fits the category (e.g. "dining out" = restaurants, cafes, food delivery; not airlines, ride-shares, gyms, bike shops, grocery stores, utilities, paychecks, interest, deposits, or transfers).
+- Paychecks, ACH credits, interest payments, CD/savings deposits, credit-card payments, and bank transfers are NEVER flagged.
+- If you're unsure, set flagged=false. Do NOT guess a category just because the user has one active.
 
 Transaction:
 - Merchant: {merchant}
@@ -44,7 +47,7 @@ Transaction:
 Respond with ONLY valid JSON (no markdown, no extra text):
 {{"flagged": true/false, "reason": "brief explanation", "category": "{valid_values}"}}
 
-If the transaction does not clearly fall into one of the categories above, set flagged to false and category to null."""
+If the transaction does not clearly fit one of the listed categories, set flagged=false and category=null."""
 
 
 class OllamaClassifierAdapter:

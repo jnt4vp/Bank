@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ from plaid.model.transactions_refresh_request import TransactionsRefreshRequest
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.model.transactions_sync_request_options import TransactionsSyncRequestOptions
 from sqlalchemy import select, update as sa_update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
@@ -168,6 +170,60 @@ async def _call_plaid(func, *args, **kwargs):
     return await asyncio.to_thread(partial(func, *args, **kwargs))
 
 
+def _extract_plaid_error_code(exc: Exception) -> str | None:
+    """Pull error_code out of a Plaid ApiException body; None if it's not a Plaid error."""
+    if not isinstance(exc, plaid.ApiException):
+        return None
+    body = getattr(exc, "body", None)
+    if body is None:
+        return None
+    if isinstance(body, bytes):
+        try:
+            body = body.decode("utf-8", errors="replace")
+        except Exception:
+            return None
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return None
+    code = payload.get("error_code") if isinstance(payload, dict) else None
+    return str(code) if code else None
+
+
+# Plaid personal-finance-category primaries that are never discretionary spending.
+# Paychecks, interest, deposits, credit-card/loan payments, and internal transfers
+# get noisy-flagged as pact violations when routed through the LLM, so we skip them.
+_NON_SPENDING_PLAID_CATEGORIES = {
+    "INCOME",
+    "TRANSFER_IN",
+    "TRANSFER_OUT",
+    "LOAN_PAYMENTS",
+    "BANK_FEES",
+}
+
+
+def _is_classifiable_spending(amount: float, plaid_category: str | None) -> bool:
+    """True only for real outflows we'd want to evaluate against the user's pacts."""
+    if amount <= 0:
+        return False
+    if plaid_category and plaid_category.upper() in _NON_SPENDING_PLAID_CATEGORIES:
+        return False
+    return True
+
+
+async def _mark_item_needs_reauth(plaid_item_id: uuid.UUID) -> None:
+    """Flip needs_reauth=True in a fresh session so we commit regardless of caller state."""
+    from ..database import async_session
+
+    async with async_session() as db:
+        await db.execute(
+            sa_update(PlaidItem)
+            .where(PlaidItem.id == plaid_item_id)
+            .values(needs_reauth=True)
+        )
+        await db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -217,6 +273,7 @@ async def exchange_public_token(
         # Update existing item with fresh token
         plaid_item.access_token = encrypt_token(response.access_token)
         plaid_item.institution_name = institution_name or plaid_item.institution_name
+        plaid_item.needs_reauth = False
         logger.info("Plaid item %s re-linked for user %s", plaid_item.id, user_id)
     else:
         plaid_item = PlaidItem(
@@ -248,7 +305,14 @@ async def _sync_accounts(db: AsyncSession, plaid_item: PlaidItem) -> None:
             client.accounts_get,
             AccountsGetRequest(access_token=access_token),
         )
-    except Exception:
+    except Exception as exc:
+        if _extract_plaid_error_code(exc) == "ITEM_LOGIN_REQUIRED":
+            logger.warning(
+                "Plaid item %s needs re-auth (ITEM_LOGIN_REQUIRED); flagging and skipping",
+                plaid_item.id,
+            )
+            await _mark_item_needs_reauth(plaid_item.id)
+            raise
         logger.exception("Failed to fetch accounts for plaid_item %s", plaid_item.id)
         return
 
@@ -341,7 +405,7 @@ async def _process_added_transaction(
     flagged = False
     flag_reason = None
 
-    if classifier:
+    if classifier and _is_classifiable_spending(amount, category):
         try:
             classification = await classify_transaction(
                 classifier,
@@ -378,8 +442,20 @@ async def _process_added_transaction(
         pending=txn.pending,
         date=txn.date,
     )
-    db.add(new_txn)
-    await db.flush()
+    try:
+        async with db.begin_nested():
+            db.add(new_txn)
+            await db.flush()
+    except IntegrityError:
+        # Concurrent sync (e.g. background poller + manual /plaid/sync) already
+        # inserted this row — safe to skip. Savepoint rollback keeps the outer
+        # transaction alive so the rest of the page still syncs.
+        logger.info(
+            "Skipping duplicate plaid txn %s for user %s (already inserted concurrently)",
+            txn.transaction_id,
+            user_id,
+        )
+        return False
 
     await record_simulated_savings_transfers_for_transaction(
         db,
@@ -598,6 +674,12 @@ async def sync_transactions(
     notifier: NotifierPort | None = None,
 ) -> dict:
     """Run /transactions/sync for a single PlaidItem. Returns counts of added/modified/removed."""
+    if plaid_item.needs_reauth:
+        logger.debug(
+            "Plaid sync skipped — item %s is awaiting re-auth", plaid_item.id
+        )
+        return {"added": 0, "modified": 0, "removed": 0}
+
     access_token, client = await _get_access_token_for_item(db, plaid_item)
     is_initial_backfill = (
         plaid_item.transaction_cursor is None and plaid_item.last_synced_at is None
@@ -623,7 +705,18 @@ async def sync_transactions(
             ),
             **({"cursor": cursor} if cursor else {}),
         )
-        response = await _call_plaid(client.transactions_sync, request)
+        try:
+            response = await _call_plaid(client.transactions_sync, request)
+        except Exception as exc:
+            if _extract_plaid_error_code(exc) == "ITEM_LOGIN_REQUIRED":
+                logger.warning(
+                    "Plaid item %s needs re-auth (ITEM_LOGIN_REQUIRED); flagging and stopping sync",
+                    plaid_item.id,
+                )
+                await db.rollback()
+                await _mark_item_needs_reauth(plaid_item.id)
+                return {"added": 0, "modified": 0, "removed": 0}
+            raise
 
         a, m, r = await _process_sync_page(
             db, response,
@@ -672,7 +765,9 @@ async def sync_all_items(
     from ..database import async_session
 
     async with async_session() as db:
-        result = await db.execute(select(PlaidItem))
+        result = await db.execute(
+            select(PlaidItem).where(PlaidItem.needs_reauth.is_(False))
+        )
         items = list(result.scalars().all())
 
     synced = 0
@@ -681,7 +776,7 @@ async def sync_all_items(
             async with async_session() as db:
                 # Re-fetch the item in this session
                 refreshed = await db.get(PlaidItem, item.id)
-                if refreshed is None:
+                if refreshed is None or refreshed.needs_reauth:
                     continue
                 await sync_transactions(
                     db, refreshed, classifier=classifier, notifier=notifier

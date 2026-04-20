@@ -95,6 +95,24 @@ def _normalize_user_categories(user_categories: list[str] | None) -> tuple[list[
     return normalized, display_names
 
 
+def _merchant_conflicts_with_pact(
+    merchant: str,
+    description: str,
+    claimed_category: str,
+) -> str | None:
+    """If the merchant/description clearly matches a DIFFERENT pact category's
+    keywords, return that conflicting category. Guards against LLM confabulation
+    like "Uber → dining out" when the user's only active pact is dining out."""
+    combined = f"{merchant} {description}".lower()
+    for cat, keywords in PACT_CATEGORY_KEYWORDS.items():
+        if cat == claimed_category or not keywords:
+            continue
+        for kw in keywords:
+            if kw in combined:
+                return cat
+    return None
+
+
 def _match_user_pacts(
     merchant: str,
     description: str,
@@ -176,6 +194,15 @@ async def classify_transaction(
             logger.debug(
                 "LLM classification: %s | %s | $%.2f → flagged=%s category=%s",
                 merchant, description, amount, llm_result.flagged, normalized_category,
+            )
+            return ClassificationResult(flagged=False)
+        conflict = _merchant_conflicts_with_pact(
+            merchant, description, normalized_category
+        )
+        if conflict is not None:
+            logger.info(
+                "Rejecting LLM pact match (%s → %s): merchant text matches %s keywords instead",
+                merchant, normalized_category, conflict,
             )
             return ClassificationResult(flagged=False)
         logger.info(
