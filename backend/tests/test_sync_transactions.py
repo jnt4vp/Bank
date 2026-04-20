@@ -18,8 +18,17 @@ def _make_plaid_item(*, cursor=None, last_synced_at=None):
         id=uuid4(),
         user_id=uuid4(),
         access_token="encrypted-tok",
+        shared_source_id=None,
         transaction_cursor=cursor,
         last_synced_at=last_synced_at,
+    )
+
+
+def _patch_access_token_resolver():
+    """Replaces _get_access_token_for_item with a stub returning (token, mock client)."""
+    return patch(
+        "backend.services.plaid_service._get_access_token_for_item",
+        new=AsyncMock(return_value=("access-tok", MagicMock())),
     )
 
 
@@ -100,7 +109,7 @@ class SyncTransactionsAddedTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
         ):
             from backend.services.plaid_service import sync_transactions
             counts = await sync_transactions(db, item, classifier=None, notifier=None)
@@ -131,7 +140,7 @@ class SyncTransactionsAddedTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
             patch("backend.services.plaid_service.classify_transaction", new=AsyncMock(
                 return_value=ClassificationResult(flagged=True, category="Coffee Shops", flag_reason="keyword")
             )),
@@ -158,7 +167,7 @@ class SyncTransactionsAddedTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
         ):
             from backend.services.plaid_service import sync_transactions
             counts = await sync_transactions(db, item, classifier=None, notifier=None)
@@ -187,7 +196,7 @@ class SyncTransactionsAddedTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
             patch("backend.services.plaid_service.record_simulated_savings_transfers_for_transaction", new=AsyncMock(return_value=0)) as sst_mock,
         ):
             from backend.services.plaid_service import sync_transactions
@@ -242,7 +251,7 @@ class SyncTransactionsCardLockTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
         ):
             from backend.services.plaid_service import sync_transactions
             counts = await sync_transactions(db, item, classifier=None, notifier=None)
@@ -269,7 +278,7 @@ class SyncTransactionsRemovedTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
         ):
             from backend.services.plaid_service import sync_transactions
             counts = await sync_transactions(db, item, classifier=None, notifier=None)
@@ -291,7 +300,7 @@ class SyncTransactionsCursorTest(unittest.IsolatedAsyncioTestCase):
         with (
             patch("backend.services.plaid_service.get_plaid_client", return_value=MagicMock()),
             patch("backend.services.plaid_service._call_plaid", new=AsyncMock(return_value=sync_resp)),
-            patch("backend.services.plaid_service._get_access_token", return_value="access-tok"),
+            _patch_access_token_resolver(),
         ):
             from backend.services.plaid_service import sync_transactions
             await sync_transactions(db, item, classifier=None, notifier=None)

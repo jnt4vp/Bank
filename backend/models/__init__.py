@@ -5,6 +5,7 @@ from .counter import Counter
 from .goal_llm_txn_cache import GoalLlmTxnCache
 from .password_history import PasswordHistory
 from .plaid_item import PlaidItem
+from .shared_plaid_source import SharedPlaidSource
 from .transaction import Transaction
 from .user import User
 from .accountability_settings import AccountabilitySettings
@@ -21,6 +22,7 @@ __all__ = [
     "Pact",
     "PasswordHistory",
     "PlaidItem",
+    "SharedPlaidSource",
     "SimulatedSavingsTransfer",
     "Transaction",
     "User",

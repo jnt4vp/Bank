@@ -23,7 +23,11 @@ from .routers.simulated_savings_transfers import router as simulated_savings_tra
 from .models.plaid_item import PlaidItem
 from .models.pact import Pact
 from .services.plaid_poller import start_poller, stop_poller
-from .services.plaid_service import seed_sandbox_plaid_item, sync_transactions
+from .services.plaid_service import (
+    ensure_shared_demo_source,
+    seed_sandbox_plaid_item,
+    sync_transactions,
+)
 from .dependencies.integrations import get_classifier, get_notifier
 
 settings = get_settings()
@@ -77,6 +81,17 @@ async def lifespan(app: FastAPI):
                     logging.getLogger(__name__).info("Seeded 2 default pacts for dev user")
         except Exception:
             logging.getLogger(__name__).warning("Failed to seed default pacts", exc_info=True)
+
+    # Provision the shared demo Plaid source once per deploy so new users can pick
+    # "demo bank" at signup regardless of whether the main Plaid env is sandbox or production.
+    try:
+        async with async_session() as session:
+            await ensure_shared_demo_source(session)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Failed to provision shared demo Plaid source — demo-bank option will be unavailable",
+            exc_info=True,
+        )
 
     # Seed a sandbox Plaid connection for the dev user so login works out-of-the-box
     if user:

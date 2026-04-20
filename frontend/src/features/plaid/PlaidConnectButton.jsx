@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePlaidLink } from 'react-plaid-link'
 import {
+  connectDemoBank,
   createLinkToken,
   exchangePublicToken,
+  getDemoBankAvailable,
 } from './api'
 import {
   PLAID_BROWSER_TAB_ERROR,
@@ -20,6 +22,8 @@ export default function PlaidConnectButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [launchRequested, setLaunchRequested] = useState(false)
+  const [demoAvailable, setDemoAvailable] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
   const embeddedBrowser = isEmbeddedBrowserContext()
 
   useEffect(() => {
@@ -48,6 +52,23 @@ export default function PlaidConnectButton({
     }
 
     loadLinkToken()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!token) return undefined
+
+    getDemoBankAvailable(token)
+      .then((data) => {
+        if (!cancelled) setDemoAvailable(Boolean(data?.available))
+      })
+      .catch(() => {
+        if (!cancelled) setDemoAvailable(false)
+      })
 
     return () => {
       cancelled = true
@@ -99,6 +120,24 @@ export default function PlaidConnectButton({
     open()
   }, [embeddedBrowser, launchRequested, linkToken, open, ready])
 
+  const handleDemoClick = async () => {
+    try {
+      setDemoLoading(true)
+      setError(null)
+      await connectDemoBank(token)
+      if (onSuccess) {
+        await onSuccess()
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to connect demo bank.')
+    } finally {
+      setDemoLoading(false)
+    }
+  }
+
+  const personalDisabled =
+    disabled || embeddedBrowser || loading || demoLoading || (!linkToken && !error) || (Boolean(linkToken) && !ready)
+
   return (
     <div>
       <button
@@ -128,10 +167,22 @@ export default function PlaidConnectButton({
 
           open()
         }}
-        disabled={disabled || embeddedBrowser || loading || (!linkToken && !error) || (Boolean(linkToken) && !ready)}
+        disabled={personalDisabled}
       >
         {loading ? 'Connecting...' : children}
       </button>
+
+      {demoAvailable ? (
+        <button
+          type="button"
+          className={className}
+          onClick={handleDemoClick}
+          disabled={disabled || loading || demoLoading}
+          style={{ marginTop: '8px' }}
+        >
+          {demoLoading ? 'Loading demo bank…' : 'Use demo bank'}
+        </button>
+      ) : null}
 
       {embeddedBrowser ? (
         <p className="dashboard-error">{PLAID_BROWSER_TAB_ERROR}</p>

@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     PLAID_POLL_INTERVAL_MINUTES: int = 30
     PLAID_TOKEN_KEY: str = ""  # encryption key for access tokens; falls back to JWT_SECRET
 
+    # Separate Plaid credentials used for the shared demo-bank item.
+    # Leave blank to reuse PLAID_CLIENT_ID/PLAID_SECRET; only useful when PLAID_ENV=production
+    # and you still want the demo flow to hit Plaid's sandbox environment.
+    PLAID_SANDBOX_CLIENT_ID: str = ""
+    PLAID_SANDBOX_SECRET: str = ""
+
     FRONTEND_URL: str = "http://localhost:5173"
     # Demo: record "savings transfers" in DB without Plaid/ACH (see SimulatedSavingsTransfer).
     # Set false when wiring a real money-movement provider.

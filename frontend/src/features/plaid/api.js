@@ -32,3 +32,14 @@ export function removePlaidItem({ itemId, token }) {
     token,
   })
 }
+
+export function getDemoBankAvailable(token) {
+  return apiRequest('/api/plaid/demo-bank/available', { token })
+}
+
+export function connectDemoBank(token) {
+  return apiRequest('/api/plaid/connect-demo-bank', {
+    method: 'POST',
+    token,
+  })
+}

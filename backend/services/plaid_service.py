@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..config import get_settings
 from ..models.account import Account
 from ..models.plaid_item import PlaidItem
+from ..models.shared_plaid_source import SharedPlaidSource
 from ..models.transaction import Transaction
 from ..models.user import User
 from ..services.discipline import ensure_discipline_window_after_plaid_sync
@@ -67,7 +68,24 @@ def _get_plaid_client() -> plaid_api.PlaidApi:
     return plaid_api.PlaidApi(api_client)
 
 
+def _get_sandbox_plaid_client() -> plaid_api.PlaidApi:
+    """Client pinned to Plaid's sandbox environment, used for the shared demo item.
+
+    Falls back to the main PLAID_CLIENT_ID/PLAID_SECRET when PLAID_SANDBOX_* are empty —
+    that path only makes sense when PLAID_ENV=sandbox (main client already is sandbox).
+    """
+    settings = get_settings()
+    client_id = settings.PLAID_SANDBOX_CLIENT_ID or settings.PLAID_CLIENT_ID
+    secret = settings.PLAID_SANDBOX_SECRET or settings.PLAID_SECRET
+    configuration = plaid.Configuration(
+        host=plaid.Environment.Sandbox,
+        api_key={"clientId": client_id, "secret": secret},
+    )
+    return plaid_api.PlaidApi(plaid.ApiClient(configuration))
+
+
 _client: plaid_api.PlaidApi | None = None
+_sandbox_client: plaid_api.PlaidApi | None = None
 
 
 def get_plaid_client() -> plaid_api.PlaidApi:
@@ -77,13 +95,68 @@ def get_plaid_client() -> plaid_api.PlaidApi:
     return _client
 
 
-def _get_access_token(plaid_item: PlaidItem) -> str:
-    """Decrypt the stored access token. Handles both encrypted and legacy plaintext tokens."""
+def get_sandbox_plaid_client() -> plaid_api.PlaidApi:
+    global _sandbox_client
+    if _sandbox_client is None:
+        _sandbox_client = _get_sandbox_plaid_client()
+    return _sandbox_client
+
+
+def _sandbox_client_configured() -> bool:
+    """Whether a usable sandbox client can be built (either dedicated or main-in-sandbox-mode)."""
+    settings = get_settings()
+    if settings.PLAID_SANDBOX_CLIENT_ID and settings.PLAID_SANDBOX_SECRET:
+        return True
+    return (
+        settings.PLAID_ENV == "sandbox"
+        and bool(settings.PLAID_CLIENT_ID)
+        and bool(settings.PLAID_SECRET)
+    )
+
+
+def _decrypt(token: str) -> str:
     try:
-        return decrypt_token(plaid_item.access_token)
+        return decrypt_token(token)
     except Exception:
-        # Legacy plaintext token (pre-encryption migration)
-        return plaid_item.access_token
+        return token
+
+
+async def _get_access_token_for_item(
+    db: AsyncSession, plaid_item: PlaidItem
+) -> tuple[str, plaid_api.PlaidApi]:
+    """Resolve the access_token and correct Plaid client for a given PlaidItem.
+
+    Subscriber items (shared_source_id set) read the token from the shared source and
+    hit Plaid's sandbox environment; personal items use their own stored token on the
+    main environment.
+    """
+    if plaid_item.shared_source_id is not None:
+        result = await db.execute(
+            select(SharedPlaidSource).where(
+                SharedPlaidSource.id == plaid_item.shared_source_id
+            )
+        )
+        source = result.scalar_one_or_none()
+        if source is None:
+            raise ValueError(
+                f"PlaidItem {plaid_item.id} references a missing shared source"
+            )
+        return _decrypt(source.access_token), get_sandbox_plaid_client()
+
+    if not plaid_item.access_token:
+        raise ValueError(f"PlaidItem {plaid_item.id} has no access token")
+    return _decrypt(plaid_item.access_token), get_plaid_client()
+
+
+def _get_access_token(plaid_item: PlaidItem) -> str:
+    """Legacy synchronous accessor. Works only for personal items; raises for shared subscribers."""
+    if plaid_item.shared_source_id is not None:
+        raise ValueError(
+            "Subscriber items must use _get_access_token_for_item to resolve the source token"
+        )
+    if not plaid_item.access_token:
+        raise ValueError(f"PlaidItem {plaid_item.id} has no access token")
+    return _decrypt(plaid_item.access_token)
 
 
 # ---------------------------------------------------------------------------
@@ -167,21 +240,26 @@ async def exchange_public_token(
 
 
 async def _sync_accounts(db: AsyncSession, plaid_item: PlaidItem) -> None:
-    """Fetch accounts from Plaid and upsert into the accounts table."""
-    client = get_plaid_client()
+    """Fetch accounts from Plaid and upsert into the accounts table for this item."""
+    access_token, client = await _get_access_token_for_item(db, plaid_item)
 
     try:
         response = await _call_plaid(
             client.accounts_get,
-            AccountsGetRequest(access_token=_get_access_token(plaid_item)),
+            AccountsGetRequest(access_token=access_token),
         )
     except Exception:
         logger.exception("Failed to fetch accounts for plaid_item %s", plaid_item.id)
         return
 
     for acct in response.accounts:
+        # Scope by plaid_item_id — the same Plaid account_id may appear under
+        # many subscriber items when pointing at the shared demo source.
         existing = await db.execute(
-            select(Account).where(Account.plaid_account_id == acct.account_id)
+            select(Account).where(
+                Account.plaid_item_id == plaid_item.id,
+                Account.plaid_account_id == acct.account_id,
+            )
         )
         existing_acct = existing.scalar_one_or_none()
 
@@ -213,13 +291,18 @@ async def _sync_accounts(db: AsyncSession, plaid_item: PlaidItem) -> None:
 
 
 async def _resolve_account_id(
-    db: AsyncSession, plaid_account_id: str | None
+    db: AsyncSession,
+    plaid_account_id: str | None,
+    plaid_item_id: uuid.UUID,
 ) -> uuid.UUID | None:
-    """Look up our internal account UUID from a Plaid account_id string."""
+    """Look up our internal account UUID for a Plaid account_id under a specific item."""
     if not plaid_account_id:
         return None
     result = await db.execute(
-        select(Account.id).where(Account.plaid_account_id == plaid_account_id)
+        select(Account.id).where(
+            Account.plaid_item_id == plaid_item_id,
+            Account.plaid_account_id == plaid_account_id,
+        )
     )
     row = result.scalar_one_or_none()
     return row
@@ -230,6 +313,7 @@ async def _process_added_transaction(
     txn,
     *,
     user_id: uuid.UUID,
+    plaid_item_id: uuid.UUID,
     classifier: ClassifierPort | None,
     notifier: NotifierPort | None,
     user_email: str | None,
@@ -240,13 +324,14 @@ async def _process_added_transaction(
     """Handle a single added Plaid transaction. Returns True if a new row was inserted."""
     existing = await db.execute(
         select(Transaction).where(
-            Transaction.plaid_transaction_id == txn.transaction_id
+            Transaction.user_id == user_id,
+            Transaction.plaid_transaction_id == txn.transaction_id,
         )
     )
     if existing.scalar_one_or_none():
         return False
 
-    account_id = await _resolve_account_id(db, txn.account_id)
+    account_id = await _resolve_account_id(db, txn.account_id, plaid_item_id)
     plaid_original_description = txn.original_description or None
     merchant = txn.merchant_name or txn.name or "Unknown"
     description = txn.name or plaid_original_description or ""
@@ -338,6 +423,7 @@ async def _process_modified_transaction(
     txn,
     *,
     user_id: uuid.UUID,
+    plaid_item_id: uuid.UUID,
     notifier: NotifierPort | None,
     user_email: str | None,
     is_initial_backfill: bool,
@@ -345,7 +431,8 @@ async def _process_modified_transaction(
     """Handle a single modified Plaid transaction. Returns True if an existing row was updated."""
     result = await db.execute(
         select(Transaction).where(
-            Transaction.plaid_transaction_id == txn.transaction_id
+            Transaction.user_id == user_id,
+            Transaction.plaid_transaction_id == txn.transaction_id,
         )
     )
     existing_txn = result.scalar_one_or_none()
@@ -366,7 +453,9 @@ async def _process_modified_transaction(
     if new_cat:
         existing_txn.category = new_cat
     if existing_txn.account_id is None and txn.account_id:
-        existing_txn.account_id = await _resolve_account_id(db, txn.account_id)
+        existing_txn.account_id = await _resolve_account_id(
+            db, txn.account_id, plaid_item_id
+        )
 
     if (
         notifier
@@ -415,13 +504,16 @@ async def _process_modified_transaction(
 async def _process_removed_transactions(
     db: AsyncSession,
     removed_txns: list,
+    *,
+    user_id: uuid.UUID,
 ) -> int:
     """Delete local rows for Plaid-removed transactions. Returns count of deleted rows."""
     removed_count = 0
     for txn in removed_txns:
         result = await db.execute(
             select(Transaction).where(
-                Transaction.plaid_transaction_id == txn.transaction_id
+                Transaction.user_id == user_id,
+                Transaction.plaid_transaction_id == txn.transaction_id,
             )
         )
         existing_txn = result.scalar_one_or_none()
@@ -458,6 +550,7 @@ async def _process_sync_page(
     response,
     *,
     user_id: uuid.UUID,
+    plaid_item_id: uuid.UUID,
     classifier: ClassifierPort | None,
     notifier: NotifierPort | None,
     user_email: str | None,
@@ -472,6 +565,7 @@ async def _process_sync_page(
         if await _process_added_transaction(
             db, txn,
             user_id=user_id,
+            plaid_item_id=plaid_item_id,
             classifier=classifier,
             notifier=notifier,
             user_email=user_email,
@@ -485,13 +579,14 @@ async def _process_sync_page(
         if await _process_modified_transaction(
             db, txn,
             user_id=user_id,
+            plaid_item_id=plaid_item_id,
             notifier=notifier,
             user_email=user_email,
             is_initial_backfill=is_initial_backfill,
         ):
             modified += 1
 
-    removed = await _process_removed_transactions(db, response.removed)
+    removed = await _process_removed_transactions(db, response.removed, user_id=user_id)
     return added, modified, removed
 
 
@@ -503,7 +598,7 @@ async def sync_transactions(
     notifier: NotifierPort | None = None,
 ) -> dict:
     """Run /transactions/sync for a single PlaidItem. Returns counts of added/modified/removed."""
-    client = get_plaid_client()
+    access_token, client = await _get_access_token_for_item(db, plaid_item)
     is_initial_backfill = (
         plaid_item.transaction_cursor is None and plaid_item.last_synced_at is None
     )
@@ -521,7 +616,7 @@ async def sync_transactions(
 
     while has_more:
         request = TransactionsSyncRequest(
-            access_token=_get_access_token(plaid_item),
+            access_token=access_token,
             options=TransactionsSyncRequestOptions(
                 include_original_description=True,
                 include_personal_finance_category=True,
@@ -533,6 +628,7 @@ async def sync_transactions(
         a, m, r = await _process_sync_page(
             db, response,
             user_id=plaid_item.user_id,
+            plaid_item_id=plaid_item.id,
             classifier=classifier,
             notifier=notifier,
             user_email=user_email,
@@ -740,12 +836,12 @@ async def create_sandbox_transactions(
     return response.json()
 
 
-async def refresh_transactions(plaid_item: PlaidItem):
+async def refresh_transactions(db: AsyncSession, plaid_item: PlaidItem):
     """Request a Plaid transactions refresh for an existing item."""
-    client = get_plaid_client()
+    access_token, client = await _get_access_token_for_item(db, plaid_item)
     return await _call_plaid(
         client.transactions_refresh,
-        TransactionsRefreshRequest(access_token=_get_access_token(plaid_item)),
+        TransactionsRefreshRequest(access_token=access_token),
     )
 
 
@@ -759,14 +855,17 @@ async def get_user_plaid_items(
 
 
 async def remove_plaid_item(db: AsyncSession, plaid_item: PlaidItem) -> None:
-    client = get_plaid_client()
-    try:
-        await _call_plaid(
-            client.item_remove,
-            ItemRemoveRequest(access_token=_get_access_token(plaid_item)),
-        )
-    except Exception:
-        logger.warning("Failed to remove item from Plaid API, removing locally anyway")
+    # Subscriber items share an access token owned by the shared source — never
+    # call /item/remove for them, that would revoke the token for every subscriber.
+    if plaid_item.shared_source_id is None:
+        client = get_plaid_client()
+        try:
+            await _call_plaid(
+                client.item_remove,
+                ItemRemoveRequest(access_token=_decrypt(plaid_item.access_token)),
+            )
+        except Exception:
+            logger.warning("Failed to remove item from Plaid API, removing locally anyway")
 
     # Detach transactions from accounts belonging to this item before deletion.
     # The DB cascade (plaid_item → accounts ON DELETE CASCADE, accounts → transactions
@@ -784,3 +883,133 @@ async def remove_plaid_item(db: AsyncSession, plaid_item: PlaidItem) -> None:
 
     await db.delete(plaid_item)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Shared demo-bank source (communal Plaid item)
+# ---------------------------------------------------------------------------
+
+async def get_active_shared_source(db: AsyncSession) -> SharedPlaidSource | None:
+    result = await db.execute(
+        select(SharedPlaidSource)
+        .where(SharedPlaidSource.is_active.is_(True))
+        .order_by(SharedPlaidSource.created_at.desc())
+    )
+    return result.scalars().first()
+
+
+async def ensure_shared_demo_source(db: AsyncSession) -> SharedPlaidSource | None:
+    """Create the shared demo Plaid item on first startup. Idempotent."""
+    existing = await get_active_shared_source(db)
+    if existing is not None:
+        return existing
+
+    if not _sandbox_client_configured():
+        logger.info(
+            "Skipping shared demo Plaid source — sandbox credentials not configured"
+        )
+        return None
+
+    sandbox_client = get_sandbox_plaid_client()
+
+    # ins_109508 = "First Platypus Bank" (Plaid's sandbox test institution).
+    create_request = SandboxPublicTokenCreateRequest(
+        institution_id="ins_109508",
+        initial_products=[Products("transactions")],
+    )
+    try:
+        create_response = await _call_plaid(
+            sandbox_client.sandbox_public_token_create, create_request
+        )
+        exchange_response = await _call_plaid(
+            sandbox_client.item_public_token_exchange,
+            ItemPublicTokenExchangeRequest(public_token=create_response.public_token),
+        )
+    except Exception:
+        logger.exception("Failed to bootstrap shared demo Plaid source")
+        return None
+
+    source = SharedPlaidSource(
+        item_id=exchange_response.item_id,
+        access_token=encrypt_token(exchange_response.access_token),
+        institution_name="First Platypus Bank (Demo)",
+        is_active=True,
+    )
+    db.add(source)
+    await db.commit()
+    await db.refresh(source)
+
+    # Prime the sandbox with historical transactions so subscribers see data on first sync.
+    try:
+        from plaid.model.sandbox_item_fire_webhook_request import (
+            SandboxItemFireWebhookRequest,
+        )
+
+        await _call_plaid(
+            sandbox_client.sandbox_item_fire_webhook,
+            SandboxItemFireWebhookRequest(
+                access_token=exchange_response.access_token,
+                webhook_code="DEFAULT_UPDATE",
+            ),
+        )
+        await asyncio.sleep(2)
+    except Exception:
+        logger.warning(
+            "Failed to fire sandbox webhook for shared source — subscribers may see empty history initially"
+        )
+
+    logger.info("Shared demo Plaid source created: %s", source.id)
+    return source
+
+
+async def subscribe_user_to_shared_source(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    classifier: ClassifierPort | None = None,
+    notifier: NotifierPort | None = None,
+) -> PlaidItem:
+    """Create a per-user PlaidItem backed by the active shared demo source.
+
+    Each subscriber keeps its own accounts, transactions, and /transactions/sync cursor —
+    only the upstream access_token is shared.
+    """
+    source = await get_active_shared_source(db)
+    if source is None:
+        raise ValueError("No active shared demo Plaid source is available")
+
+    existing = await db.execute(
+        select(PlaidItem).where(
+            PlaidItem.user_id == user_id,
+            PlaidItem.shared_source_id == source.id,
+        )
+    )
+    plaid_item = existing.scalar_one_or_none()
+
+    if plaid_item is None:
+        plaid_item = PlaidItem(
+            user_id=user_id,
+            # item_id must be unique globally; namespace subscriber rows so they don't
+            # collide with the source's Plaid item_id or with each other.
+            item_id=f"shared:{source.id}:{user_id}",
+            access_token=None,
+            shared_source_id=source.id,
+            institution_name=source.institution_name,
+        )
+        db.add(plaid_item)
+        await db.commit()
+        await db.refresh(plaid_item)
+
+    await _touch_bank_connected_at(db, user_id)
+
+    try:
+        await sync_transactions(db, plaid_item, classifier=classifier, notifier=notifier)
+    except Exception:
+        logger.warning(
+            "Initial sync failed for demo subscription %s, poller will retry",
+            plaid_item.id,
+        )
+        await db.rollback()
+
+    await db.refresh(plaid_item)
+    return plaid_item

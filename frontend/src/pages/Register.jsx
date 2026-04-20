@@ -10,7 +10,12 @@ import { validatePassword } from "../features/auth/passwordValidation";
 import PasswordFields from "../features/auth/PasswordFields";
 import { createPact } from "../features/pacts/api";
 import { saveAccountabilitySettings } from "../features/accountability/api";
-import { createLinkToken, exchangePublicToken } from "../features/plaid/api";
+import {
+  connectDemoBank,
+  createLinkToken,
+  exchangePublicToken,
+  getDemoBankAvailable,
+} from "../features/plaid/api";
 import {
   PLAID_BROWSER_TAB_ERROR,
   isEmbeddedBrowserContext,
@@ -60,6 +65,8 @@ export default function Register() {
   const [connectedInstitution, setConnectedInstitution] = useState(null);
   const [plaidTokenLoading, setPlaidTokenLoading] = useState(false);
   const [plaidLaunchRequested, setPlaidLaunchRequested] = useState(false);
+  const [demoBankAvailable, setDemoBankAvailable] = useState(false);
+  const [demoBankLoading, setDemoBankLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -201,6 +208,39 @@ export default function Register() {
     plaidLaunchRequested,
     plaidReady,
   ]);
+
+  React.useEffect(() => {
+    if (!authToken) return undefined;
+    let cancelled = false;
+    getDemoBankAvailable(authToken)
+      .then((data) => {
+        if (!cancelled) setDemoBankAvailable(Boolean(data?.available));
+      })
+      .catch(() => {
+        if (!cancelled) setDemoBankAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken]);
+
+  const handleConnectDemoBank = async () => {
+    if (!authToken) {
+      setError("Please complete registration first.");
+      return;
+    }
+    setDemoBankLoading(true);
+    setError(null);
+    try {
+      await connectDemoBank(authToken);
+      setPlaidConnected(true);
+      setConnectedInstitution("Demo bank");
+    } catch (err) {
+      setError(err.message || "Failed to connect demo bank.");
+    } finally {
+      setDemoBankLoading(false);
+    }
+  };
 
   const handleOpenPlaid = async () => {
     if (embeddedBrowser) {
@@ -966,6 +1006,7 @@ export default function Register() {
                         onClick={handleOpenPlaid}
                         disabled={
                           loading ||
+                          demoBankLoading ||
                           plaidTokenLoading ||
                           embeddedBrowser ||
                           (!linkToken && !error) ||
@@ -981,8 +1022,48 @@ export default function Register() {
                               ? "Loading Plaid…"
                               : error && !linkToken
                                 ? "Retry secure connect"
-                                : "Connect with Plaid"}
+                                : "Connect your bank"}
                       </button>
+
+                      {demoBankAvailable ? (
+                        <>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              margin: "12px 0",
+                              opacity: 0.55,
+                              fontSize: "12px",
+                              textTransform: "uppercase",
+                              letterSpacing: "0.08em",
+                            }}
+                          >
+                            <div style={{ flex: 1, height: "1px", background: "currentColor" }} />
+                            <span>or</span>
+                            <div style={{ flex: 1, height: "1px", background: "currentColor" }} />
+                          </div>
+                          <button
+                            type="button"
+                            className="sign-in-btn register-btn-continue"
+                            onClick={handleConnectDemoBank}
+                            disabled={loading || demoBankLoading}
+                            style={{ width: "100%" }}
+                          >
+                            {demoBankLoading ? "Loading demo bank…" : "Use demo bank"}
+                          </button>
+                          <p
+                            style={{
+                              marginTop: "10px",
+                              fontSize: "12px",
+                              opacity: 0.6,
+                            }}
+                          >
+                            Skip bank linking and explore the app with sample
+                            transactions.
+                          </p>
+                        </>
+                      ) : null}
                     </div>
                   )}
 

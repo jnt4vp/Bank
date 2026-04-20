@@ -44,10 +44,52 @@ class SyncResponse(BaseModel):
     removed: int
 
 
+class DemoBankAvailabilityResponse(BaseModel):
+    available: bool
+
+
 @router.post("/create-link-token", response_model=LinkTokenResponse)
 async def create_link_token(user: User = Depends(get_current_user)):
     link_token = await plaid_service.create_link_token(user.id)
     return LinkTokenResponse(link_token=link_token)
+
+
+@router.get("/demo-bank/available", response_model=DemoBankAvailabilityResponse)
+async def demo_bank_available(db: AsyncSession = Depends(get_db)):
+    """Tell the frontend whether the shared demo-bank option can be offered."""
+    source = await plaid_service.get_active_shared_source(db)
+    return DemoBankAvailabilityResponse(available=source is not None)
+
+
+@router.post("/connect-demo-bank", response_model=PlaidItemResponse)
+async def connect_demo_bank(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    classifier: ClassifierPort = Depends(get_classifier),
+    notifier: NotifierPort = Depends(get_notifier),
+):
+    """Subscribe the caller to the shared demo Plaid item.
+
+    The subscriber gets their own PlaidItem row (and their own cloned accounts/transactions)
+    backed by the shared sandbox access_token. Safe to call alongside a personal Plaid link —
+    both can coexist on one user.
+    """
+    try:
+        item = await plaid_service.subscribe_user_to_shared_source(
+            db, user.id, classifier=classifier, notifier=notifier
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    return PlaidItemResponse(
+        id=item.id,
+        institution_name=item.institution_name,
+        last_synced_at=item.last_synced_at.isoformat() if item.last_synced_at else None,
+        created_at=item.created_at.isoformat(),
+    )
 
 
 @router.post("/exchange-token", response_model=PlaidItemResponse)

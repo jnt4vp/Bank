@@ -25,7 +25,13 @@ class PlaidItem(Base):
         index=True,
     )
     item_id: Mapped[str] = mapped_column(String(255), unique=True)
-    access_token: Mapped[str] = mapped_column(Text)
+    access_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    shared_source_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("shared_plaid_sources.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     institution_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     transaction_cursor: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_synced_at: Mapped[Optional[datetime]] = mapped_column(
