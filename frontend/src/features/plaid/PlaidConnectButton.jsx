@@ -10,6 +10,7 @@ import {
   PLAID_BROWSER_TAB_ERROR,
   isEmbeddedBrowserContext,
 } from './browserContext'
+import PlaidSourceChooser from './PlaidSourceChooser'
 
 export default function PlaidConnectButton({
   token,
@@ -23,6 +24,7 @@ export default function PlaidConnectButton({
   const [error, setError] = useState(null)
   const [launchRequested, setLaunchRequested] = useState(false)
   const [demoAvailable, setDemoAvailable] = useState(false)
+  const [chooserOpen, setChooserOpen] = useState(false)
   const [demoLoading, setDemoLoading] = useState(false)
   const embeddedBrowser = isEmbeddedBrowserContext()
 
@@ -120,7 +122,32 @@ export default function PlaidConnectButton({
     open()
   }, [embeddedBrowser, launchRequested, linkToken, open, ready])
 
-  const handleDemoClick = async () => {
+  const handleChoosePersonal = async () => {
+    setChooserOpen(false)
+    if (embeddedBrowser) {
+      setError(PLAID_BROWSER_TAB_ERROR)
+      return
+    }
+    if (!linkToken) {
+      try {
+        setLoading(true)
+        setError(null)
+        setLaunchRequested(true)
+        const data = await createLinkToken(token)
+        setLinkToken(data.link_token)
+      } catch (err) {
+        setLaunchRequested(false)
+        setError(err.message || 'Failed to initialize Plaid.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    open()
+  }
+
+  const handleChooseDemo = async () => {
+    setChooserOpen(false)
     try {
       setDemoLoading(true)
       setError(null)
@@ -135,59 +162,44 @@ export default function PlaidConnectButton({
     }
   }
 
-  const personalDisabled =
-    disabled || embeddedBrowser || loading || demoLoading || (!linkToken && !error) || (Boolean(linkToken) && !ready)
+  const mainDisabled =
+    disabled || loading || demoLoading || (!demoAvailable && !linkToken && !error) || (!demoAvailable && Boolean(linkToken) && !ready)
 
   return (
     <div>
       <button
         type="button"
         className={className}
-        onClick={async () => {
-          if (embeddedBrowser) {
+        onClick={() => {
+          if (embeddedBrowser && !demoAvailable) {
             setError(PLAID_BROWSER_TAB_ERROR)
             return
           }
-
-          if (!linkToken) {
-            try {
-              setLoading(true)
-              setError(null)
-              setLaunchRequested(true)
-              const data = await createLinkToken(token)
-              setLinkToken(data.link_token)
-            } catch (err) {
-              setLaunchRequested(false)
-              setError(err.message || 'Failed to initialize Plaid.')
-            } finally {
-              setLoading(false)
-            }
+          if (demoAvailable) {
+            setChooserOpen(true)
             return
           }
-
-          open()
+          handleChoosePersonal()
         }}
-        disabled={personalDisabled}
+        disabled={mainDisabled}
       >
-        {loading ? 'Connecting...' : children}
+        {loading || demoLoading ? 'Connecting…' : children}
       </button>
 
-      {demoAvailable ? (
-        <button
-          type="button"
-          className={className}
-          onClick={handleDemoClick}
-          disabled={disabled || loading || demoLoading}
-          style={{ marginTop: '8px' }}
-        >
-          {demoLoading ? 'Loading demo bank…' : 'Use demo bank'}
-        </button>
-      ) : null}
-
-      {embeddedBrowser ? (
+      {embeddedBrowser && !demoAvailable ? (
         <p className="dashboard-error">{PLAID_BROWSER_TAB_ERROR}</p>
       ) : error ? (
         <p className="dashboard-error">{error}</p>
+      ) : null}
+
+      {chooserOpen ? (
+        <PlaidSourceChooser
+          onClose={() => setChooserOpen(false)}
+          onChoosePersonal={handleChoosePersonal}
+          onChooseDemo={handleChooseDemo}
+          personalDisabled={embeddedBrowser}
+          personalDisabledReason={embeddedBrowser ? PLAID_BROWSER_TAB_ERROR : null}
+        />
       ) : null}
     </div>
   )

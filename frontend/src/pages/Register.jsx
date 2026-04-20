@@ -20,6 +20,7 @@ import {
   PLAID_BROWSER_TAB_ERROR,
   isEmbeddedBrowserContext,
 } from "../features/plaid/browserContext";
+import PlaidSourceChooser from "../features/plaid/PlaidSourceChooser";
 
 const STEPS = [
   { num: 1, label: "Create Account" },
@@ -67,6 +68,7 @@ export default function Register() {
   const [plaidLaunchRequested, setPlaidLaunchRequested] = useState(false);
   const [demoBankAvailable, setDemoBankAvailable] = useState(false);
   const [demoBankLoading, setDemoBankLoading] = useState(false);
+  const [plaidChooserOpen, setPlaidChooserOpen] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1003,69 +1005,55 @@ export default function Register() {
                       <button
                         type="button"
                         className="sign-in-btn register-btn-continue"
-                        onClick={handleOpenPlaid}
+                        onClick={() => {
+                          if (demoBankAvailable) {
+                            setError(null);
+                            setPlaidChooserOpen(true);
+                          } else {
+                            handleOpenPlaid();
+                          }
+                        }}
                         disabled={
                           loading ||
                           demoBankLoading ||
-                          plaidTokenLoading ||
-                          embeddedBrowser ||
-                          (!linkToken && !error) ||
-                          (Boolean(linkToken) && !plaidReady)
+                          (!demoBankAvailable &&
+                            (plaidTokenLoading ||
+                              embeddedBrowser ||
+                              (!linkToken && !error) ||
+                              (Boolean(linkToken) && !plaidReady)))
                         }
                         style={{ width: "100%" }}
                       >
-                        {loading
+                        {loading || demoBankLoading
                           ? "Connecting…"
-                          : plaidTokenLoading || (!linkToken && !error)
+                          : !demoBankAvailable && (plaidTokenLoading || (!linkToken && !error))
                             ? "Preparing secure connect…"
-                            : linkToken && !plaidReady
+                            : !demoBankAvailable && linkToken && !plaidReady
                               ? "Loading Plaid…"
-                              : error && !linkToken
+                              : !demoBankAvailable && error && !linkToken
                                 ? "Retry secure connect"
-                                : "Connect your bank"}
+                                : "Connect Plaid"}
                       </button>
-
-                      {demoBankAvailable ? (
-                        <>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              margin: "12px 0",
-                              opacity: 0.55,
-                              fontSize: "12px",
-                              textTransform: "uppercase",
-                              letterSpacing: "0.08em",
-                            }}
-                          >
-                            <div style={{ flex: 1, height: "1px", background: "currentColor" }} />
-                            <span>or</span>
-                            <div style={{ flex: 1, height: "1px", background: "currentColor" }} />
-                          </div>
-                          <button
-                            type="button"
-                            className="sign-in-btn register-btn-continue"
-                            onClick={handleConnectDemoBank}
-                            disabled={loading || demoBankLoading}
-                            style={{ width: "100%" }}
-                          >
-                            {demoBankLoading ? "Loading demo bank…" : "Use demo bank"}
-                          </button>
-                          <p
-                            style={{
-                              marginTop: "10px",
-                              fontSize: "12px",
-                              opacity: 0.6,
-                            }}
-                          >
-                            Skip bank linking and explore the app with sample
-                            transactions.
-                          </p>
-                        </>
-                      ) : null}
                     </div>
                   )}
+
+                  {plaidChooserOpen ? (
+                    <PlaidSourceChooser
+                      onClose={() => setPlaidChooserOpen(false)}
+                      onChoosePersonal={() => {
+                        setPlaidChooserOpen(false);
+                        handleOpenPlaid();
+                      }}
+                      onChooseDemo={() => {
+                        setPlaidChooserOpen(false);
+                        handleConnectDemoBank();
+                      }}
+                      personalDisabled={embeddedBrowser}
+                      personalDisabledReason={
+                        embeddedBrowser ? PLAID_BROWSER_TAB_ERROR : null
+                      }
+                    />
+                  ) : null}
 
                   {error && <div className="register-error">{error}</div>}
 
