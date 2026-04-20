@@ -1,0 +1,14 @@
+{
+  "name": "bank-e2e-agent",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Agent-driven E2E smoke test using agent-browser + wterm viewer.",
+  "scripts": {
+    "run": "./scenario.sh",
+    "view": "python3 -m http.server 4173"
+  },
+  "dependencies": {
+    "agent-browser": "^0.26.0",
+    "@wterm/dom": "^0.1.9"
+  }
+}

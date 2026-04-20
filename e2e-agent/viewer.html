@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bank — agent-browser run viewer (wterm)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/@wterm/dom@0.1.9/src/terminal.css"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --fg: #e7e9ec;
+        --muted: #8b9299;
+        --accent: #7dd3fc;
+        --card: #141820;
+        --border: #22272f;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+      header {
+        display: flex; align-items: center; gap: 1rem;
+        padding: 0.9rem 1.2rem;
+        border-bottom: 1px solid var(--border);
+        background: var(--card);
+      }
+      header h1 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: 0.02em; }
+      header .meta { color: var(--muted); font-size: 0.85rem; }
+      header .spacer { flex: 1; }
+      header button {
+        padding: 0.4rem 0.85rem;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: var(--fg);
+        font: inherit;
+        cursor: pointer;
+      }
+      header button:hover { border-color: var(--accent); color: var(--accent); }
+      main { padding: 1rem 1.2rem; }
+      #terminal {
+        height: calc(100vh - 95px);
+        min-height: 320px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #000;
+      }
+      .banner {
+        margin: 0 0 0.75rem;
+        padding: 0.6rem 0.9rem;
+        border-radius: 6px;
+        background: rgba(125, 211, 252, 0.08);
+        border: 1px solid rgba(125, 211, 252, 0.25);
+        color: var(--accent);
+        font-size: 0.85rem;
+      }
+      .banner.is-error {
+        background: rgba(248, 113, 113, 0.08);
+        border-color: rgba(248, 113, 113, 0.35);
+        color: #fca5a5;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>agent-browser run viewer</h1>
+      <span class="meta" id="log-meta">loading…</span>
+      <span class="spacer"></span>
+      <button id="refresh">Reload log</button>
+    </header>
+
+    <main>
+      <div class="banner" id="banner">
+        Serve this folder (<code>npm run view</code>) and run <code>./scenario.sh</code>
+        in another terminal. This page replays <code>last-run.log</code> through
+        <a href="https://wterm.dev" style="color:inherit">wterm</a>.
+      </div>
+      <div id="terminal" aria-label="Agent run output rendered by wterm"></div>
+    </main>
+
+    <script type="module">
+      import { WTerm } from "https://unpkg.com/@wterm/dom@0.1.9/dist/index.js";
+
+      const el = document.getElementById("terminal");
+      const meta = document.getElementById("log-meta");
+      const banner = document.getElementById("banner");
+      const refreshBtn = document.getElementById("refresh");
+
+      const term = new WTerm(el, {
+        cols: 120,
+        rows: 34,
+        autoResize: true,
+      });
+      await term.init();
+
+      function toCRLF(text) {
+        // Logs from a tty-less shell use '\n' only; wterm expects CRLF.
+        return text.replace(/\r?\n/g, "\r\n");
+      }
+
+      async function loadLog() {
+        try {
+          const res = await fetch(`last-run.log?t=${Date.now()}`, { cache: "no-store" });
+          if (!res.ok) {
+            banner.classList.add("is-error");
+            banner.textContent = `No last-run.log yet (HTTP ${res.status}). Run ./scenario.sh first.`;
+            meta.textContent = "no log";
+            return;
+          }
+          const text = await res.text();
+          const sizeKb = (text.length / 1024).toFixed(1);
+          meta.textContent = `last-run.log · ${sizeKb} KB · ${new Date().toLocaleTimeString()}`;
+          banner.classList.remove("is-error");
+          banner.innerHTML = `Replaying <code>last-run.log</code>. Re-run <code>./scenario.sh</code> then click <strong>Reload log</strong>.`;
+          // Clear and rewrite. wterm has no clear API in this version, so we
+          // reset by writing the ANSI full-reset + clear-screen sequence.
+          term.write("\x1bc");
+          term.write(toCRLF(text));
+        } catch (err) {
+          banner.classList.add("is-error");
+          banner.textContent = `Error loading log: ${err.message}`;
+          meta.textContent = "error";
+        }
+      }
+
+      refreshBtn.addEventListener("click", loadLog);
+      await loadLog();
+    </script>
+  </body>
+</html>
