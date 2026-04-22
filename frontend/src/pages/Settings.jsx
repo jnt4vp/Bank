@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../features/auth/context'
 import { apiRequest } from '../lib/api/client'
+import { useAppConfig } from '../lib/config/useAppConfig'
 import DashboardTopbar from '../components/DashboardTopbar'
+import PlaidItemsSection from '../features/plaid/PlaidItemsSection'
 import {
   createAccountabilityPartner,
   deleteAccountabilityPartner,
@@ -11,31 +13,6 @@ import {
 } from '../features/accountability-partners/api'
 import '../dashboard.css'
 import '../settings.css'
-
-const notificationOptions = [
-  {
-    key: 'disciplineAlerts',
-    label: 'Discipline alerts',
-    description: 'Get notified when activity may conflict with one of your active rules.',
-  },
-  {
-    key: 'weeklyOverview',
-    label: 'Weekly overview summary',
-    description: 'Receive a concise weekly snapshot of trends, wins, and review items.',
-  },
-  {
-    key: 'pactReminders',
-    label: 'Pact reminders',
-    description: 'Stay aligned with reminder nudges tied to your selected commitments.',
-  },
-  {
-    key: 'productUpdates',
-    label: 'Product updates',
-    description: 'Hear about thoughtful improvements and new features from PactBank.',
-  },
-]
-
-const APP_VERSION = '0.9.4'
 
 const securityRows = [
   {
@@ -174,11 +151,13 @@ function SegmentedControl({ label, value, options, onChange }) {
 
 export default function Settings() {
   const { user, token, refreshUser } = useAuth()
+  const { config: appConfig, isSandbox } = useAppConfig()
 
   const [isEditingProfile, setIsEditingProfile] = useState(false)
-  const [profileSaving, _setProfileSaving] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState('')
   const [profileSuccess, setProfileSuccess] = useState('')
+  const [disciplineResetConfirmOpen, setDisciplineResetConfirmOpen] = useState(false)
 
   const [profileForm, setProfileForm] = useState({
     name: '',
@@ -187,12 +166,6 @@ export default function Settings() {
   })
 
   const [_activeTab, _setActiveTab] = useState('Profile')
-  const [notifications, setNotifications] = useState({
-    disciplineAlerts: true,
-    weeklyOverview: true,
-    pactReminders: true,
-    productUpdates: false,
-  })
   const [theme, setTheme] = useState('System')
   const [density, setDensity] = useState('Comfortable')
   const [dateFormat, setDateFormat] = useState('Month / Day / Year')
@@ -239,12 +212,6 @@ export default function Settings() {
   const userLabel = user?.name || user?.email || 'User'
   const firstInitial = userLabel.charAt(0).toUpperCase()
 
-  function toggleNotification(key) {
-    setNotifications((current) => ({
-      ...current,
-      [key]: !current[key],
-    }))
-  }
   useEffect(() => {
     if (token) {
       refreshUser(token)
@@ -427,15 +394,14 @@ export default function Settings() {
     }
   }
 
-  async function handleResetDisciplineWindow() {
+  function requestResetDisciplineWindow() {
     if (!token || resetDisciplineSaving) return
-    if (
-      !window.confirm(
-        'Start discipline scoring fresh from now? Purchases before this moment will no longer affect your score (history is unchanged).'
-      )
-    ) {
-      return
-    }
+    setDisciplineResetConfirmOpen(true)
+  }
+
+  async function confirmResetDisciplineWindow() {
+    if (!token || resetDisciplineSaving) return
+    setDisciplineResetConfirmOpen(false)
     setUiPrefsMessage({ type: '', text: '' })
     try {
       setResetDisciplineSaving(true)
@@ -499,19 +465,47 @@ export default function Settings() {
     setIsEditingProfile(false)
   }
   async function handleSaveProfile() {
+    if (!token || profileSaving) return
+
+    const nextName = profileForm.name.trim()
+    const nextEmail = profileForm.email.trim().toLowerCase()
+    const nextPhone = profileForm.phone.trim()
+
+    if (!nextName) {
+      setProfileError('Name is required.')
+      setProfileSuccess('')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setProfileError('Enter a valid email address.')
+      setProfileSuccess('')
+      return
+    }
+
+    const body = {}
+    if (nextName !== (user?.name || '')) body.name = nextName
+    if (nextEmail !== (user?.email || '').toLowerCase()) body.email = nextEmail
+    if (nextPhone !== (user?.phone || '')) body.phone = nextPhone
+
+    if (Object.keys(body).length === 0) {
+      setIsEditingProfile(false)
+      setProfileError('')
+      setProfileSuccess('')
+      return
+    }
+
+    setProfileSaving(true)
+    setProfileError('')
+    setProfileSuccess('')
     try {
-      console.log('Saving profile:', profileForm)
-
-      /*
-        TODO LATER:
-        Example:
-        const updatedUser = await updateProfile(profileForm)
-        Then update your auth context / user state with updatedUser
-      */
-
+      await apiRequest('/api/auth/me', { method: 'PATCH', token, body })
+      await refreshUser(token)
+      setProfileSuccess('Profile updated.')
       setIsEditingProfile(false)
     } catch (error) {
-      console.error('Failed to save profile:', error)
+      setProfileError(error?.message || 'Could not update profile.')
+    } finally {
+      setProfileSaving(false)
     }
   }
 
@@ -654,15 +648,25 @@ export default function Settings() {
             </div>
 
             <div className="settings-list settings-stack">
-              {notificationOptions.map((option) => (
-                <ToggleRow
-                  key={option.key}
-                  label={option.label}
-                  description={option.description}
-                  checked={notifications[option.key]}
-                  onChange={() => toggleNotification(option.key)}
-                />
-              ))}
+              <p className="settings-support-lede">
+                Accountability emails are active when you add a partner and break a pact.
+                Additional notification preferences (discipline alerts, weekly overview,
+                pact reminders, product updates) are coming soon.
+              </p>
+              <RowAction
+                label="Accountability partner emails"
+                detail="Active — configure partners under Accountability above."
+                badge="Active"
+                chevron={false}
+                disabled
+              />
+              <RowAction
+                label="More notification controls"
+                detail="Discipline alerts, weekly overview, pact reminders, product updates."
+                badge="Coming soon"
+                chevron={false}
+                disabled
+              />
             </div>
           </section>
 
@@ -829,6 +833,20 @@ export default function Settings() {
             ) : null}
           </section>
 
+          <section className="dashboard-card settings-card settings-card-partners">
+            <div className="settings-section-header">
+              <div>
+                <p className="settings-section-kicker">Bank connections</p>
+                <h2>Connected banks</h2>
+                <p className="settings-support-lede" style={{ marginTop: '0.5rem' }}>
+                  Reconnect a bank when Plaid asks you to re-authenticate. Disconnecting
+                  stops future syncs but keeps your existing transaction history.
+                </p>
+              </div>
+            </div>
+            <PlaidItemsSection token={token} />
+          </section>
+
           <section className="dashboard-card settings-card settings-card-security">
             <div className="settings-section-header">
               <div>
@@ -842,12 +860,16 @@ export default function Settings() {
                 label={
                   user?.card_locked
                     ? 'Card is locked'
-                    : 'Lock card (simulation)'
+                    : isSandbox
+                      ? 'Lock card (simulation)'
+                      : 'Lock card'
                 }
                 description={
                   user?.card_locked
                     ? 'New purchases are blocked. Plaid-synced charges will be flagged with "card_was_locked".'
-                    : 'Block new simulated purchases and flag any real Plaid charges while locked. Useful for testing discipline.'
+                    : isSandbox
+                      ? 'Block new simulated purchases and flag any real Plaid charges while locked.'
+                      : 'Block new purchases and flag any Plaid charges that arrive while locked.'
                 }
                 checked={Boolean(user?.card_locked)}
                 onChange={handleToggleCardLock}
@@ -970,7 +992,7 @@ export default function Settings() {
                   className="settings-button-danger"
                   style={{ width: 'fit-content' }}
                   disabled={resetDisciplineSaving}
-                  onClick={handleResetDisciplineWindow}
+                  onClick={requestResetDisciplineWindow}
                 >
                   {resetDisciplineSaving ? 'Resetting…' : 'Reset discipline window'}
                 </button>
@@ -1076,7 +1098,12 @@ export default function Settings() {
             </div>
 
             <div className="settings-list settings-stack">
-              <RowAction label="PactBank for Web" detail={`Version ${APP_VERSION}`} chevron={false} disabled />
+              <RowAction
+                label="PactBank for Web"
+                detail={appConfig.app_version ? `Version ${appConfig.app_version}` : 'Version —'}
+                chevron={false}
+                disabled
+              />
               <RowAction
                 label="Terms of service"
                 detail="Add your organization’s legal URL in deployment config when you ship publicly."
@@ -1085,7 +1112,7 @@ export default function Settings() {
               />
               <RowAction
                 label="Privacy policy"
-                detail="Document how you store Plaid and profile data for your campus or demo reviewers."
+                detail="Document how you store Plaid and profile data for your users."
                 chevron={false}
                 disabled
               />
@@ -1093,6 +1120,47 @@ export default function Settings() {
           </section>
         </div>
       </section>
+
+      {disciplineResetConfirmOpen ? (
+        <div
+          className="settings-modal-overlay"
+          role="presentation"
+          onClick={() => setDisciplineResetConfirmOpen(false)}
+        >
+          <div
+            className="settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-discipline-reset-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="settings-discipline-reset-title" className="settings-modal-title">
+              Reset discipline window?
+            </h3>
+            <p className="settings-support-lede">
+              Start discipline scoring fresh from now. Purchases before this moment
+              no longer affect your score. Transaction history is not deleted.
+            </p>
+            <div className="settings-form-actions" style={{ marginTop: '1rem' }}>
+              <button
+                type="button"
+                className="settings-ghost-button"
+                onClick={() => setDisciplineResetConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="settings-button-danger"
+                disabled={resetDisciplineSaving}
+                onClick={confirmResetDisciplineWindow}
+              >
+                {resetDisciplineSaving ? 'Resetting…' : 'Reset window'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

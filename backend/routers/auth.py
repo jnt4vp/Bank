@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -119,6 +120,28 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if payload.name is not None:
+        trimmed = payload.name.strip()
+        if not trimmed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Name cannot be empty.",
+            )
+        current_user.name = trimmed
+    if payload.email is not None:
+        next_email = str(payload.email).strip().lower()
+        if next_email != current_user.email:
+            result = await db.execute(
+                select(User.id).where(User.email == next_email, User.id != current_user.id)
+            )
+            if result.scalar_one_or_none() is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="That email is already in use.",
+                )
+            current_user.email = next_email
+    if payload.phone is not None:
+        current_user.phone = payload.phone.strip() or None
     if payload.discipline_savings_percentage is not None:
         current_user.discipline_savings_percentage = payload.discipline_savings_percentage
     if payload.discipline_ui_mode is not None:

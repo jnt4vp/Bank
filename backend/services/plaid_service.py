@@ -228,15 +228,27 @@ async def _mark_item_needs_reauth(plaid_item_id: uuid.UUID) -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
-async def create_link_token(user_id: uuid.UUID) -> str:
+async def create_link_token(
+    user_id: uuid.UUID, *, access_token: str | None = None
+) -> str:
+    """Create a Plaid Link token.
+
+    Pass `access_token` to produce an update-mode token for reconnecting an
+    existing item (e.g. after ITEM_LOGIN_REQUIRED). In update mode, `products`
+    must be omitted per Plaid's API requirements.
+    """
     client = get_plaid_client()
-    request = LinkTokenCreateRequest(
-        products=[Products("transactions")],
-        client_name="PactBank",
-        country_codes=[CountryCode("US")],
-        language="en",
-        user=LinkTokenCreateRequestUser(client_user_id=str(user_id)),
-    )
+    kwargs: dict = {
+        "client_name": "PactBank",
+        "country_codes": [CountryCode("US")],
+        "language": "en",
+        "user": LinkTokenCreateRequestUser(client_user_id=str(user_id)),
+    }
+    if access_token:
+        kwargs["access_token"] = access_token
+    else:
+        kwargs["products"] = [Products("transactions")]
+    request = LinkTokenCreateRequest(**kwargs)
     response = await _call_plaid(client.link_token_create, request)
     return response.link_token
 

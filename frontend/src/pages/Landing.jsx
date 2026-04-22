@@ -74,8 +74,12 @@ export default function Landing() {
             </div>
 
             <div className="landing-stats">
-              <div className="landing-stat-row"><strong>$145</strong> automatically<br />transferred to savings</div>
-              <div className="landing-stat-row landing-stat-row-secondary">3 penalties triggered<br />this month</div>
+              <div className="landing-stat-row">
+                <strong>—</strong> automatic savings<br />from kept pacts
+              </div>
+              <div className="landing-stat-row landing-stat-row-secondary">
+                Your penalties and wins<br />appear after sign in
+              </div>
             </div>
 
             <div className="landing-chart-area">

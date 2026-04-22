@@ -17,6 +17,25 @@ export function fetchGoalSpendingBreakdown(token, body) {
   })
 }
 
+export function listGoals(token) {
+  return apiRequest('/api/goals', { token })
+}
+
+export function createGoal(token, { category, monthly_limit }) {
+  return apiRequest('/api/goals', {
+    method: 'POST',
+    token,
+    body: { category, monthly_limit },
+  })
+}
+
+export function deleteGoal(token, goalId) {
+  return apiRequest(`/api/goals/${goalId}`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
 /** Local calendar month bounds as YYYY-MM-DD (browser local timezone). */
 export function localCalendarMonthBounds(date = new Date()) {
   const y = date.getFullYear()

@@ -429,8 +429,6 @@ export default function Register() {
           created = pactResponse?.data || pactResponse;
         }
 
-        console.log("PACT CREATE RESPONSE:", created);
-
         if (!created?.id) {
           throw new Error("Pact was created but no pact id was returned.");
         }
@@ -500,7 +498,7 @@ export default function Register() {
       setLoading(true);
 
       try {
-        const accountabilityResponse = await saveAccountabilitySettings(
+        await saveAccountabilitySettings(
           {
             pact_id: createdPact.id,
             accountability_type: accountabilityType,
@@ -509,11 +507,6 @@ export default function Register() {
             accountability_note: accountabilityNote.trim() || null,
           },
           authToken
-        );
-
-        console.log(
-          "ACCOUNTABILITY SETTINGS RESPONSE:",
-          accountabilityResponse
         );
 
         goNext();
@@ -541,19 +534,11 @@ export default function Register() {
     }
 
     if (currentStep === 4) {
-      console.log("Prototype complete:", {
-        registeredUser,
-        createdPact,
-        name,
-        email,
-        phone,
-        selectedPactId,
-        customPactTitle,
-        accountabilityType,
-        disciplineSavingsPercent,
-        accountabilityNote,
-      });
-
+      if (!registeredUser?.id || !authToken) {
+        setError("Your session expired mid-signup. Please sign in to continue.");
+        navigate("/", { replace: true });
+        return;
+      }
       navigate("/dashboard", { replace: true });
     }
   };

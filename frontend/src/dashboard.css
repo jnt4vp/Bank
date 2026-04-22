@@ -263,6 +263,22 @@
   font-weight: 600;
 }
 
+.dashboard-reauth-banner {
+  margin: 0.6rem 0.35rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 14px;
+  background: rgba(196, 130, 32, 0.12);
+  border: 1px solid rgba(196, 130, 32, 0.4);
+  color: #6e4a10;
+  font-size: 0.95rem;
+}
+
+.dashboard-reauth-banner a {
+  color: #6e4a10;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
 .dashboard-hero-copy {
   max-width: 46rem;
 }
@@ -524,6 +540,39 @@
   margin: 0;
   color: #7d767f;
   font-size: 0.92rem;
+}
+
+.dashboard-score-explain {
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+  color: #8a8489;
+}
+
+.dashboard-score-explain summary {
+  cursor: pointer;
+  color: #6b4f1d;
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+}
+
+.dashboard-score-explain summary::-webkit-details-marker {
+  display: none;
+}
+
+.dashboard-score-explain summary::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.dashboard-score-explain[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.dashboard-score-explain p {
+  margin: 0.4rem 0 0 0;
+  line-height: 1.5;
 }
 
 .dashboard-score-meter {

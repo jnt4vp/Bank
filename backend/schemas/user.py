@@ -13,6 +13,9 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=20)
     discipline_savings_percentage: float | None = Field(default=None, ge=0, le=100)
     discipline_ui_mode: str | None = None
     dashboard_force_sky: bool | None = None

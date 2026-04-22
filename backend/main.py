@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models  # noqa: F401  # Ensure model metadata is registered for migrations/dev auto-create.
 from .database import Base, async_session, engine
 from .routers.auth import router as auth_router
+from .routers.config import router as config_router
 from .routers.counter import router as counter_router
 from .routers.plaid import router as plaid_router
 from .routers.transactions import router as transactions_router
@@ -28,6 +29,7 @@ from .services.plaid_service import (
     seed_sandbox_plaid_item,
     sync_transactions,
 )
+from .version import APP_VERSION
 from .dependencies.integrations import get_classifier, get_notifier
 
 settings = get_settings()
@@ -122,7 +124,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Bank API",
     description="Banking application API",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan
 )
 
@@ -169,6 +171,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(config_router, prefix="/api/config", tags=["config"])
 app.include_router(counter_router, prefix="/api/counter", tags=["counter"])
 app.include_router(transactions_router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(plaid_router, prefix="/api/plaid", tags=["plaid"])

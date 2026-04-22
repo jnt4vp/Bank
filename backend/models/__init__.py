@@ -2,6 +2,7 @@ from .account import Account
 from .accountability_alert_settings import AccountabilityAlertSettings
 from .accountability_partner import AccountabilityPartner
 from .counter import Counter
+from .goal import Goal
 from .goal_llm_txn_cache import GoalLlmTxnCache
 from .password_history import PasswordHistory
 from .plaid_item import PlaidItem
@@ -18,6 +19,7 @@ __all__ = [
     "AccountabilityPartner",
     "AccountabilitySettings",
     "Counter",
+    "Goal",
     "GoalLlmTxnCache",
     "Pact",
     "PasswordHistory",

@@ -34,8 +34,19 @@ class PlaidItemResponse(BaseModel):
     institution_name: str | None
     last_synced_at: str | None
     created_at: str
+    needs_reauth: bool = False
 
     model_config = {"from_attributes": True}
+
+
+def _plaid_item_to_response(item: PlaidItem) -> "PlaidItemResponse":
+    return PlaidItemResponse(
+        id=item.id,
+        institution_name=item.institution_name,
+        last_synced_at=item.last_synced_at.isoformat() if item.last_synced_at else None,
+        created_at=item.created_at.isoformat(),
+        needs_reauth=bool(item.needs_reauth),
+    )
 
 
 class SyncResponse(BaseModel):
@@ -51,6 +62,31 @@ class DemoBankAvailabilityResponse(BaseModel):
 @router.post("/create-link-token", response_model=LinkTokenResponse)
 async def create_link_token(user: User = Depends(get_current_user)):
     link_token = await plaid_service.create_link_token(user.id)
+    return LinkTokenResponse(link_token=link_token)
+
+
+@router.post("/items/{item_id}/update-link-token", response_model=LinkTokenResponse)
+async def create_update_link_token(
+    item_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mint a Plaid update-mode link token so the user can re-auth an existing item
+    (typically after ITEM_LOGIN_REQUIRED). Only valid for personal items — subscriber
+    items pointing at the shared demo source can't be re-auth'd per-user."""
+    result = await db.execute(
+        select(PlaidItem).where(PlaidItem.id == item_id, PlaidItem.user_id == user.id)
+    )
+    plaid_item = result.scalar_one_or_none()
+    if not plaid_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plaid item not found")
+    if plaid_item.shared_source_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Shared demo-bank items cannot be re-authenticated individually.",
+        )
+    access_token, _ = await plaid_service._get_access_token_for_item(db, plaid_item)
+    link_token = await plaid_service.create_link_token(user.id, access_token=access_token)
     return LinkTokenResponse(link_token=link_token)
 
 
@@ -84,12 +120,7 @@ async def connect_demo_bank(
             detail=str(exc),
         ) from exc
 
-    return PlaidItemResponse(
-        id=item.id,
-        institution_name=item.institution_name,
-        last_synced_at=item.last_synced_at.isoformat() if item.last_synced_at else None,
-        created_at=item.created_at.isoformat(),
-    )
+    return _plaid_item_to_response(item)
 
 
 @router.post("/exchange-token", response_model=PlaidItemResponse)
@@ -118,12 +149,7 @@ async def exchange_token(
         await db.rollback()
 
     await db.refresh(item)
-    return PlaidItemResponse(
-        id=item.id,
-        institution_name=item.institution_name,
-        last_synced_at=item.last_synced_at.isoformat() if item.last_synced_at else None,
-        created_at=item.created_at.isoformat(),
-    )
+    return _plaid_item_to_response(item)
 
 
 @router.get("/items", response_model=list[PlaidItemResponse])
@@ -132,15 +158,32 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
 ):
     items = await plaid_service.get_user_plaid_items(db, user.id)
-    return [
-        PlaidItemResponse(
-            id=item.id,
-            institution_name=item.institution_name,
-            last_synced_at=item.last_synced_at.isoformat() if item.last_synced_at else None,
-            created_at=item.created_at.isoformat(),
-        )
-        for item in items
-    ]
+    return [_plaid_item_to_response(item) for item in items]
+
+
+@router.post("/items/{item_id}/reconnected", response_model=SyncResponse)
+async def mark_item_reconnected(
+    item_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    classifier: ClassifierPort = Depends(get_classifier),
+    notifier: NotifierPort = Depends(get_notifier),
+):
+    """Clear the needs_reauth flag after a successful Plaid update-mode Link flow
+    and trigger an immediate sync."""
+    result = await db.execute(
+        select(PlaidItem).where(PlaidItem.id == item_id, PlaidItem.user_id == user.id)
+    )
+    plaid_item = result.scalar_one_or_none()
+    if not plaid_item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plaid item not found")
+    plaid_item.needs_reauth = False
+    await db.commit()
+    await db.refresh(plaid_item)
+    counts = await plaid_service.sync_transactions(
+        db, plaid_item, classifier=classifier, notifier=notifier
+    )
+    return SyncResponse(**counts)
 
 
 @router.post("/sync/{item_id}", response_model=SyncResponse)

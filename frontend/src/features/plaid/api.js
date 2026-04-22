@@ -33,6 +33,20 @@ export function removePlaidItem({ itemId, token }) {
   })
 }
 
+export function createUpdateLinkToken({ itemId, token }) {
+  return apiRequest(`/api/plaid/items/${itemId}/update-link-token`, {
+    method: 'POST',
+    token,
+  })
+}
+
+export function markPlaidItemReconnected({ itemId, token }) {
+  return apiRequest(`/api/plaid/items/${itemId}/reconnected`, {
+    method: 'POST',
+    token,
+  })
+}
+
 export function getDemoBankAvailable(token) {
   return apiRequest('/api/plaid/demo-bank/available', { token })
 }

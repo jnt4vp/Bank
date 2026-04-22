@@ -625,6 +625,19 @@ export default function Dashboard() {
         </div>
       ) : null}
 
+      {plaidItems.some((item) => item.needs_reauth) ? (
+        <div className="dashboard-reauth-banner" role="alert">
+          <strong>One of your banks needs re-authentication.</strong>{' '}
+          Transaction syncing is paused for{' '}
+          {plaidItems
+            .filter((item) => item.needs_reauth)
+            .map((item) => item.institution_name || 'a linked bank')
+            .join(', ')}
+          .{' '}
+          <Link to="/settings">Reconnect in Settings →</Link>
+        </div>
+      ) : null}
+
       <section className="dashboard-hero">
         <div className="dashboard-hero-copy">
           <h1 className="dashboard-title">{greeting.title}</h1>
@@ -694,7 +707,7 @@ export default function Dashboard() {
             <p className="dashboard-card-label">Pact Savings</p>
             <p className="dashboard-stat">{formatCurrency(pactSavingsDisplay)}</p>
             {simulatedSavings.enabled ? (
-              <p className="dashboard-card-footnote">Simulated transfers (demo — not a real bank move)</p>
+              <p className="dashboard-card-footnote">Projected — not linked to a real bank transfer yet</p>
             ) : null}
           </div>
 
@@ -706,6 +719,18 @@ export default function Dashboard() {
                   ? 'No purchases in your discipline window yet — only new activity after your score start time counts.'
                   : `${flaggedSharePercent}% of window purchases flagged — score is the inverse (higher is better).`}
               </p>
+              <details className="dashboard-score-explain">
+                <summary>How is this calculated?</summary>
+                <p>
+                  We count only purchases made after your score start time
+                  (reset anytime from Settings). The score is
+                  100 × (1 − flagged ÷ total purchases), rounded to a whole
+                  number. A purchase is flagged when it matches one of your
+                  active pacts — either by merchant/description keywords or by
+                  the classifier. New users start at 100 and the score falls
+                  only as real flagged activity lands.
+                </p>
+              </details>
             </div>
 
             <div className="dashboard-score-meter">

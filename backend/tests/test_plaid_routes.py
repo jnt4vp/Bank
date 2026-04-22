@@ -39,7 +39,7 @@ class ExchangeTokenRouteTest(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(timezone.utc)
         item = SimpleNamespace(
             id=uuid4(), institution_name="Test Bank",
-            last_synced_at=now, created_at=now,
+            last_synced_at=now, created_at=now, needs_reauth=False,
         )
         db = AsyncMock()
         with (
@@ -60,7 +60,7 @@ class ExchangeTokenRouteTest(unittest.IsolatedAsyncioTestCase):
         now = datetime.now(timezone.utc)
         item = SimpleNamespace(
             id=uuid4(), institution_name="Test Bank",
-            last_synced_at=None, created_at=now,
+            last_synced_at=None, created_at=now, needs_reauth=False,
         )
         db = AsyncMock()
         with (
@@ -84,8 +84,8 @@ class ListItemsRouteTest(unittest.IsolatedAsyncioTestCase):
         user = SimpleNamespace(id=uuid4())
         now = datetime.now(timezone.utc)
         items = [
-            SimpleNamespace(id=uuid4(), institution_name="Bank A", last_synced_at=now, created_at=now),
-            SimpleNamespace(id=uuid4(), institution_name="Bank B", last_synced_at=None, created_at=now),
+            SimpleNamespace(id=uuid4(), institution_name="Bank A", last_synced_at=now, created_at=now, needs_reauth=False),
+            SimpleNamespace(id=uuid4(), institution_name="Bank B", last_synced_at=None, created_at=now, needs_reauth=True),
         ]
         with patch("backend.routers.plaid.plaid_service.get_user_plaid_items", new=AsyncMock(return_value=items)):
             resp = await list_items(user=user, db=AsyncMock())

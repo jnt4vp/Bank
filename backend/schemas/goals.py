@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
+from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class GoalAttributionSpec(BaseModel):
@@ -81,3 +82,25 @@ class GoalSpendingResponse(BaseModel):
     spent_by_goal: dict[str, float]
     method: str
     llm_assigned_count: int = 0
+
+
+class GoalCreate(BaseModel):
+    category: str = Field(..., min_length=1, max_length=120)
+    monthly_limit: float = Field(..., gt=0, le=1_000_000)
+
+    @field_validator("category")
+    @classmethod
+    def strip_category(cls, value: str) -> str:
+        s = value.strip()
+        if not s:
+            raise ValueError("category must not be empty")
+        return s
+
+
+class GoalResponse(BaseModel):
+    id: UUID
+    category: str
+    monthly_limit: float
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
