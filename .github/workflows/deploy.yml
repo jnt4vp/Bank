@@ -66,9 +66,13 @@ jobs:
           docker build -t bank-frontend:latest -f Dockerfile.frontend .
 
       - name: Save images to a single tarball
+        # Write into the workspace (not /tmp) because the scp-action below
+        # runs inside its own Docker container and only mounts the workspace.
+        # A path under /tmp on the runner is invisible to that container and
+        # produces "tar: empty archive".
         run: |
-          docker save bank-api:latest bank-frontend:latest | gzip -1 > /tmp/bank-images.tar.gz
-          ls -lh /tmp/bank-images.tar.gz
+          docker save bank-api:latest bank-frontend:latest | gzip -1 > bank-images.tar.gz
+          ls -lh bank-images.tar.gz
 
       - name: Copy image tarball to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -76,7 +80,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: /tmp/bank-images.tar.gz
+          source: bank-images.tar.gz
           target: /tmp/
 
       - name: Swap in new images on EC2
