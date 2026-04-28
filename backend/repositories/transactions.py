@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.transaction import Transaction
@@ -41,8 +41,12 @@ async def get_transactions_for_user(
     q = select(Transaction).where(Transaction.user_id == user_id)
     if flagged_only:
         q = q.where(Transaction.flagged.is_(True))
+    # Sort by bank posting date when present, else by ingest date, then by
+    # created_at to break ties. Without the COALESCE, NULL `date` rows
+    # (manual / API ingests) get shoved to the end and can be cut off by
+    # the limit, hiding rows the user just added.
     q = q.order_by(
-        Transaction.date.desc().nullslast(),
+        func.coalesce(Transaction.date, cast(Transaction.created_at, Date)).desc(),
         Transaction.created_at.desc(),
     )
     if offset:

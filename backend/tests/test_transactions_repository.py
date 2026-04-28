@@ -56,6 +56,27 @@ class GetTransactionsForUserTest(unittest.IsolatedAsyncioTestCase):
         # The flagged query should include an extra filter clause
         self.assertIn("flagged", query_flagged.lower())
 
+    async def test_sort_falls_back_to_created_at_when_date_is_null(self):
+        """Manual ingests have NULL date; they used to sort to the end and
+        get cut off by the LIMIT. The query should sort by COALESCE(date,
+        created_at) so manual rows interleave by ingest time."""
+        uid = uuid4()
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = []
+        exec_result = MagicMock()
+        exec_result.scalars.return_value = scalars_result
+        session = AsyncMock()
+        session.execute = AsyncMock(return_value=exec_result)
+
+        await get_transactions_for_user(session, uid)
+        query = str(session.execute.call_args_list[0][0][0]).lower()
+
+        self.assertIn("coalesce", query)
+        self.assertIn("transactions.date", query)
+        self.assertIn("transactions.created_at", query)
+        # The previous "nulls last" sort was the bug — it must not be there.
+        self.assertNotIn("nulls last", query)
+
 
 class CreateTransactionTest(unittest.IsolatedAsyncioTestCase):
     async def test_creates_transaction_with_correct_fields(self):
