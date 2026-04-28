@@ -28,14 +28,10 @@ export default function AddTransaction() {
   const navigate = useNavigate()
   const { token, user } = useAuth()
   const merchantRef = useRef(null)
-  const refsByField = {
-    merchant: useRef(null),
-    description: useRef(null),
-    amount: useRef(null),
-  }
+  const descriptionRef = useRef(null)
+  const amountRef = useRef(null)
 
   const [form, setForm] = useState(initialForm)
-  const [touched, setTouched] = useState({})
   const [fieldErrors, setFieldErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -58,7 +54,6 @@ export default function AddTransaction() {
   }
 
   function handleBlur(name) {
-    setTouched((prev) => ({ ...prev, [name]: true }))
     const errors = validate(form)
     if (errors[name]) {
       setFieldErrors((prev) => ({ ...prev, [name]: errors[name] }))
@@ -71,9 +66,13 @@ export default function AddTransaction() {
     const errors = validate(form)
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
-      setTouched({ merchant: true, description: true, amount: true })
+      const refByField = {
+        merchant: merchantRef,
+        description: descriptionRef,
+        amount: amountRef,
+      }
       const firstField = ['merchant', 'description', 'amount'].find((f) => errors[f])
-      refsByField[firstField]?.current?.focus()
+      refByField[firstField]?.current?.focus()
       return
     }
 
@@ -157,10 +156,7 @@ export default function AddTransaction() {
                 </span>
                 <input
                   id="add-txn-merchant"
-                  ref={(el) => {
-                    merchantRef.current = el
-                    refsByField.merchant.current = el
-                  }}
+                  ref={merchantRef}
                   type="text"
                   className="settings-input"
                   placeholder="e.g. Starbucks"
@@ -186,7 +182,7 @@ export default function AddTransaction() {
                 </span>
                 <input
                   id="add-txn-description"
-                  ref={refsByField.description}
+                  ref={descriptionRef}
                   type="text"
                   className="settings-input"
                   placeholder="e.g. Iced latte"
@@ -222,7 +218,7 @@ export default function AddTransaction() {
                   </span>
                   <input
                     id="add-txn-amount"
-                    ref={refsByField.amount}
+                    ref={amountRef}
                     type="number"
                     inputMode="decimal"
                     step="0.01"
