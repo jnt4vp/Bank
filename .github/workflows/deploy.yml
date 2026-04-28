@@ -61,5 +61,9 @@ jobs:
             sudo systemctl stop nginx || true
             sudo systemctl stop bankapp || true
             sudo git -c safe.directory=/opt/bankapp -C /opt/bankapp pull --ff-only origin main
+            # Free RAM during the in-place vite build: ollama (llama3.2:1b) holds ~1.5 GB
+            # resident, which on a small EC2 instance pushes the host into swap mid-build and
+            # makes node appear hung during chunk write. compose recreates ollama at the end.
+            sudo docker stop bank_ollama || true
             sudo docker-compose --env-file /opt/bankapp/.env.prod -f /opt/bankapp/docker-compose.prod.yml up --build -d
             sudo docker image prune -f
