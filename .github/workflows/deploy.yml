@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Serialize deploys against the same branch so two pushes in flight don't race
+# the EC2 host. Pending deploys queue and only the most recent one is kept.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ── Frontend build check ──────────────────────────────────────────────────
   build-frontend:
@@ -41,29 +47,52 @@ jobs:
       - run: python -m py_compile backend/main.py
         working-directory: .
 
-  # ── Deploy to EC2 (main branch only) ─────────────────────────────────────
+  # ── Build prod images on the runner, ship them to EC2, swap in place ──────
+  # Why off-EC2: building Dockerfile.frontend on a small EC2 host caused
+  # vite's chunk-write phase to swap-thrash for 24+ minutes (ollama held
+  # ~1.5 GB resident at the same time). We now bake images on the
+  # ubuntu-latest runner (~7 GB RAM) and the EC2 host only docker-loads them.
   deploy:
     needs: [build-frontend, build-backend]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2
+      - uses: actions/checkout@v4
+
+      - name: Build production images
+        run: |
+          docker build -t bank-api:latest -f backend/Dockerfile .
+          docker build -t bank-frontend:latest -f Dockerfile.frontend .
+
+      - name: Save images to a single tarball
+        run: |
+          docker save bank-api:latest bank-frontend:latest | gzip -1 > /tmp/bank-images.tar.gz
+          ls -lh /tmp/bank-images.tar.gz
+
+      - name: Copy image tarball to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: /tmp/bank-images.tar.gz
+          target: /tmp/
+
+      - name: Swap in new images on EC2
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 10m
           script: |
             set -euo pipefail
             # The Docker deployment path owns port 80; stop the legacy host stack if it is still present.
             sudo systemctl stop nginx || true
             sudo systemctl stop bankapp || true
             sudo git -c safe.directory=/opt/bankapp -C /opt/bankapp pull --ff-only origin main
-            # Free RAM during the in-place vite build: ollama (llama3.2:1b) holds ~1.5 GB
-            # resident, which on a small EC2 instance pushes the host into swap mid-build and
-            # makes node appear hung during chunk write. compose recreates ollama at the end.
-            sudo docker stop bank_ollama || true
-            sudo docker-compose --env-file /opt/bankapp/.env.prod -f /opt/bankapp/docker-compose.prod.yml up --build -d
+            sudo docker load -i /tmp/bank-images.tar.gz
+            rm -f /tmp/bank-images.tar.gz
+            sudo docker-compose --env-file /opt/bankapp/.env.prod -f /opt/bankapp/docker-compose.prod.yml up -d
             sudo docker image prune -f

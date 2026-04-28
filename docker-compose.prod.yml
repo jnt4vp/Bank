@@ -18,10 +18,10 @@ services:
     restart: unless-stopped
 
   api:
-    # Canonical production deployment path in this repo.
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    # Image is built and pushed to the EC2 host by CI (deploy.yml).
+    # We do not build on the host because that pegs CPU/RAM and made vite
+    # appear to hang during chunk-write on small instances.
+    image: bank-api:latest
     container_name: bank_api
     environment:
       APP_ENV: production
@@ -60,9 +60,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
+    image: bank-frontend:latest
     container_name: bank_frontend
     ports:
       - "80:80"
