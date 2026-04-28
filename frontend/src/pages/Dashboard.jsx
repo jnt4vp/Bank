@@ -706,9 +706,6 @@ export default function Dashboard() {
           <div className="dashboard-card">
             <p className="dashboard-card-label">Pact Savings</p>
             <p className="dashboard-stat">{formatCurrency(pactSavingsDisplay)}</p>
-            {simulatedSavings.enabled ? (
-              <p className="dashboard-card-footnote">Projected — not linked to a real bank transfer yet</p>
-            ) : null}
           </div>
 
           <div className="dashboard-card dashboard-score-card dashboard-card-hero-accent">

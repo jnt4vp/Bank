@@ -9,6 +9,7 @@ import Settings from '../pages/Settings'
 import Signup from '../pages/Signup'
 import Register from '../pages/Register'
 import Transactions from '../pages/Transactions'
+import AddTransaction from '../pages/AddTransaction'
 import Pacts from '../pages/Pacts'
 import Goals from '../pages/Goals'
 import Analytics from '../pages/Analytics'
@@ -31,6 +32,7 @@ export default function AppRouter() {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/transactions/new" element={<AddTransaction />} />
         <Route path="/pacts" element={<Pacts />} />
         <Route path="/goals" element={<Goals />} />
         <Route path="/analytics" element={<Analytics />} />

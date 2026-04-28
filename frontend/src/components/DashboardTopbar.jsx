@@ -125,6 +125,13 @@ export default function DashboardTopbar({ navAriaLabel = 'Primary' }) {
               >
                 Settings
               </Link>
+              <Link
+                to="/transactions/new"
+                className="dashboard-profile-item"
+                onClick={() => setMenuOpen(false)}
+              >
+                Add transaction
+              </Link>
               <button type="button" className="dashboard-profile-item" onClick={logout}>
                 Sign out
               </button>
