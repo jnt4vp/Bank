@@ -37,6 +37,7 @@ from ..models.plaid_item import PlaidItem
 from ..models.shared_plaid_source import SharedPlaidSource
 from ..models.transaction import Transaction
 from ..models.user import User
+from ..services.card_lock import extend_card_lock
 from ..services.discipline import ensure_discipline_window_after_plaid_sync
 from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
@@ -476,6 +477,12 @@ async def _process_added_transaction(
         skip_for_initial_plaid_backfill=is_initial_backfill,
     )
 
+    # Auto-lock as punishment for a real pact violation. Excludes
+    # card_was_locked (purely a marker that the card was already locked at sync)
+    # and the initial backfill (historical txns shouldn't lock a present-day card).
+    if flagged and flag_reason != "card_was_locked" and not is_initial_backfill:
+        await extend_card_lock(db, user_id=user_id)
+
     if flagged and notifier and not is_initial_backfill:
         try:
             await notifier.send_transaction_alert(
@@ -625,9 +632,10 @@ async def _gather_sync_context(
         user_email = result.scalar_one_or_none()
 
     lock_result = await db.execute(
-        select(User.card_locked).where(User.id == plaid_item.user_id)
+        select(User.card_locked_until).where(User.id == plaid_item.user_id)
     )
-    card_locked = bool(lock_result.scalar_one_or_none())
+    locked_until = lock_result.scalar_one_or_none()
+    card_locked = bool(locked_until and locked_until > datetime.now(timezone.utc))
 
     user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
     return user_email, user_categories, card_locked

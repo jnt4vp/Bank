@@ -10,6 +10,7 @@ from ..ports.classifier import ClassifierPort
 from ..ports.notifier import NotifierPort
 from ..repositories.pacts import get_active_pact_categories
 from ..repositories.transactions import create_transaction
+from ..services.card_lock import extend_card_lock
 from ..services.discipline import ensure_discipline_window_after_manual_transaction
 from ..services.classifier import classify_transaction
 from ..services.accountability_alerts import send_accountability_alerts_for_transaction
@@ -46,14 +47,17 @@ async def ingest_user_transaction(
     amount: float,
     classifier: ClassifierPort,
     notifier: NotifierPort,
-    card_locked: bool = False,
+    card_locked_until: datetime | None = None,
 ) -> Transaction:
-    if card_locked:
+    now = datetime.now(timezone.utc)
+    if card_locked_until is not None and card_locked_until > now:
         logger.info(
-            "BLOCKED PURCHASE  |  user=%s  |  merchant=%s  |  amount=$%.2f  |  reason=card_locked",
-            user_id, merchant, amount,
+            "BLOCKED PURCHASE  |  user=%s  |  merchant=%s  |  amount=$%.2f  |  locked_until=%s",
+            user_id, merchant, amount, card_locked_until.isoformat(),
         )
-        raise CardLockedError("Card is locked. Unlock it in Settings to record purchases.")
+        raise CardLockedError(
+            f"Card is locked until {card_locked_until.isoformat()}."
+        )
 
     user_categories = await get_active_pact_categories(db, user_id)
     logger.info(
@@ -92,6 +96,11 @@ async def ingest_user_transaction(
     )
     await db.flush()
     await ensure_discipline_window_after_manual_transaction(db, user_id, txn)
+
+    # Auto-lock the card as punishment for breaking a pact. card_was_locked
+    # flags are excluded so a locked-card purchase doesn't infinitely renew the lock.
+    if classification.flagged and classification.flag_reason != "card_was_locked":
+        await extend_card_lock(db, user_id=user_id)
 
     try:
         await db.commit()

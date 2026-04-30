@@ -53,7 +53,7 @@ class RegisterRouteTest(unittest.IsolatedAsyncioTestCase):
     async def test_successful_registration_returns_auth_response(self):
         user = SimpleNamespace(
             id=uuid4(), email="a@example.com", phone=None, name="A",
-            card_locked=False, discipline_savings_percentage=0,
+            card_locked_until=None, discipline_savings_percentage=0,
             discipline_score=100, discipline_ui_mode="discipline",
             dashboard_force_sky=False, discipline_score_started_at=None,
             bank_connected_at=None, created_at=datetime.now(timezone.utc),
@@ -86,7 +86,7 @@ class GetMeRouteTest(unittest.IsolatedAsyncioTestCase):
         user = SimpleNamespace(
             id=uuid4(), discipline_score_started_at=datetime.now(timezone.utc),
             discipline_score=100, email="a@example.com", phone=None, name="A",
-            card_locked=False, discipline_savings_percentage=0,
+            card_locked_until=None, discipline_savings_percentage=0,
             discipline_ui_mode="discipline", dashboard_force_sky=False,
             bank_connected_at=None, created_at=datetime.now(timezone.utc),
         )

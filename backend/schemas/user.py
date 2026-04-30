@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
 
 class UserCreate(BaseModel):
@@ -19,7 +19,6 @@ class UserUpdate(BaseModel):
     discipline_savings_percentage: float | None = Field(default=None, ge=0, le=100)
     discipline_ui_mode: str | None = None
     dashboard_force_sky: bool | None = None
-    card_locked: bool | None = None
     reset_discipline_window: bool | None = Field(
         default=None,
         description="When true, moves the discipline scoring window to now and recomputes score.",
@@ -31,7 +30,7 @@ class UserResponse(BaseModel):
     email: str
     phone: str | None
     name: str
-    card_locked: bool
+    card_locked_until: Optional[datetime] = None
     discipline_savings_percentage: float
     discipline_score: int = 100
     discipline_ui_mode: str = "discipline"
@@ -41,6 +40,13 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def card_locked(self) -> bool:
+        if self.card_locked_until is None:
+            return False
+        return self.card_locked_until > datetime.now(timezone.utc)
 
     @field_validator("discipline_score", mode="before")
     @classmethod

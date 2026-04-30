@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 from uuid import uuid4
@@ -59,13 +59,21 @@ def _make_sync_response(*, added=None, modified=None, removed=None, has_more=Fal
     )
 
 
-def _build_smart_db(*, user_email="u@example.com", existing_txn=None, has_notifier=False):
+def _build_smart_db(
+    *,
+    user_email="u@example.com",
+    existing_txn=None,
+    has_notifier=False,
+    card_locked_until=None,
+):
     """Build a db mock that handles the dynamic execute calls in sync_transactions.
 
-    The sync loop calls db.execute multiple times:
-    - If notifier is set: first call is user email lookup
+    The sync loop calls db.execute in this order per cycle:
+    - If notifier is set: user email lookup
+    - card_locked_until lookup
     - For each added txn: existing txn check
     - For each removed txn: existing txn lookup
+    - (extend_card_lock UPDATE doesn't go through execute via a lookup)
     """
 
     def _make_result(value):
@@ -74,17 +82,19 @@ def _build_smart_db(*, user_email="u@example.com", existing_txn=None, has_notifi
         return r
 
     email_result = _make_result(user_email)
+    lock_result = _make_result(card_locked_until)
     txn_result = _make_result(existing_txn)
 
-    call_count = [0]
     email_consumed = [False]
+    lock_consumed = [False]
 
     async def _execute(query, *args, **kwargs):
-        call_count[0] += 1
-        # First call is user email lookup only when notifier is provided
         if has_notifier and not email_consumed[0]:
             email_consumed[0] = True
             return email_result
+        if not lock_consumed[0]:
+            lock_consumed[0] = True
+            return lock_result
         return txn_result
 
     db = AsyncMock()
@@ -229,18 +239,20 @@ class SyncTransactionsCardLockTest(unittest.IsolatedAsyncioTestCase):
         txn1 = _make_plaid_txn(amount=12.0, merchant_name="Unexpected Store")
         sync_resp = _make_sync_response(added=[txn1])
 
-        # db.execute returns True for the card_locked lookup, None otherwise
+        # db.execute returns a future timestamp for the card_locked_until lookup,
+        # None for the existing-txn lookup.
         def _make_result(value):
             r = MagicMock()
             r.scalar_one_or_none.return_value = value
             return r
 
         lock_consumed = [False]
+        locked_until = datetime.now(timezone.utc) + timedelta(hours=1)
 
         async def _execute(query, *args, **kwargs):
             if not lock_consumed[0]:
                 lock_consumed[0] = True
-                return _make_result(True)  # card_locked = True
+                return _make_result(locked_until)  # card_locked_until > now
             return _make_result(None)  # No existing txn
 
         db = AsyncMock()

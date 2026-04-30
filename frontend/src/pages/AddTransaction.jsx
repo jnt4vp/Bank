@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import DashboardTopbar from '../components/DashboardTopbar'
 import { useAuth } from '../features/auth/context'
 import { ApiError, apiRequest } from '../lib/api'
 import '../dashboard.css'
 import '../settings.css'
+
+function formatLockUnlockAt(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return null
+  return d.toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
 
 const initialForm = { merchant: '', description: '', amount: '' }
 
@@ -95,7 +102,7 @@ export default function AddTransaction() {
           kind: 'card_locked',
           message:
             err.data?.detail ||
-            'Your card is locked. Unlock it in Settings before adding new transactions.',
+            'Your card is locked. Wait out the lock window before adding new transactions.',
         })
       } else if (err instanceof ApiError) {
         setSubmitError({ kind: 'generic', message: err.message })
@@ -107,6 +114,7 @@ export default function AddTransaction() {
   }
 
   const cardLocked = Boolean(user?.card_locked)
+  const unlockAtLabel = formatLockUnlockAt(user?.card_locked_until)
 
   return (
     <div className="dashboard-shell settings-shell">
@@ -134,8 +142,9 @@ export default function AddTransaction() {
 
             {cardLocked ? (
               <p className="settings-form-feedback is-error" role="status">
-                Card is currently locked. New manual transactions will be blocked until you unlock
-                it in <Link to="/settings">Settings</Link>.
+                Card is currently locked for breaking a pact. New manual transactions will be
+                blocked
+                {unlockAtLabel ? <> until <strong>{unlockAtLabel}</strong></> : ''}.
               </p>
             ) : null}
 
@@ -253,12 +262,6 @@ export default function AddTransaction() {
                   aria-live="assertive"
                 >
                   {submitError.message}
-                  {submitError.kind === 'card_locked' ? (
-                    <>
-                      {' '}
-                      <Link to="/settings">Open Settings</Link>
-                    </>
-                  ) : null}
                 </p>
               ) : null}
 

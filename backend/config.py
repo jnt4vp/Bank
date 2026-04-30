@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     DEV_SEED_EXAMPLE_EMAIL: str = "test@example.com"
     DEV_SEED_EXAMPLE_PASSWORD: str = "Password123!"
 
+    # Card-lock punishment: when a flagged purchase is ingested (manual or Plaid),
+    # the user's card auto-locks for this many minutes. Each new flag extends to
+    # max(current_lock_until, now + duration) so locks never shorten on re-trigger.
+    CARD_LOCK_DURATION_MINUTES: int = Field(
+        default=60,
+        ge=1,
+        le=10080,  # 1 week ceiling
+        description="Minutes to lock the card after a flagged purchase.",
+    )
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         case_sensitive=True,

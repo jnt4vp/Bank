@@ -23,6 +23,16 @@ function formatCurrency(value) {
   return `$${Number(value || 0).toFixed(2)}`
 }
 
+function formatLockRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const pad = (n) => String(n).padStart(2, '0')
+  if (hours > 0) return `${hours}:${pad(minutes)}:${pad(seconds)}`
+  return `${pad(minutes)}:${pad(seconds)}`
+}
+
 function normalizeCategory(category) {
   if (!category) return 'Other'
   return String(category)
@@ -191,26 +201,35 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
-  const [cardLockSaving, setCardLockSaving] = useState(false)
-  const [cardLockError, setCardLockError] = useState('')
 
-  const handleToggleCardLock = useCallback(async () => {
-    if (!token || cardLockSaving) return
-    setCardLockSaving(true)
-    setCardLockError('')
-    try {
-      await apiRequest('/api/auth/me', {
-        method: 'PATCH',
-        token,
-        body: { card_locked: !user?.card_locked },
-      })
-      await refreshUser(token)
-    } catch (err) {
-      setCardLockError(err?.message || 'Could not update card lock.')
-    } finally {
-      setCardLockSaving(false)
+  const cardLockedUntilMs = useMemo(() => {
+    if (!user?.card_locked_until) return null
+    const t = new Date(user.card_locked_until).getTime()
+    return Number.isFinite(t) ? t : null
+  }, [user?.card_locked_until])
+
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!cardLockedUntilMs || cardLockedUntilMs <= Date.now()) return undefined
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [cardLockedUntilMs])
+
+  const cardLockRemainingMs = cardLockedUntilMs ? cardLockedUntilMs - now : 0
+  const cardIsLocked = cardLockRemainingMs > 0
+
+  // When the lock window expires, refresh the user so the banner clears.
+  const lockClearedRef = useRef(false)
+  useEffect(() => {
+    if (cardIsLocked) {
+      lockClearedRef.current = false
+      return
     }
-  }, [token, cardLockSaving, user?.card_locked, refreshUser])
+    if (cardLockedUntilMs && !lockClearedRef.current && token) {
+      lockClearedRef.current = true
+      void refreshUser(token).catch(() => {})
+    }
+  }, [cardIsLocked, cardLockedUntilMs, refreshUser, token])
 
   const userIdRef = useRef(user?.id)
   useEffect(() => {
@@ -637,21 +656,15 @@ export default function Dashboard() {
     <div className="dashboard-shell">
       <DashboardTopbar navAriaLabel="Dashboard" />
 
-      {user?.card_locked ? (
-        <div className="dashboard-card-lock-banner" role="status">
-          <strong>Card is locked.</strong> New purchases are blocked. Plaid-synced charges will be flagged.
+      {cardIsLocked ? (
+        <div className="dashboard-card-lock-banner" role="status" aria-live="polite">
+          <strong>Card locked for breaking a pact.</strong>
           {' '}
-          <button
-            type="button"
-            className="dashboard-card-lock-banner-button"
-            onClick={handleToggleCardLock}
-            disabled={cardLockSaving}
-          >
-            {cardLockSaving ? 'Unlocking…' : 'Unlock card'}
-          </button>
-          {cardLockError ? (
-            <span className="dashboard-card-lock-banner-error"> {cardLockError}</span>
-          ) : null}
+          New purchases are blocked. Plaid-synced charges will be flagged.
+          {' '}
+          <span className="dashboard-card-lock-countdown">
+            Unlocks in {formatLockRemaining(cardLockRemainingMs)}.
+          </span>
         </div>
       ) : null}
 
@@ -680,21 +693,6 @@ export default function Dashboard() {
               ? 'Loading activity...'
               : `${disciplineWindowTransactions.length} in score window`}
           </div>
-
-          {!user?.card_locked ? (
-            <button
-              type="button"
-              className="dashboard-pill dashboard-pill-action dashboard-pill-danger"
-              onClick={handleToggleCardLock}
-              disabled={cardLockSaving}
-              title="Lock card as a consequence for breaking a pact"
-            >
-              {cardLockSaving ? 'Locking…' : 'Lock card'}
-            </button>
-          ) : null}
-          {!user?.card_locked && cardLockError ? (
-            <span className="dashboard-card-lock-inline-error">{cardLockError}</span>
-          ) : null}
 
           {bankConnected ? (
             <button

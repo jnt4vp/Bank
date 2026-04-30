@@ -2,7 +2,7 @@
 
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -18,8 +18,12 @@ from backend.routers.transactions import ingest_transaction, list_transactions
 from backend.schemas.transaction import TransactionCreate
 
 
-def _make_user(*, card_locked: bool = False):
-    return SimpleNamespace(id=uuid4(), email="u@example.com", card_locked=card_locked)
+def _make_user(*, card_locked_until: datetime | None = None):
+    return SimpleNamespace(
+        id=uuid4(),
+        email="u@example.com",
+        card_locked_until=card_locked_until,
+    )
 
 
 class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
@@ -60,7 +64,7 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
             amount=5.50,
             classifier=classifier,
             notifier=notifier,
-            card_locked=False,
+            card_locked_until=None,
         )
         self.assertEqual(result, txn)
 
@@ -81,7 +85,7 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.merchant, "Target")
 
     async def test_card_locked_returns_423(self):
-        user = _make_user(card_locked=True)
+        user = _make_user(card_locked_until=datetime.now(timezone.utc) + timedelta(hours=1))
         with patch(
             "backend.routers.transactions.ingest_user_transaction",
             new=AsyncMock(side_effect=CardLockedError("Card is locked.")),
@@ -97,15 +101,14 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.status_code, 423)
         self.assertIn("locked", ctx.exception.detail.lower())
 
-    async def test_card_locked_flag_is_forwarded(self):
-        user = _make_user(card_locked=True)
+    async def test_card_locked_until_is_forwarded(self):
+        until = datetime.now(timezone.utc) + timedelta(hours=1)
+        user = _make_user(card_locked_until=until)
         txn = SimpleNamespace(id=uuid4())
         with patch(
             "backend.routers.transactions.ingest_user_transaction",
             new=AsyncMock(return_value=txn),
         ) as ingest_mock:
-            # Still call it so we can see card_locked was passed through;
-            # the handler's real check happens inside the use-case.
             await ingest_transaction(
                 TransactionCreate(merchant="X", description="Y", amount=1.0),
                 db=AsyncMock(),
@@ -113,7 +116,7 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
                 classifier=SimpleNamespace(),
                 notifier=SimpleNamespace(),
             )
-        self.assertTrue(ingest_mock.await_args.kwargs["card_locked"])
+        self.assertEqual(ingest_mock.await_args.kwargs["card_locked_until"], until)
 
 
 class ListTransactionsRouteTest(unittest.IsolatedAsyncioTestCase):

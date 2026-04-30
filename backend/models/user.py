@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Integer, Numeric, String
@@ -19,7 +19,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     name: Mapped[str] = mapped_column(String(100))
-    card_locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    card_locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     discipline_savings_percentage: Mapped[float] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"
@@ -55,3 +59,9 @@ class User(Base):
         cascade="all, delete-orphan",
         order_by="PasswordHistory.created_at.desc()",
     )
+
+    @property
+    def card_locked(self) -> bool:
+        if self.card_locked_until is None:
+            return False
+        return self.card_locked_until > datetime.now(timezone.utc)

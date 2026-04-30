@@ -1,6 +1,6 @@
 import os
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -353,7 +353,10 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         ), patch(
             "backend.application.transactions.record_simulated_savings_transfers_for_transaction",
             new=AsyncMock(return_value=0),
-        ):
+        ), patch(
+            "backend.application.transactions.extend_card_lock",
+            new=AsyncMock(),
+        ) as extend_lock_mock:
             result = await ingest_user_transaction(
                 db,
                 user_id=transaction.user_id,
@@ -394,6 +397,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(transaction.alert_sent)
         self.assertIsNotNone(transaction.alert_sent_at)
         self.assertEqual(result, transaction)
+        extend_lock_mock.assert_awaited_once()
 
     async def test_ingest_user_transaction_raises_when_card_locked(self):
         classifier = SimpleNamespace(classify_transaction=AsyncMock())
@@ -419,7 +423,7 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
                     amount=10.0,
                     classifier=classifier,
                     notifier=notifier,
-                    card_locked=True,
+                    card_locked_until=datetime.now(timezone.utc) + timedelta(hours=1),
                 )
         classifier.classify_transaction.assert_not_awaited()
         create_mock.assert_not_awaited()
