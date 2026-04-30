@@ -191,6 +191,26 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState(null)
+  const [cardLockSaving, setCardLockSaving] = useState(false)
+  const [cardLockError, setCardLockError] = useState('')
+
+  const handleToggleCardLock = useCallback(async () => {
+    if (!token || cardLockSaving) return
+    setCardLockSaving(true)
+    setCardLockError('')
+    try {
+      await apiRequest('/api/auth/me', {
+        method: 'PATCH',
+        token,
+        body: { card_locked: !user?.card_locked },
+      })
+      await refreshUser(token)
+    } catch (err) {
+      setCardLockError(err?.message || 'Could not update card lock.')
+    } finally {
+      setCardLockSaving(false)
+    }
+  }, [token, cardLockSaving, user?.card_locked, refreshUser])
 
   const userIdRef = useRef(user?.id)
   useEffect(() => {
@@ -621,7 +641,17 @@ export default function Dashboard() {
         <div className="dashboard-card-lock-banner" role="status">
           <strong>Card is locked.</strong> New purchases are blocked. Plaid-synced charges will be flagged.
           {' '}
-          <Link to="/settings">Unlock in Settings</Link>
+          <button
+            type="button"
+            className="dashboard-card-lock-banner-button"
+            onClick={handleToggleCardLock}
+            disabled={cardLockSaving}
+          >
+            {cardLockSaving ? 'Unlocking…' : 'Unlock card'}
+          </button>
+          {cardLockError ? (
+            <span className="dashboard-card-lock-banner-error"> {cardLockError}</span>
+          ) : null}
         </div>
       ) : null}
 
@@ -650,6 +680,21 @@ export default function Dashboard() {
               ? 'Loading activity...'
               : `${disciplineWindowTransactions.length} in score window`}
           </div>
+
+          {!user?.card_locked ? (
+            <button
+              type="button"
+              className="dashboard-pill dashboard-pill-action dashboard-pill-danger"
+              onClick={handleToggleCardLock}
+              disabled={cardLockSaving}
+              title="Lock card as a consequence for breaking a pact"
+            >
+              {cardLockSaving ? 'Locking…' : 'Lock card'}
+            </button>
+          ) : null}
+          {!user?.card_locked && cardLockError ? (
+            <span className="dashboard-card-lock-inline-error">{cardLockError}</span>
+          ) : null}
 
           {bankConnected ? (
             <button
