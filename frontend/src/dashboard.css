@@ -269,6 +269,71 @@
   letter-spacing: 0.02em;
 }
 
+.dashboard-card-lock-widget {
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard-card-lock-widget.is-unlocked {
+  background: rgba(83, 138, 96, 0.10);
+  border-color: rgba(83, 138, 96, 0.25);
+  color: #2f5a3a;
+}
+
+.dashboard-card-lock-widget.is-locked {
+  background: rgba(169, 78, 85, 0.14);
+  border-color: rgba(169, 78, 85, 0.4);
+  color: #7a2d33;
+}
+
+.dashboard-card-lock-widget-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dashboard-card-lock-widget-state {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0.15rem 0 0.25rem;
+}
+
+.dashboard-card-lock-widget-sub {
+  font-size: 0.9rem;
+  margin: 0;
+  opacity: 0.85;
+}
+
+.dashboard-card-lock-widget-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  text-align: right;
+  min-width: 7.5rem;
+}
+
+.dashboard-card-lock-widget-meter-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.dashboard-card-lock-widget.is-locked .dashboard-card-lock-countdown {
+  font-size: 1.5rem;
+}
+
+.dashboard-card-lock-widget-meter-ok {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .dashboard-reauth-banner {
   margin: 0.6rem 0.35rem;
   padding: 0.85rem 1.1rem;

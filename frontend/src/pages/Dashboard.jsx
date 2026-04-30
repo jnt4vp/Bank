@@ -656,17 +656,6 @@ export default function Dashboard() {
     <div className="dashboard-shell">
       <DashboardTopbar navAriaLabel="Dashboard" />
 
-      {cardIsLocked ? (
-        <div className="dashboard-card-lock-banner" role="status" aria-live="polite">
-          <strong>Card locked for breaking a pact.</strong>
-          {' '}
-          New purchases are blocked. Plaid-synced charges will be flagged.
-          {' '}
-          <span className="dashboard-card-lock-countdown">
-            Unlocks in {formatLockRemaining(cardLockRemainingMs)}.
-          </span>
-        </div>
-      ) : null}
 
       {plaidItems.some((item) => item.needs_reauth) ? (
         <div className="dashboard-reauth-banner" role="alert">
@@ -879,6 +868,42 @@ export default function Dashboard() {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+
+            <div
+              className={`dashboard-card dashboard-panel dashboard-card-lock-widget ${
+                cardIsLocked ? 'is-locked' : 'is-unlocked'
+              }`}
+              role="status"
+              aria-live="polite"
+            >
+              <div className="dashboard-card-lock-widget-row">
+                <div>
+                  <p className="dashboard-card-label">Card status</p>
+                  <p className="dashboard-card-lock-widget-state">
+                    {cardIsLocked ? 'Locked' : 'Active'}
+                  </p>
+                  <p className="dashboard-card-lock-widget-sub">
+                    {cardIsLocked
+                      ? 'New purchases blocked. Plaid-synced charges will be flagged.'
+                      : 'Card auto-locks for 1 hour after a flagged purchase.'}
+                  </p>
+                </div>
+                <div className="dashboard-card-lock-widget-meter">
+                  {cardIsLocked ? (
+                    <>
+                      <span className="dashboard-card-lock-widget-meter-label">
+                        Unlocks in
+                      </span>
+                      <span className="dashboard-card-lock-countdown">
+                        {formatLockRemaining(cardLockRemainingMs)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="dashboard-card-lock-widget-meter-ok">✓</span>
+                  )}
+                </div>
               </div>
             </div>
 
