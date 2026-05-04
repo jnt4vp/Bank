@@ -34,6 +34,7 @@ async def ingest_transaction(
             classifier=classifier,
             notifier=notifier,
             card_locked_until=current_user.card_locked_until,
+            card_lock_auto_enabled=current_user.card_lock_auto_enabled,
         )
     except CardLockedError as exc:
         raise HTTPException(

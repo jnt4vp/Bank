@@ -27,6 +27,7 @@ from ..services.auth import (
     InvalidResetTokenError,
     PasswordReusedError,
 )
+from ..services.card_lock import extend_card_lock
 from ..services.discipline import (
     calculate_discipline_score,
     count_transactions_for_discipline_score,
@@ -165,6 +166,12 @@ async def update_me(
             total_transactions=total_rw,
             flagged_transactions=flagged_rw,
         )
+    if payload.card_lock_auto_enabled is not None:
+        current_user.card_lock_auto_enabled = payload.card_lock_auto_enabled
+    if payload.card_locked is True:
+        await extend_card_lock(db, user_id=current_user.id)
+    elif payload.card_locked is False:
+        current_user.card_locked_until = None
     await db.commit()
     await db.refresh(current_user)
     return current_user

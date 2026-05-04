@@ -397,6 +397,7 @@ async def _process_added_transaction(
     user_categories: list[str] | None,
     is_initial_backfill: bool,
     card_locked: bool = False,
+    card_lock_auto_enabled: bool = True,
 ) -> bool:
     """Handle a single added Plaid transaction. Returns True if a new row was inserted."""
     existing = await db.execute(
@@ -480,7 +481,12 @@ async def _process_added_transaction(
     # Auto-lock as punishment for a real pact violation. Excludes
     # card_was_locked (purely a marker that the card was already locked at sync)
     # and the initial backfill (historical txns shouldn't lock a present-day card).
-    if flagged and flag_reason != "card_was_locked" and not is_initial_backfill:
+    if (
+        card_lock_auto_enabled
+        and flagged
+        and flag_reason != "card_was_locked"
+        and not is_initial_backfill
+    ):
         await extend_card_lock(db, user_id=user_id)
 
     if flagged and notifier and not is_initial_backfill:
@@ -622,23 +628,26 @@ async def _gather_sync_context(
     db: AsyncSession,
     plaid_item: PlaidItem,
     notifier: NotifierPort | None,
-) -> tuple[str | None, list[str] | None, bool]:
-    """Fetch the user_email, active pact categories, and card_locked flag for a sync cycle."""
-    user_email: str | None = None
-    if notifier:
-        result = await db.execute(
-            select(User.email).where(User.id == plaid_item.user_id)
+) -> tuple[str | None, list[str] | None, bool, bool]:
+    """Fetch user email (if notifier), pact categories, card lock state, and auto-lock preference."""
+    result = await db.execute(
+        select(User.email, User.card_locked_until, User.card_lock_auto_enabled).where(
+            User.id == plaid_item.user_id
         )
-        user_email = result.scalar_one_or_none()
-
-    lock_result = await db.execute(
-        select(User.card_locked_until).where(User.id == plaid_item.user_id)
     )
-    locked_until = lock_result.scalar_one_or_none()
-    card_locked = bool(locked_until and locked_until > datetime.now(timezone.utc))
+    row = result.one_or_none()
+    user_email: str | None = None
+    card_locked = False
+    card_lock_auto_enabled = True
+    if row:
+        email, locked_until, auto_enabled = row[0], row[1], row[2]
+        if notifier:
+            user_email = email
+        card_locked = bool(locked_until and locked_until > datetime.now(timezone.utc))
+        card_lock_auto_enabled = bool(auto_enabled)
 
     user_categories = await get_active_pact_categories(db, plaid_item.user_id) or None
-    return user_email, user_categories, card_locked
+    return user_email, user_categories, card_locked, card_lock_auto_enabled
 
 
 async def _process_sync_page(
@@ -653,6 +662,7 @@ async def _process_sync_page(
     user_categories: list[str] | None,
     is_initial_backfill: bool,
     card_locked: bool = False,
+    card_lock_auto_enabled: bool = True,
 ) -> tuple[int, int, int]:
     """Process one /transactions/sync response page. Returns (added, modified, removed) counts."""
     added = 0
@@ -668,6 +678,7 @@ async def _process_sync_page(
             user_categories=user_categories,
             is_initial_backfill=is_initial_backfill,
             card_locked=card_locked,
+            card_lock_auto_enabled=card_lock_auto_enabled,
         ):
             added += 1
 
@@ -706,7 +717,7 @@ async def sync_transactions(
     )
 
     await _sync_accounts(db, plaid_item)
-    user_email, user_categories, card_locked = await _gather_sync_context(
+    user_email, user_categories, card_locked, card_lock_auto_enabled = await _gather_sync_context(
         db, plaid_item, notifier
     )
 
@@ -748,6 +759,7 @@ async def sync_transactions(
             user_categories=user_categories,
             is_initial_backfill=is_initial_backfill,
             card_locked=card_locked,
+            card_lock_auto_enabled=card_lock_auto_enabled,
         )
         added_count += a
         modified_count += m

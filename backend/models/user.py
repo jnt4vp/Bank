@@ -24,6 +24,9 @@ class User(Base):
         nullable=True,
         default=None,
     )
+    # When True (default), a flagged pact violation extends card_locked_until.
+    # When False, violations still flag transactions but do not auto-lock the card.
+    card_lock_auto_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     discipline_savings_percentage: Mapped[float] = mapped_column(
         Numeric(5, 2), default=0, server_default="0"

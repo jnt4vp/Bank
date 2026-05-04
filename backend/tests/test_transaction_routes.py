@@ -18,11 +18,12 @@ from backend.routers.transactions import ingest_transaction, list_transactions
 from backend.schemas.transaction import TransactionCreate
 
 
-def _make_user(*, card_locked_until: datetime | None = None):
+def _make_user(*, card_locked_until: datetime | None = None, card_lock_auto_enabled: bool = True):
     return SimpleNamespace(
         id=uuid4(),
         email="u@example.com",
         card_locked_until=card_locked_until,
+        card_lock_auto_enabled=card_lock_auto_enabled,
     )
 
 
@@ -65,6 +66,7 @@ class IngestTransactionRouteTest(unittest.IsolatedAsyncioTestCase):
             classifier=classifier,
             notifier=notifier,
             card_locked_until=None,
+            card_lock_auto_enabled=True,
         )
         self.assertEqual(result, txn)
 

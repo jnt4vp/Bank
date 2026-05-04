@@ -410,6 +410,73 @@ class TransactionUseCaseTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, transaction)
         extend_lock_mock.assert_awaited_once()
 
+    async def test_ingest_skips_extend_when_auto_lock_disabled(self):
+        classifier = SimpleNamespace(
+            classify_transaction=AsyncMock(
+                return_value=ClassificationResult(
+                    flagged=True,
+                    category="Coffee Shops",
+                    flag_reason="keyword",
+                )
+            )
+        )
+        notifier = SimpleNamespace(send_transaction_alert=AsyncMock())
+        transaction = SimpleNamespace(
+            id=uuid4(),
+            user_id=uuid4(),
+            merchant="Starbucks",
+            description="Coffee",
+            amount=Decimal("5.50"),
+            category="Coffee Shops",
+            flagged=True,
+            flag_reason="keyword",
+            alert_sent=False,
+            alert_sent_at=None,
+            accountability_alert_sent=False,
+            accountability_alert_sent_at=None,
+            created_at=datetime.now(timezone.utc),
+            plaid_transaction_id=None,
+            plaid_original_description=None,
+            date=None,
+            pending=False,
+        )
+        db = SimpleNamespace(
+            flush=AsyncMock(),
+            commit=AsyncMock(),
+            rollback=AsyncMock(),
+            refresh=AsyncMock(),
+        )
+
+        with patch(
+            "backend.application.transactions.get_active_pact_categories",
+            new=AsyncMock(return_value=["Coffee Shops"]),
+        ), patch(
+            "backend.application.transactions.create_transaction",
+            new=AsyncMock(return_value=transaction),
+        ), patch(
+            "backend.application.transactions.ensure_discipline_window_after_manual_transaction",
+            new=AsyncMock(),
+        ), patch(
+            "backend.application.transactions.record_simulated_savings_transfers_for_transaction",
+            new=AsyncMock(return_value=0),
+        ), patch(
+            "backend.application.transactions.extend_card_lock",
+            new=AsyncMock(),
+        ) as extend_lock_mock:
+            await ingest_user_transaction(
+                db,
+                user_id=transaction.user_id,
+                user_email="test@example.com",
+                merchant="Starbucks",
+                description="Coffee",
+                amount=5.5,
+                classifier=classifier,
+                notifier=notifier,
+                card_lock_auto_enabled=False,
+            )
+
+        extend_lock_mock.assert_not_awaited()
+
     async def test_ingest_user_transaction_raises_when_card_locked(self):
         classifier = SimpleNamespace(classify_transaction=AsyncMock())
         notifier = SimpleNamespace(send_transaction_alert=AsyncMock())

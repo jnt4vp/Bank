@@ -53,7 +53,8 @@ class RegisterRouteTest(unittest.IsolatedAsyncioTestCase):
     async def test_successful_registration_returns_auth_response(self):
         user = SimpleNamespace(
             id=uuid4(), email="a@example.com", phone=None, name="A",
-            card_locked_until=None, discipline_savings_percentage=0,
+            card_locked_until=None, card_lock_auto_enabled=True,
+            discipline_savings_percentage=0,
             discipline_score=100, discipline_ui_mode="discipline",
             dashboard_force_sky=False, discipline_score_started_at=None,
             bank_connected_at=None, created_at=datetime.now(timezone.utc),
@@ -86,7 +87,8 @@ class GetMeRouteTest(unittest.IsolatedAsyncioTestCase):
         user = SimpleNamespace(
             id=uuid4(), discipline_score_started_at=datetime.now(timezone.utc),
             discipline_score=100, email="a@example.com", phone=None, name="A",
-            card_locked_until=None, discipline_savings_percentage=0,
+            card_locked_until=None, card_lock_auto_enabled=True,
+            discipline_savings_percentage=0,
             discipline_ui_mode="discipline", dashboard_force_sky=False,
             bank_connected_at=None, created_at=datetime.now(timezone.utc),
         )
@@ -136,6 +138,42 @@ class UpdateMeRouteTest(unittest.IsolatedAsyncioTestCase):
         ):
             await update_me(payload, current_user=user, db=db)
         self.assertIsNotNone(user.discipline_score_started_at)
+        db.commit.assert_awaited_once()
+
+    async def test_card_locked_false_clears_lock(self):
+        uid = uuid4()
+        until = datetime.now(timezone.utc)
+        user = SimpleNamespace(
+            id=uid,
+            card_locked_until=until,
+            card_lock_auto_enabled=True,
+            discipline_savings_percentage=0,
+            discipline_ui_mode="discipline",
+            dashboard_force_sky=False,
+            discipline_score_started_at=None,
+        )
+        db = AsyncMock()
+        payload = UserUpdate(card_locked=False)
+        await update_me(payload, current_user=user, db=db)
+        self.assertIsNone(user.card_locked_until)
+        db.commit.assert_awaited_once()
+
+    async def test_card_locked_true_calls_extend_lock(self):
+        uid = uuid4()
+        user = SimpleNamespace(
+            id=uid,
+            card_locked_until=None,
+            card_lock_auto_enabled=True,
+            discipline_savings_percentage=0,
+            discipline_ui_mode="discipline",
+            dashboard_force_sky=False,
+            discipline_score_started_at=None,
+        )
+        db = AsyncMock()
+        payload = UserUpdate(card_locked=True)
+        with patch("backend.routers.auth.extend_card_lock", new=AsyncMock()) as ext:
+            await update_me(payload, current_user=user, db=db)
+        ext.assert_awaited_once_with(db, user_id=uid)
         db.commit.assert_awaited_once()
 
 

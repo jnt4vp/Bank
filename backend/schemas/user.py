@@ -23,6 +23,14 @@ class UserUpdate(BaseModel):
         default=None,
         description="When true, moves the discipline scoring window to now and recomputes score.",
     )
+    card_locked: bool | None = Field(
+        default=None,
+        description="When true, locks the card until the configured duration; when false, clears an active lock.",
+    )
+    card_lock_auto_enabled: bool | None = Field(
+        default=None,
+        description="When false, pact violations no longer extend the automatic card lock.",
+    )
 
 
 class UserResponse(BaseModel):
@@ -35,6 +43,7 @@ class UserResponse(BaseModel):
     discipline_score: int = 100
     discipline_ui_mode: str = "discipline"
     dashboard_force_sky: bool = False
+    card_lock_auto_enabled: bool = True
     discipline_score_started_at: Optional[datetime] = None
     bank_connected_at: Optional[datetime] = None
     created_at: datetime

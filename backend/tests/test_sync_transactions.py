@@ -65,36 +65,36 @@ def _build_smart_db(
     existing_txn=None,
     has_notifier=False,
     card_locked_until=None,
+    card_lock_auto_enabled=True,
 ):
     """Build a db mock that handles the dynamic execute calls in sync_transactions.
 
-    The sync loop calls db.execute in this order per cycle:
-    - If notifier is set: user email lookup
-    - card_locked_until lookup
-    - For each added txn: existing txn check
-    - For each removed txn: existing txn lookup
-    - (extend_card_lock UPDATE doesn't go through execute via a lookup)
+    First execute: ``_gather_sync_context`` loads ``User.email``, ``card_locked_until``,
+    ``card_lock_auto_enabled`` via ``Result.one_or_none()`` returning a row tuple.
+    Later executes use ``scalar_one_or_none()`` (existing txn checks, etc.).
     """
 
-    def _make_result(value):
+    def _make_scalar_result(value):
         r = MagicMock()
         r.scalar_one_or_none.return_value = value
         return r
 
-    email_result = _make_result(user_email)
-    lock_result = _make_result(card_locked_until)
-    txn_result = _make_result(existing_txn)
+    def _make_gather_result(email, locked_until, auto_enabled):
+        r = MagicMock()
+        r.one_or_none.return_value = (email, locked_until, auto_enabled)
+        return r
 
-    email_consumed = [False]
-    lock_consumed = [False]
+    txn_result = _make_scalar_result(existing_txn)
+
+    gather_email = user_email if has_notifier else "dev@example.com"
+    gather_result = _make_gather_result(gather_email, card_locked_until, card_lock_auto_enabled)
+
+    gather_consumed = [False]
 
     async def _execute(query, *args, **kwargs):
-        if has_notifier and not email_consumed[0]:
-            email_consumed[0] = True
-            return email_result
-        if not lock_consumed[0]:
-            lock_consumed[0] = True
-            return lock_result
+        if not gather_consumed[0]:
+            gather_consumed[0] = True
+            return gather_result
         return txn_result
 
     db = AsyncMock()
@@ -239,21 +239,23 @@ class SyncTransactionsCardLockTest(unittest.IsolatedAsyncioTestCase):
         txn1 = _make_plaid_txn(amount=12.0, merchant_name="Unexpected Store")
         sync_resp = _make_sync_response(added=[txn1])
 
-        # db.execute returns a future timestamp for the card_locked_until lookup,
-        # None for the existing-txn lookup.
-        def _make_result(value):
+        # First execute: _gather_sync_context row (email, locked_until, auto_enabled).
+        # Second: existing-plaid-txn check uses scalar_one_or_none.
+        def _make_scalar_result(value):
             r = MagicMock()
             r.scalar_one_or_none.return_value = value
             return r
 
-        lock_consumed = [False]
+        gather_consumed = [False]
         locked_until = datetime.now(timezone.utc) + timedelta(hours=1)
 
         async def _execute(query, *args, **kwargs):
-            if not lock_consumed[0]:
-                lock_consumed[0] = True
-                return _make_result(locked_until)  # card_locked_until > now
-            return _make_result(None)  # No existing txn
+            if not gather_consumed[0]:
+                gather_consumed[0] = True
+                r = MagicMock()
+                r.one_or_none.return_value = ("u@example.com", locked_until, True)
+                return r
+            return _make_scalar_result(None)  # No existing txn
 
         db = AsyncMock()
         db.execute = AsyncMock(side_effect=_execute)

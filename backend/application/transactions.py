@@ -48,6 +48,7 @@ async def ingest_user_transaction(
     classifier: ClassifierPort,
     notifier: NotifierPort,
     card_locked_until: datetime | None = None,
+    card_lock_auto_enabled: bool = True,
 ) -> Transaction:
     now = datetime.now(timezone.utc)
     if card_locked_until is not None and card_locked_until > now:
@@ -99,7 +100,11 @@ async def ingest_user_transaction(
 
     # Auto-lock the card as punishment for breaking a pact. card_was_locked
     # flags are excluded so a locked-card purchase doesn't infinitely renew the lock.
-    if classification.flagged and classification.flag_reason != "card_was_locked":
+    if (
+        card_lock_auto_enabled
+        and classification.flagged
+        and classification.flag_reason != "card_was_locked"
+    ):
         await extend_card_lock(db, user_id=user_id)
 
     try:

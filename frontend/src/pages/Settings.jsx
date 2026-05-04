@@ -106,7 +106,7 @@ function RowAction({
   )
 }
 
-function ToggleRow({ label, description, checked, onChange }) {
+function ToggleRow({ label, description, checked, onChange, disabled = false }) {
   return (
     <div className="settings-row settings-toggle-row">
       <div className="settings-row-copy">
@@ -119,7 +119,10 @@ function ToggleRow({ label, description, checked, onChange }) {
         className={`settings-toggle ${checked ? 'is-on' : ''}`}
         aria-label={label}
         aria-pressed={checked}
-        onClick={onChange}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) onChange()
+        }}
       />
     </div>
   )
@@ -172,6 +175,7 @@ export default function Settings() {
   const [currency, setCurrency] = useState('USD ($)')
   const [disciplineUiModeSaving, setDisciplineUiModeSaving] = useState(false)
   const [dashboardSkySaving, setDashboardSkySaving] = useState(false)
+  const [cardLockPrefsSaving, setCardLockPrefsSaving] = useState(false)
   const [resetDisciplineSaving, setResetDisciplineSaving] = useState(false)
   const [uiPrefsMessage, setUiPrefsMessage] = useState({ type: '', text: '' })
   const [partners, setPartners] = useState([])
@@ -403,6 +407,64 @@ export default function Settings() {
       })
     } finally {
       setResetDisciplineSaving(false)
+    }
+  }
+
+  async function handleCardLockAutoToggle() {
+    if (!token || cardLockPrefsSaving) return
+    const currentlyOn = user?.card_lock_auto_enabled !== false
+    setUiPrefsMessage({ type: '', text: '' })
+    try {
+      setCardLockPrefsSaving(true)
+      await apiRequest('/api/auth/me', {
+        method: 'PATCH',
+        token,
+        body: { card_lock_auto_enabled: !currentlyOn },
+      })
+      await refreshUser(token)
+      setUiPrefsMessage({
+        type: 'success',
+        text: !currentlyOn
+          ? 'Automatic card lock after pact violations is on.'
+          : 'Automatic card lock is off — violations still flag purchases.',
+      })
+      clearUiPrefsMessageSoon()
+    } catch (error) {
+      setUiPrefsMessage({
+        type: 'error',
+        text: error?.message || 'Could not update card lock preference.',
+      })
+    } finally {
+      setCardLockPrefsSaving(false)
+    }
+  }
+
+  async function handleCardLockedManualToggle() {
+    if (!token || cardLockPrefsSaving) return
+    const locked = Boolean(user?.card_locked)
+    setUiPrefsMessage({ type: '', text: '' })
+    try {
+      setCardLockPrefsSaving(true)
+      await apiRequest('/api/auth/me', {
+        method: 'PATCH',
+        token,
+        body: { card_locked: !locked },
+      })
+      await refreshUser(token)
+      setUiPrefsMessage({
+        type: 'success',
+        text: locked
+          ? 'Card unlocked — you can record purchases again.'
+          : 'Card locked for the configured duration.',
+      })
+      clearUiPrefsMessageSoon()
+    } catch (error) {
+      setUiPrefsMessage({
+        type: 'error',
+        text: error?.message || 'Could not update card lock.',
+      })
+    } finally {
+      setCardLockPrefsSaving(false)
     }
   }
 
@@ -847,6 +909,33 @@ export default function Settings() {
                   chevron={!row.disabled}
                 />
               ))}
+              <div className="settings-control-group" style={{ marginTop: '0.75rem' }}>
+                <div className="settings-control-label-row">
+                  <span className="settings-control-label">Card lock</span>
+                </div>
+                <p className="settings-support-lede">
+                  Breaking an active pact can lock your card so new purchases are blocked until the timer ends. Turn off
+                  automatic lock if you only want flagged transactions without locking.
+                </p>
+                <ToggleRow
+                  label="Automatically lock card after a pact violation"
+                  description="When off, violations still flag purchases but will not extend your card lock."
+                  checked={user?.card_lock_auto_enabled !== false}
+                  disabled={cardLockPrefsSaving}
+                  onChange={handleCardLockAutoToggle}
+                />
+                <ToggleRow
+                  label={user?.card_locked ? 'Card is locked' : 'Lock card'}
+                  description={
+                    user?.card_locked
+                      ? 'Unlock to allow recording new purchases before the timer expires.'
+                      : 'Turn on to block new purchases for the lock duration.'
+                  }
+                  checked={Boolean(user?.card_locked)}
+                  disabled={cardLockPrefsSaving}
+                  onChange={handleCardLockedManualToggle}
+                />
+              </div>
             </div>
           </section>
 
