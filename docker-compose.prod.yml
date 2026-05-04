@@ -40,6 +40,11 @@ services:
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_POLL_INTERVAL_MINUTES: ${PLAID_POLL_INTERVAL_MINUTES:-30}
+      # Email (Gmail SMTP) — must be passed through or the API never sees your .env values
+      GMAIL_USER: ${GMAIL_USER:-}
+      GMAIL_APP_PASSWORD: ${GMAIL_APP_PASSWORD:-}
+      ALERT_EMAIL: ${ALERT_EMAIL:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     command: ["sh", "-c", "alembic upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       postgres:

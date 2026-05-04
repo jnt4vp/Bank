@@ -203,6 +203,12 @@ If `/api/*` returns `502`, inspect API logs first:
 sudo docker-compose -f docker-compose.prod.yml logs -f api
 ```
 
+**No emails (alerts, forgot password, accountability):**
+
+1. Set `GMAIL_USER`, `GMAIL_APP_PASSWORD` (Gmail **App Password**, not your login password), and `FRONTEND_URL` in `.env.prod`. Compose passes these into the API container — without them, sending is skipped and you will see `Gmail credentials not configured` in logs.
+2. After changing `.env.prod`, recreate the API container so it picks up new variables: `sudo docker-compose --env-file .env.prod -f docker-compose.prod.yml up -d api`.
+3. Watch logs while triggering mail: `sudo docker-compose -f docker-compose.prod.yml logs -f api | grep -i -E 'email|smtp|Gmail'`.
+
 Database connection test:
 
 ```bash
