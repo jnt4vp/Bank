@@ -6,6 +6,7 @@ import {
   filterTransactionsForDisciplineWindow,
   getDisciplineUiState,
   themeBackgroundKeyFromDisciplineScore,
+  transactionInDisciplineWindow,
 } from './disciplineState.js'
 
 test('maps 75-100 to strong state', () => {
@@ -53,4 +54,36 @@ test('filterTransactionsForDisciplineWindow excludes older created_at', () => {
 test('filterTransactionsForDisciplineWindow is empty when window not started', () => {
   const txs = [{ created_at: '2025-01-01T00:00:00.000Z', flagged: true }]
   assert.equal(filterTransactionsForDisciplineWindow(txs, null).length, 0)
+})
+
+test('Plaid uses bank posted date vs window day (not only created_at)', () => {
+  const start = '2026-06-15T12:00:00.000Z'
+  const inWindowByDate = {
+    plaid_transaction_id: 'plaid-1',
+    date: '2026-06-20',
+    created_at: '2026-01-01T00:00:00.000Z',
+    flagged: false,
+  }
+  assert.equal(transactionInDisciplineWindow(inWindowByDate, start), true)
+  const oldPurchase = {
+    plaid_transaction_id: 'plaid-2',
+    date: '2026-06-01',
+    created_at: '2026-06-20T12:00:00.000Z',
+    flagged: true,
+  }
+  assert.equal(transactionInDisciplineWindow(oldPurchase, start), false)
+})
+
+test('filterTransactionsForDisciplineWindow includes Plaid row when posted date in window', () => {
+  const start = '2026-06-15T12:00:00.000Z'
+  const txs = [
+    {
+      plaid_transaction_id: 'p1',
+      date: '2026-06-18',
+      created_at: '2026-01-01T00:00:00.000Z',
+      flagged: true,
+    },
+  ]
+  const w = filterTransactionsForDisciplineWindow(txs, start)
+  assert.equal(w.length, 1)
 })

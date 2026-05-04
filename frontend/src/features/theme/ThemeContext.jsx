@@ -11,7 +11,13 @@ import {
 import { DEV_MODES } from './themeConstants'
 import { ThemeContext } from './themeContextValue.js'
 
-function useDisciplineTheme(token, userId, dashboardForceSky, disciplineScoreStartedAt) {
+function useDisciplineTheme(
+  token,
+  userId,
+  dashboardForceSky,
+  disciplineScoreStartedAt,
+  apiDisciplineScore
+) {
   const [bg, setBg] = useState('sky')
   const [disciplineTierKey, setDisciplineTierKey] = useState(null)
 
@@ -33,7 +39,13 @@ function useDisciplineTheme(token, userId, dashboardForceSky, disciplineScoreSta
           disciplineScoreStartedAt
         )
         const flaggedCount = windowed.filter((tx) => tx.flagged).length
-        const score = computeDisciplineScoreFromFlagged(windowed.length, flaggedCount)
+        const computed = computeDisciplineScoreFromFlagged(windowed.length, flaggedCount)
+        const score =
+          apiDisciplineScore !== undefined &&
+          apiDisciplineScore !== null &&
+          !Number.isNaN(Number(apiDisciplineScore))
+            ? Math.max(0, Math.min(100, Math.round(Number(apiDisciplineScore))))
+            : computed
         const tier = score === null ? null : getDisciplineUiState(score).key
         setDisciplineTierKey(tier)
         if (dashboardForceSky) {
@@ -46,7 +58,7 @@ function useDisciplineTheme(token, userId, dashboardForceSky, disciplineScoreSta
         setBg('sky')
         setDisciplineTierKey(null)
       })
-  }, [token, userId, dashboardForceSky, disciplineScoreStartedAt])
+  }, [token, userId, dashboardForceSky, disciplineScoreStartedAt, apiDisciplineScore])
 
   return { bg, disciplineTierKey }
 }
@@ -56,13 +68,15 @@ export function ThemeProvider({
   userId,
   dashboardForceSky = false,
   disciplineScoreStartedAt,
+  disciplineScore: apiDisciplineScore,
   children,
 }) {
   const { bg: realBg, disciplineTierKey } = useDisciplineTheme(
     token,
     userId,
     dashboardForceSky,
-    disciplineScoreStartedAt
+    disciplineScoreStartedAt,
+    apiDisciplineScore
   )
   const [devOverride, setDevOverride] = useState(null)
   const bg = devOverride ?? realBg

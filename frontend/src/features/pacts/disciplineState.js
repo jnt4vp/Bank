@@ -2,18 +2,51 @@
  * Transactions on or after discipline_score_started_at count toward discipline score / theme.
  * When startedAt is null/undefined, the scoring window is not open yet — no rows count
  * (neutral sky / 100% until the first post-onboarding transaction).
+ *
+ * Matches backend rules: manual rows use ingestion `created_at`; Plaid rows use bank `date`
+ * when present so historical sync timestamps do not shrink or inflate the window.
  */
+function disciplineStartMsAndUtcDay(startedAtIso) {
+  const start = new Date(startedAtIso)
+  const startMs = start.getTime()
+  if (Number.isNaN(startMs)) return null
+  const startDay = start.toISOString().slice(0, 10)
+  return { startMs, startDay }
+}
+
+/** Same membership rules as backend `transaction_counts_toward_discipline_score`. */
+export function transactionInDisciplineWindow(tx, startedAtIso) {
+  const parsed = disciplineStartMsAndUtcDay(startedAtIso)
+  if (parsed === null) return false
+
+  const plaidId = tx.plaid_transaction_id
+  const isManual = plaidId == null || plaidId === ''
+
+  if (isManual) {
+    const raw = tx.created_at
+    if (!raw) return false
+    const t = new Date(raw).getTime()
+    return !Number.isNaN(t) && t >= parsed.startMs
+  }
+
+  const bankDay = tx.date
+  if (bankDay != null && bankDay !== '') {
+    const dayStr = typeof bankDay === 'string' ? bankDay.slice(0, 10) : String(bankDay).slice(0, 10)
+    return dayStr >= parsed.startDay
+  }
+
+  const raw = tx.created_at
+  if (!raw) return false
+  const t = new Date(raw).getTime()
+  return !Number.isNaN(t) && t >= parsed.startMs
+}
+
 export function filterTransactionsForDisciplineWindow(transactions, startedAtIso) {
   if (!Array.isArray(transactions) || transactions.length === 0) return []
   if (!startedAtIso) return []
   const startMs = new Date(startedAtIso).getTime()
   if (Number.isNaN(startMs)) return transactions
-  return transactions.filter((tx) => {
-    const raw = tx.created_at
-    if (!raw) return false
-    const t = new Date(raw).getTime()
-    return !Number.isNaN(t) && t >= startMs
-  })
+  return transactions.filter((tx) => transactionInDisciplineWindow(tx, startedAtIso))
 }
 
 /** Same formula as backend `calculate_discipline_score`. Returns null when there is no activity yet. */

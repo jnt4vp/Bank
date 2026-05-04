@@ -77,6 +77,7 @@ export default function AppLayout() {
       userId={user?.id}
       dashboardForceSky={Boolean(user?.dashboard_force_sky)}
       disciplineScoreStartedAt={user?.discipline_score_started_at}
+      disciplineScore={user?.discipline_score}
     >
       <AppShell />
     </ThemeProvider>
