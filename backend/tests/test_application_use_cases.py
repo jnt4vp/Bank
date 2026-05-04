@@ -10,6 +10,7 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("AUTO_CREATE_TABLES", "false")
 
 from backend.application.auth import (
+    build_password_reset_url,
     ensure_dev_seed_user_exists,
     login_account,
     register_account,
@@ -86,7 +87,7 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch("backend.application.auth.generate_reset_token", new=AsyncMock(return_value="reset-token")) as generate_reset_token_mock, patch(
-            "backend.config.get_settings",
+            "backend.application.auth.get_settings",
             return_value=SimpleNamespace(FRONTEND_URL="http://localhost:5173"),
         ):
             await send_password_reset_link(
@@ -101,6 +102,16 @@ class AuthUseCaseTest(unittest.IsolatedAsyncioTestCase):
             to_email="test@example.com",
             reset_url="http://localhost:5173/reset-password?token=reset-token",
         )
+
+    def test_build_password_reset_url_strips_trailing_slash_on_base(self):
+        with patch(
+            "backend.application.auth.get_settings",
+            return_value=SimpleNamespace(FRONTEND_URL="https://app.example.com/"),
+        ):
+            self.assertEqual(
+                build_password_reset_url("t1"),
+                "https://app.example.com/reset-password?token=t1",
+            )
 
     async def test_ensure_dev_seed_user_exists_commits_modified_user(self):
         user = SimpleNamespace(email="test@example.com")

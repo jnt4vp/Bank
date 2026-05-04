@@ -8,6 +8,7 @@ from sqlalchemy import inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import get_settings
 from ..database import get_db
 from ..models.user import User
 from ..ports.notifier import NotifierPort
@@ -114,6 +115,16 @@ async def login_account(
     return LoginResult(access_token=access_token)
 
 
+def build_password_reset_url(token: str) -> str:
+    """Full URL for the SPA password-reset screen (used in forgot-password emails).
+
+    Uses ``Settings.FRONTEND_URL`` (environment variable ``FRONTEND_URL``), defaulting to
+    ``http://localhost:5173`` when unset or empty.
+    """
+    base = get_settings().FRONTEND_URL.rstrip("/")
+    return f"{base}/reset-password?token={token}"
+
+
 async def send_password_reset_link(
     db: AsyncSession,
     *,
@@ -130,10 +141,7 @@ async def send_password_reset_link(
         await db.rollback()
         raise
 
-    from ..config import get_settings
-
-    settings = get_settings()
-    reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+    reset_url = build_password_reset_url(token)
     await notifier.send_password_reset(to_email=email, reset_url=reset_url)
 
 

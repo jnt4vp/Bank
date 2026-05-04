@@ -63,7 +63,12 @@ class Settings(BaseSettings):
     PLAID_SANDBOX_CLIENT_ID: str = ""
     PLAID_SANDBOX_SECRET: str = ""
 
-    FRONTEND_URL: str = "http://localhost:5173"
+    # Public SPA origin (password reset links, etc.). Set env FRONTEND_URL in production.
+    # Unset or empty string falls back to local Vite (see validator).
+    FRONTEND_URL: str = Field(
+        default="http://localhost:5173",
+        description="Browser base URL for the React app, e.g. https://app.example.com",
+    )
     # Demo: record "savings transfers" in DB without Plaid/ACH (see SimulatedSavingsTransfer).
     # Set false when wiring a real money-movement provider.
     SIMULATED_TRANSFERS_ENABLED: bool = True
@@ -103,6 +108,14 @@ class Settings(BaseSettings):
             return json.loads(raw)
 
         return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+    @field_validator("FRONTEND_URL", mode="after")
+    @classmethod
+    def normalize_frontend_url(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            return "http://localhost:5173"
+        return s.rstrip("/")
 
     @model_validator(mode="after")
     def validate_security(self) -> "Settings":
