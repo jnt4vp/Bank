@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -9,6 +9,7 @@ from backend.services.discipline import (
     count_transactions_for_discipline_score,
     normalize_discipline_start,
     resolve_discipline_score_cutoff_after_bank_sync,
+    transaction_counts_toward_discipline_score,
 )
 
 
@@ -80,6 +81,54 @@ class NormalizeDisciplineStartTest(unittest.TestCase):
         naive = datetime(2026, 1, 1, 12, 0, 0)
         out = normalize_discipline_start(naive)
         self.assertEqual(out.tzinfo, timezone.utc)
+
+
+class TransactionCountsTowardDisciplineScoreTest(unittest.TestCase):
+    """Plaid rows use bank posted date so historical sync does not inflate totals."""
+
+    def setUp(self):
+        self.start = datetime(2026, 6, 15, 12, 0, 0, tzinfo=timezone.utc)
+        self.plaid_id = "plaid-tx-1"
+
+    def test_plaid_old_posted_date_excluded_even_if_ingested_later(self):
+        self.assertFalse(
+            transaction_counts_toward_discipline_score(
+                plaid_transaction_id=self.plaid_id,
+                transaction_date=date(2026, 6, 1),
+                created_at=datetime(2026, 6, 20, 12, 0, 0, tzinfo=timezone.utc),
+                discipline_score_started_at=self.start,
+            )
+        )
+
+    def test_plaid_posted_on_or_after_window_day_counts(self):
+        self.assertTrue(
+            transaction_counts_toward_discipline_score(
+                plaid_transaction_id=self.plaid_id,
+                transaction_date=date(2026, 6, 15),
+                created_at=datetime(2026, 6, 15, 18, 0, 0, tzinfo=timezone.utc),
+                discipline_score_started_at=self.start,
+            )
+        )
+
+    def test_manual_entry_uses_created_at_not_bank_date(self):
+        self.assertTrue(
+            transaction_counts_toward_discipline_score(
+                plaid_transaction_id=None,
+                transaction_date=date(2026, 1, 1),
+                created_at=datetime(2026, 6, 16, 12, 0, 0, tzinfo=timezone.utc),
+                discipline_score_started_at=self.start,
+            )
+        )
+
+    def test_plaid_missing_date_falls_back_to_created_at(self):
+        self.assertTrue(
+            transaction_counts_toward_discipline_score(
+                plaid_transaction_id=self.plaid_id,
+                transaction_date=None,
+                created_at=datetime(2026, 6, 16, 12, 0, 0, tzinfo=timezone.utc),
+                discipline_score_started_at=self.start,
+            )
+        )
 
 
 class CountTransactionsForDisciplineScoreTest(unittest.IsolatedAsyncioTestCase):

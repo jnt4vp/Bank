@@ -52,6 +52,15 @@ _configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.APP_ENV == "production":
+        fu = (settings.FRONTEND_URL or "").lower()
+        if "localhost" in fu or "127.0.0.1" in fu:
+            logging.getLogger(__name__).error(
+                "FRONTEND_URL points to local dev (%s). Password-reset links in emails will be wrong. "
+                "Set FRONTEND_URL to your public site in the API container environment (e.g. .env.prod) and restart.",
+                settings.FRONTEND_URL,
+            )
+
     if settings.AUTO_CREATE_TABLES:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

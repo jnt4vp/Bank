@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.transaction import Transaction
@@ -15,6 +15,39 @@ def calculate_discipline_score(*, total_transactions: int, flagged_transactions:
         return 100
     flagged_ratio = max(0.0, min(1.0, flagged_transactions / total_transactions))
     return max(0, min(100, round(100 - (flagged_ratio * 100))))
+
+
+def transaction_counts_toward_discipline_score(
+    *,
+    plaid_transaction_id: object | None,
+    transaction_date: date | None,
+    created_at: datetime,
+    discipline_score_started_at: datetime,
+) -> bool:
+    """Whether a transaction should affect the discipline score window.
+
+    Manual entries use ingestion ``created_at``. Plaid-sourced rows use the bank **posted
+    date** when present so prior purchases (historical sync) do not move the score—only
+    spending on or after the discipline window **calendar day**.
+    """
+    start = normalize_discipline_start(discipline_score_started_at)
+    if plaid_transaction_id is None:
+        ca = created_at
+        if ca.tzinfo is None or ca.tzinfo.utcoffset(ca) is None:
+            ca = ca.replace(tzinfo=timezone.utc)
+        else:
+            ca = ca.astimezone(timezone.utc)
+        return ca >= start
+
+    if transaction_date is not None:
+        return transaction_date >= start.date()
+
+    ca = created_at
+    if ca.tzinfo is None or ca.tzinfo.utcoffset(ca) is None:
+        ca = ca.replace(tzinfo=timezone.utc)
+    else:
+        ca = ca.astimezone(timezone.utc)
+    return ca >= start
 
 
 def normalize_discipline_start(value: datetime) -> datetime:
@@ -55,14 +88,40 @@ async def count_transactions_for_discipline_score(
     discipline_score_started_at: datetime | None,
 ) -> tuple[int, int]:
     """
-    Count transactions that count toward discipline score (created_at >= started_at).
+    Count transactions that count toward discipline score.
+
+    Manual purchases: ``created_at >= discipline_score_started_at``.
+    Plaid purchases: use bank **posted date** when set—only spending on or after the
+    discipline window calendar day counts, so earlier bank history does not drag the score.
 
     When ``discipline_score_started_at`` is None, scoring has not started (neutral 100).
     """
     if discipline_score_started_at is None:
         return 0, 0
     start = normalize_discipline_start(discipline_score_started_at)
-    window = (Transaction.user_id == user_id) & (Transaction.created_at >= start)
+    start_day = start.date()
+
+    # Manual / non-Plaid: ingestion time defines membership in the window.
+    manual_window = and_(
+        Transaction.plaid_transaction_id.is_(None),
+        Transaction.created_at >= start,
+    )
+    # Plaid with posted date: compare calendar dates so prior bank purchases excluded.
+    plaid_dated = and_(
+        Transaction.plaid_transaction_id.is_not(None),
+        Transaction.date.is_not(None),
+        Transaction.date >= start_day,
+    )
+    # Plaid missing posted date (edge): fall back to ingestion time.
+    plaid_no_date = and_(
+        Transaction.plaid_transaction_id.is_not(None),
+        Transaction.date.is_(None),
+        Transaction.created_at >= start,
+    )
+
+    window = (Transaction.user_id == user_id) & (
+        manual_window | plaid_dated | plaid_no_date
+    )
 
     total_result = await db.execute(select(func.count(Transaction.id)).where(window))
     flagged_result = await db.execute(

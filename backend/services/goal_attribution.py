@@ -19,7 +19,7 @@ from ..models.user import User
 from ..repositories.transactions import get_transactions_for_user
 from ..schemas.goals import GoalAttributionSpec
 from .classifier import PACT_CATEGORY_KEYWORDS
-from .discipline import normalize_discipline_start
+from .discipline import transaction_counts_toward_discipline_score
 
 # User goal names (lowercase) often differ from pact preset keys, e.g. "Coffee" vs "coffee shops".
 # Map goal key → PACT_CATEGORY_KEYWORDS key so Starbucks etc. still match.
@@ -249,13 +249,12 @@ def _transaction_effective_date(tx: Transaction) -> date:
 def _in_discipline_window(tx: Transaction, user: User) -> bool:
     if user.discipline_score_started_at is None:
         return False
-    start = normalize_discipline_start(user.discipline_score_started_at)
-    created = tx.created_at
-    if created.tzinfo is None or created.tzinfo.utcoffset(created) is None:
-        created = created.replace(tzinfo=timezone.utc)
-    else:
-        created = created.astimezone(timezone.utc)
-    return created >= start
+    return transaction_counts_toward_discipline_score(
+        plaid_transaction_id=tx.plaid_transaction_id,
+        transaction_date=tx.date,
+        created_at=tx.created_at,
+        discipline_score_started_at=user.discipline_score_started_at,
+    )
 
 
 def _in_calendar_period(tx: Transaction, period_start: date, period_end: date) -> bool:
