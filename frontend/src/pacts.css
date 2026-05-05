@@ -87,14 +87,6 @@
   margin-bottom: 1.1rem;
 }
 
-/* Wraps hero copy, pills, and Create/Manage tabs — glass panel on dark themes in app-layout.css */
-.pacts-hero-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.95rem;
-  width: 100%;
-}
-
 .pacts-hero-top {
   display: flex;
   justify-content: space-between;
