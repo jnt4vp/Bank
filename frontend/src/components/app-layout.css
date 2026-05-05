@@ -699,6 +699,163 @@
   color: #6e6770;
 }
 
+/* ── Pacts hero — readability over storm / red / money video backgrounds ── */
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero {
+  position: relative;
+  isolation: isolate;
+  padding-top: 0.85rem;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero::before,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero::before,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero::before {
+  content: '';
+  position: absolute;
+  inset: -6px -10px 4px -10px;
+  border-radius: 1.45rem;
+  background: rgba(0, 0, 0, 0.52);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.app-shell[data-theme="money"] .pacts-page .pacts-hero::before {
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.app-shell[data-theme="red"] .pacts-page .pacts-hero::before {
+  background: rgba(0, 0, 0, 0.56);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero-panel,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero-panel,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero-panel {
+  position: relative;
+  z-index: 1;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 1.35rem;
+  padding: 1.2rem 1.35rem 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero-panel {
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.app-shell[data-theme="red"] .pacts-page .pacts-hero-panel {
+  background: rgba(48, 14, 14, 0.52);
+  border-color: rgba(252, 165, 165, 0.18);
+}
+
+.app-shell[data-theme="money"] .pacts-page .pacts-hero-panel {
+  background: rgba(38, 30, 10, 0.52);
+  border-color: rgba(212, 175, 55, 0.18);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .dashboard-title,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .dashboard-title,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .dashboard-title {
+  color: #f9fafb;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .dashboard-subtitle,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .dashboard-subtitle,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .dashboard-subtitle {
+  color: #d1d5db;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-tab-row,
+.app-shell[data-theme="red"] .pacts-page .pacts-tab-row,
+.app-shell[data-theme="money"] .pacts-page .pacts-tab-row {
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-tab,
+.app-shell[data-theme="red"] .pacts-page .pacts-tab,
+.app-shell[data-theme="money"] .pacts-page .pacts-tab {
+  background: rgba(17, 24, 39, 0.78);
+  color: #e5e7eb;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-tab:hover,
+.app-shell[data-theme="red"] .pacts-page .pacts-tab:hover,
+.app-shell[data-theme="money"] .pacts-page .pacts-tab:hover {
+  background: rgba(31, 41, 55, 0.95);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-tab.is-active,
+.app-shell[data-theme="red"] .pacts-page .pacts-tab.is-active,
+.app-shell[data-theme="money"] .pacts-page .pacts-tab.is-active {
+  background: #f9fafb;
+  color: #111827;
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-tab:focus-visible,
+.app-shell[data-theme="red"] .pacts-page .pacts-tab:focus-visible,
+.app-shell[data-theme="money"] .pacts-page .pacts-tab:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .pacts-hero-pill:not(.pacts-hero-pill--link),
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .pacts-hero-pill:not(.pacts-hero-pill--link),
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .pacts-hero-pill:not(.pacts-hero-pill--link) {
+  background: rgba(17, 24, 39, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #f9fafb;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .pacts-hero-pill--link,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .pacts-hero-pill--link,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .pacts-hero-pill--link {
+  background: #f9fafb;
+  color: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .pacts-hero-pill--link:hover,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .pacts-hero-pill--link:hover,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .pacts-hero-pill--link:hover {
+  background: #ffffff;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-hero .pacts-hero-pill--link:focus-visible,
+.app-shell[data-theme="red"] .pacts-page .pacts-hero .pacts-hero-pill--link:focus-visible,
+.app-shell[data-theme="money"] .pacts-page .pacts-hero .pacts-hero-pill--link:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-page-messages .dashboard-error,
+.app-shell[data-theme="red"] .pacts-page .pacts-page-messages .dashboard-error {
+  color: #fecaca;
+}
+
+.app-shell[data-theme="stormy"] .pacts-page .pacts-page-messages .pacts-success,
+.app-shell[data-theme="red"] .pacts-page .pacts-page-messages .pacts-success,
+.app-shell[data-theme="money"] .pacts-page .pacts-page-messages .pacts-success {
+  color: #bbf7d0;
+}
+
+@media (max-width: 760px) {
+  .app-shell[data-theme="stormy"] .pacts-page .pacts-hero-panel,
+  .app-shell[data-theme="red"] .pacts-page .pacts-hero-panel,
+  .app-shell[data-theme="money"] .pacts-page .pacts-hero-panel {
+    padding: 1rem 1rem 1.15rem;
+  }
+}
+
 /* ════════════════════════════════════════
    SKY + discipline tier (75–100 Strong … 0–24 Broken)
    When dashboard_force_sky is on, video stays calm; tier shapes dashboard accents.

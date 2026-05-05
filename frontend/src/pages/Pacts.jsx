@@ -1333,49 +1333,50 @@ export default function Pacts() {
 
       {/* Hero keeps the page aligned with the rest of the app while clarifying the main task. */}
       <section className="dashboard-hero pacts-hero">
-        <div className="pacts-hero-top">
-          <div className="dashboard-hero-copy">
-            <h1 className="dashboard-title">Manage your pacts, {firstName}</h1>
-            <p className="dashboard-subtitle">
-              Build a rule, choose a consequence, and keep your spending habits intentional.
-            </p>
-          </div>
-
-          <div className="dashboard-hero-actions">
-            <div className="dashboard-pill">
-              {loading ? 'Loading pacts...' : `${activePacts.length} Active Pacts`}
+        <div className="pacts-hero-panel">
+          <div className="pacts-hero-top">
+            <div className="dashboard-hero-copy">
+              <h1 className="dashboard-title">Manage your pacts, {firstName}</h1>
+              <p className="dashboard-subtitle">
+                Build a rule, choose a consequence, and keep your spending habits intentional.
+              </p>
             </div>
-            <Link className="dashboard-pill dashboard-pill-action" to="/dashboard">
-              Back to Dashboard →
-            </Link>
-          </div>
-        </div>
 
-        <div className="pacts-tab-toolbar">
-          <div className="pacts-tab-row" role="tablist" aria-label="Pacts">
-            <button
-              type="button"
-              role="tab"
-              id="pacts-tab-create"
-              aria-selected={pactsMainTab === 'create'}
-              aria-controls="pacts-panel-create"
-              className={`pacts-tab ${pactsMainTab === 'create' ? 'is-active' : ''}`}
-              onClick={() => setPactsMainTab('create')}
-            >
-              Create Pact
-            </button>
-            <button
-              type="button"
-              role="tab"
-              id="pacts-tab-manage"
-              aria-selected={pactsMainTab === 'manage'}
-              aria-controls="pacts-panel-manage"
-              className={`pacts-tab ${pactsMainTab === 'manage' ? 'is-active' : ''}`}
-              onClick={() => setPactsMainTab('manage')}
-            >
-              Manage Pacts
-            </button>
+            <div className="dashboard-hero-actions">
+              <div className="dashboard-pill pacts-hero-pill">
+                {loading ? 'Loading pacts...' : `${activePacts.length} Active Pacts`}
+              </div>
+              <Link className="dashboard-pill dashboard-pill-action pacts-hero-pill pacts-hero-pill--link" to="/dashboard">
+                Back to Dashboard →
+              </Link>
+            </div>
           </div>
+
+          <div className="pacts-tab-toolbar">
+            <div className="pacts-tab-row" role="tablist" aria-label="Pacts">
+              <button
+                type="button"
+                role="tab"
+                id="pacts-tab-create"
+                aria-selected={pactsMainTab === 'create'}
+                aria-controls="pacts-panel-create"
+                className={`pacts-tab ${pactsMainTab === 'create' ? 'is-active' : ''}`}
+                onClick={() => setPactsMainTab('create')}
+              >
+                Create Pact
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="pacts-tab-manage"
+                aria-selected={pactsMainTab === 'manage'}
+                aria-controls="pacts-panel-manage"
+                className={`pacts-tab ${pactsMainTab === 'manage' ? 'is-active' : ''}`}
+                onClick={() => setPactsMainTab('manage')}
+              >
+                Manage Pacts
+              </button>
+            </div>
 
           {error || success ? (
             <div className="pacts-page-messages" aria-live="polite">
@@ -1383,6 +1384,7 @@ export default function Pacts() {
               {success ? <p className="pacts-success pacts-page-message">{success}</p> : null}
             </div>
           ) : null}
+        </div>
         </div>
       </section>
 
