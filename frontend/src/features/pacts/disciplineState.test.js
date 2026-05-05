@@ -36,8 +36,8 @@ test('themeBackgroundKeyFromDisciplineScore uses percent bands', () => {
   assert.equal(themeBackgroundKeyFromDisciplineScore(null), 'sky')
   assert.equal(themeBackgroundKeyFromDisciplineScore(10), 'red')
   assert.equal(themeBackgroundKeyFromDisciplineScore(40), 'stormy')
-  assert.equal(themeBackgroundKeyFromDisciplineScore(60), 'money')
-  assert.equal(themeBackgroundKeyFromDisciplineScore(90), 'sunny')
+  assert.equal(themeBackgroundKeyFromDisciplineScore(60), 'sunny')
+  assert.equal(themeBackgroundKeyFromDisciplineScore(90), 'money')
 })
 
 test('filterTransactionsForDisciplineWindow excludes older created_at', () => {

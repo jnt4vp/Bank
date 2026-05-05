@@ -60,16 +60,16 @@ export function computeDisciplineScoreFromFlagged(totalCount, flaggedCount) {
 
 /**
  * Score → full-motion dashboard themes (when sky is not forced).
- * Bands align with getDisciplineUiState:
- * 75–100 Strong | 50–74 Slipping | 25–49 At Risk | 0–24 Broken
+ * Highest scores get the “money” screen; next tier “sunny”; then storm; worst is red.
+ * (UI copy tiers in getDisciplineUiState still use 75+ / 50+ / 25+ / below 25.)
  */
 export function themeBackgroundKeyFromDisciplineScore(score) {
   if (score === null || score === undefined || Number.isNaN(Number(score))) return 'sky'
   const s = Math.max(0, Math.min(100, Number(score)))
   if (s < 25) return 'red'
   if (s < 50) return 'stormy'
-  if (s < 75) return 'money'
-  return 'sunny'
+  if (s < 75) return 'sunny'
+  return 'money'
 }
 
 export function getDisciplineUiState(score) {
