@@ -93,6 +93,10 @@
   color: #605965;
   text-decoration: none;
   cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transition: color 0.15s ease, transform 0.15s ease;
 }
 
@@ -115,6 +119,7 @@
   height: 2px;
   border-radius: 999px;
   background: var(--pb-accent-gradient-soft);
+  pointer-events: none;
 }
 
 .dashboard-nav-link-disabled {
@@ -127,6 +132,13 @@
   justify-content: flex-end;
   gap: 12px;
   min-width: 0;
+  /* Let clicks reach nav links when the middle column’s nav flex row overflows this column */
+  pointer-events: none;
+}
+
+.dashboard-topbar-actions > .dashboard-icon-button,
+.dashboard-topbar-actions > .dashboard-profile-menu {
+  pointer-events: auto;
 }
 
 .dashboard-icon-button,
