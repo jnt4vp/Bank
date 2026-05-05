@@ -491,30 +491,23 @@
     inset 0 1px 0 rgba(110, 155, 220, 0.16);
 }
 
-/* Goals & Pacts — same readable white text as main dashboard (stormy) */
-.app-shell[data-theme="stormy"] .goals-page *,
-.app-shell[data-theme="stormy"] .pacts-page * {
+/* Goals — readable white text on stormy (Pacts keeps dark text on light glass pact cards) */
+.app-shell[data-theme="stormy"] .goals-page * {
   color: #ffffff;
 }
 
 .app-shell[data-theme="stormy"] .goals-page input,
 .app-shell[data-theme="stormy"] .goals-page textarea,
-.app-shell[data-theme="stormy"] .goals-page select,
-.app-shell[data-theme="stormy"] .pacts-page input,
-.app-shell[data-theme="stormy"] .pacts-page textarea,
-.app-shell[data-theme="stormy"] .pacts-page select {
+.app-shell[data-theme="stormy"] .goals-page select {
   color: #2f2932;
 }
 
 .app-shell[data-theme="stormy"] .goals-page input::placeholder,
-.app-shell[data-theme="stormy"] .goals-page textarea::placeholder,
-.app-shell[data-theme="stormy"] .pacts-page input::placeholder,
-.app-shell[data-theme="stormy"] .pacts-page textarea::placeholder {
+.app-shell[data-theme="stormy"] .goals-page textarea::placeholder {
   color: rgba(47, 41, 50, 0.55);
 }
 
-.app-shell[data-theme="stormy"] .goals-page input:disabled,
-.app-shell[data-theme="stormy"] .pacts-page input:disabled {
+.app-shell[data-theme="stormy"] .goals-page input:disabled {
   color: #6e6770;
 }
 
@@ -686,30 +679,23 @@
     inset 0 1px 0 rgba(220, 100, 100, 0.14);
 }
 
-/* Goals & Pacts — same readable white text as main dashboard (red) */
-.app-shell[data-theme="red"] .goals-page *,
-.app-shell[data-theme="red"] .pacts-page * {
+/* Goals — readable white text on red theme (Pacts keeps dark text on light glass pact cards) */
+.app-shell[data-theme="red"] .goals-page * {
   color: #ffffff;
 }
 
 .app-shell[data-theme="red"] .goals-page input,
 .app-shell[data-theme="red"] .goals-page textarea,
-.app-shell[data-theme="red"] .goals-page select,
-.app-shell[data-theme="red"] .pacts-page input,
-.app-shell[data-theme="red"] .pacts-page textarea,
-.app-shell[data-theme="red"] .pacts-page select {
+.app-shell[data-theme="red"] .goals-page select {
   color: #2f2932;
 }
 
 .app-shell[data-theme="red"] .goals-page input::placeholder,
-.app-shell[data-theme="red"] .goals-page textarea::placeholder,
-.app-shell[data-theme="red"] .pacts-page input::placeholder,
-.app-shell[data-theme="red"] .pacts-page textarea::placeholder {
+.app-shell[data-theme="red"] .goals-page textarea::placeholder {
   color: rgba(47, 41, 50, 0.55);
 }
 
-.app-shell[data-theme="red"] .goals-page input:disabled,
-.app-shell[data-theme="red"] .pacts-page input:disabled {
+.app-shell[data-theme="red"] .goals-page input:disabled {
   color: #6e6770;
 }
 

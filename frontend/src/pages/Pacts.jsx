@@ -102,15 +102,6 @@ function composeAccountabilityType(method, recipient) {
   return recipient === 'partner' ? 'friend' : 'email'
 }
 
-function StatusMetric({ label, value }) {
-  return (
-    <div className="pacts-status-metric">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
 function StatsRow({
   totalPacts,
   presetPactCount,
@@ -186,33 +177,6 @@ function EmptyPactsCard({ onSuggestionSelect, onShowIntro }) {
           Learn more about pacts
         </button>
       </div>
-    </div>
-  )
-}
-
-function WeeklySummaryCard() {
-  return (
-    <div className="dashboard-card dashboard-panel pacts-side-info-card">
-      <div className="dashboard-panel-header">
-        <h2>This Week</h2>
-      </div>
-
-      <div className="pacts-weekly-grid">
-        <div className="pacts-weekly-stat">
-          <strong>0</strong>
-          <span>violations</span>
-        </div>
-        <div className="pacts-weekly-stat">
-          <strong>0</strong>
-          <span>alerts sent</span>
-        </div>
-        <div className="pacts-weekly-stat">
-          <strong>$0</strong>
-          <span>saved</span>
-        </div>
-      </div>
-
-      <p className="pacts-card-tip">Tip: start with one pact you can realistically stick to.</p>
     </div>
   )
 }
@@ -1685,7 +1649,6 @@ export default function Pacts() {
                 ) : null}
               </div>
 
-              <WeeklySummaryCard />
               <DisciplineTipsCard />
               <QuickLinksCard />
             </div>

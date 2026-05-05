@@ -426,12 +426,12 @@
 .pacts-library-card-title-row h3 {
   margin: 0;
   font-size: 1.05rem;
-  color: #2c2530;
+  color: #141214;
 }
 
 .pacts-library-card-subtitle {
   margin: 0.35rem 0 0;
-  color: #45404a;
+  color: #252028;
   font-size: 0.9rem;
 }
 
@@ -481,12 +481,12 @@
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #5c545e;
+  color: #3a353d;
 }
 
 .pacts-library-card-grid p {
   margin: 0;
-  color: #3d3541;
+  color: #141214;
   line-height: 1.45;
 }
 
@@ -514,7 +514,7 @@
 .pacts-edit-title {
   margin: 0 0 0.8rem;
   font-size: 0.98rem;
-  color: #2d2630;
+  color: #141214;
 }
 
 .pacts-builder-card {
@@ -923,39 +923,6 @@
   cursor: not-allowed;
 }
 
-.pacts-weekly-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.pacts-weekly-stat {
-  padding: 0.9rem 0.8rem;
-  border-radius: 1.1rem;
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(231, 223, 214, 0.82);
-}
-
-.pacts-weekly-stat strong {
-  display: block;
-  font-size: 1.25rem;
-  color: #2f2831;
-}
-
-.pacts-weekly-stat span {
-  display: block;
-  margin-top: 0.25rem;
-  font-size: 0.84rem;
-  color: #45404a;
-}
-
-.pacts-card-tip {
-  margin: 0.9rem 0 0;
-  color: #45404a;
-  line-height: 1.5;
-  font-size: 0.9rem;
-}
-
 .pacts-tips-list {
   display: flex;
   flex-direction: column;
@@ -1014,7 +981,6 @@
     grid-template-columns: 1fr;
   }
 
-  .pacts-weekly-grid,
   .pacts-builder-grid,
   .pacts-library-card-grid,
   .pacts-partner-grid {
