@@ -128,6 +128,9 @@ export default function Goals() {
   const goalsRef = useRef(goals)
   goalsRef.current = goals
 
+  /** Bumps when goals are mutated locally so a slow in-flight initial list fetch cannot overwrite fresh state. */
+  const goalsLoadRequestIdRef = useRef(0)
+
   const attributionRequestIdRef = useRef(0)
 
   const loadGoalSpending = useCallback(
@@ -185,6 +188,7 @@ export default function Goals() {
 
   useEffect(() => {
     let cancelled = false
+    const requestId = ++goalsLoadRequestIdRef.current
     async function bootstrap() {
       if (!token) {
         setGoals([])
@@ -219,13 +223,22 @@ export default function Goals() {
           }
         }
 
-        if (!cancelled) setGoals(views)
+        if (
+          !cancelled &&
+          requestId === goalsLoadRequestIdRef.current
+        ) {
+          setGoals(views)
+        }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && requestId === goalsLoadRequestIdRef.current) {
           setGoalsLoadError(err?.message || 'Could not load goals.')
         }
       } finally {
-        if (!cancelled) setGoalsLoading(false)
+        // Always end the loading state when this fetch finishes (even if goals were
+        // skipped as stale) so a slow initial fetch cannot leave the UI stuck on “Loading…”.
+        if (!cancelled) {
+          setGoalsLoading(false)
+        }
       }
     }
     bootstrap()
@@ -290,6 +303,7 @@ export default function Goals() {
         category: trimmed,
         monthly_limit: limitNum,
       })
+      goalsLoadRequestIdRef.current += 1
       const view = apiGoalToView(created)
       if (view) {
         setGoals((prev) => [...prev, view])
@@ -308,6 +322,7 @@ export default function Goals() {
     setDeletingGoalId(id)
     try {
       await deleteGoal(token, id)
+      goalsLoadRequestIdRef.current += 1
       setGoals((prev) => prev.filter((g) => g.id !== id))
     } catch (err) {
       setFormError(err?.message || 'Could not remove goal.')
