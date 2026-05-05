@@ -717,22 +717,20 @@ export default function Settings() {
               <div>
                 <p className="settings-section-kicker">Accountability</p>
                 <h2>Accountability partners</h2>
-                <p className="settings-support-lede" style={{ marginTop: '0.5rem' }}>
+                <p className="settings-support-lede settings-partners-intro">
                   People listed here may receive emails when a purchase breaks an active pact. You can remove a partner
                   anytime.
                 </p>
               </div>
             </div>
 
-            <div className="settings-control-stack" style={{ paddingTop: 0 }}>
-              <div className="settings-control-group" style={{ marginBottom: '0.85rem' }}>
-                <div className="settings-control-label-row" style={{ marginBottom: '0.85rem' }}>
-                  <span className="settings-control-label">
-                    {editingPartnerId ? 'Edit partner' : 'Add a partner'}
-                  </span>
-                </div>
+            <div className="settings-partners-body">
+              <div className="settings-partners-form-section">
+                <p className="settings-partners-form-heading">
+                  {editingPartnerId ? 'Edit partner' : 'Add a partner'}
+                </p>
 
-                <div className="settings-profile-form" style={{ paddingTop: 0 }}>
+                <div className="settings-profile-form settings-partners-form-grid">
                   <label className="settings-field">
                     <span>Partner name</span>
                     <input
@@ -742,6 +740,7 @@ export default function Settings() {
                         setPartnerForm((prev) => ({ ...prev, partner_name: event.target.value }))
                       }
                       placeholder="Alex"
+                      autoComplete="name"
                     />
                   </label>
 
@@ -755,6 +754,7 @@ export default function Settings() {
                         setPartnerForm((prev) => ({ ...prev, partner_email: event.target.value }))
                       }
                       placeholder="alex@example.com"
+                      autoComplete="email"
                     />
                   </label>
 
@@ -767,10 +767,11 @@ export default function Settings() {
                         setPartnerForm((prev) => ({ ...prev, relationship_label: event.target.value }))
                       }
                       placeholder="Friend, sibling, coach"
+                      autoComplete="off"
                     />
                   </label>
 
-                  <div className="settings-form-actions">
+                  <div className="settings-form-actions settings-partners-submit-row">
                     <button
                       type="button"
                       className="settings-primary-button"
@@ -789,47 +790,53 @@ export default function Settings() {
                 </div>
               </div>
 
-              {partners.length === 0 ? (
-                <p className="settings-support-lede">No accountability partners on file.</p>
-              ) : (
-                partners.map((partner) => {
-                  const label = partner.partner_name || partner.partner_email || 'Partner'
-                  return (
-                    <div key={partner.id} className="settings-partner-card">
-                      <div className="settings-row-copy">
-                        <h3 style={{ fontSize: '1.05rem' }}>{label}</h3>
-                        <p className="settings-support-lede" style={{ marginTop: '0.25rem' }}>
-                          {partner.partner_email}
-                          {partner.relationship_label ? ` · ${partner.relationship_label}` : ''}
-                        </p>
-                        {partner.is_active === false ? (
-                          <span className="settings-partner-badge">Inactive</span>
-                        ) : (
-                          <span className="settings-partner-badge">Active</span>
-                        )}
+              <div className="settings-partners-list">
+                {partners.length === 0 ? (
+                  <p className="settings-support-lede settings-partners-empty">No accountability partners on file.</p>
+                ) : (
+                  partners.map((partner) => {
+                    const label = partner.partner_name || partner.partner_email || 'Partner'
+                    const inactive = partner.is_active === false
+                    return (
+                      <div key={partner.id} className="settings-partner-card">
+                        <div className="settings-partner-main">
+                          <div className="settings-partner-title-row">
+                            <h3>{label}</h3>
+                            <span
+                              className={`settings-partner-badge ${inactive ? 'is-inactive' : 'is-active'}`}
+                            >
+                              {inactive ? 'Inactive' : 'Active'}
+                            </span>
+                          </div>
+                          <p className="settings-partner-meta">
+                            {partner.partner_email}
+                            {partner.relationship_label ? ` · ${partner.relationship_label}` : ''}
+                          </p>
+                        </div>
+                        <div className="settings-partner-actions">
+                          <button
+                            type="button"
+                            className="settings-ghost-button"
+                            disabled={Boolean(partnerPendingDelete)}
+                            onClick={() => beginEditPartner(partner)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="settings-button-danger"
+                            disabled={deletingPartnerId === partner.id || Boolean(partnerPendingDelete)}
+                            onClick={() => requestDeletePartner(partner)}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                      <div className="settings-partner-actions" style={{ marginTop: '0.75rem' }}>
-                        <button
-                          type="button"
-                          className="settings-ghost-button"
-                          disabled={Boolean(partnerPendingDelete)}
-                          onClick={() => beginEditPartner(partner)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="settings-button-danger"
-                          disabled={deletingPartnerId === partner.id || Boolean(partnerPendingDelete)}
-                          onClick={() => requestDeletePartner(partner)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
+                    )
+                  })
+                )}
+              </div>
+
               {partnerError ? <p className="settings-form-feedback is-error">{partnerError}</p> : null}
               {partnerSuccess ? <p className="settings-form-feedback is-success">{partnerSuccess}</p> : null}
             </div>
@@ -857,7 +864,7 @@ export default function Settings() {
                     </strong>{' '}
                     from accountability alert emails. You can add a partner again anytime from My Pacts.
                   </p>
-                  <div className="settings-form-actions" style={{ marginTop: '1rem' }}>
+                  <div className="settings-form-actions settings-modal-actions">
                     <button type="button" className="settings-ghost-button" onClick={cancelDeletePartner}>
                       Cancel
                     </button>
@@ -875,7 +882,7 @@ export default function Settings() {
             ) : null}
           </section>
 
-          <section className="dashboard-card settings-card settings-card-partners">
+          <section className="dashboard-card settings-card settings-card-banks">
             <div className="settings-section-header">
               <div>
                 <p className="settings-section-kicker">Bank connections</p>

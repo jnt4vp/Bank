@@ -97,6 +97,7 @@
   grid-template-areas:
     'account notifications'
     'partners partners'
+    'banks banks'
     'security preferences'
     'privacy support';
   gap: 1.4rem;
@@ -138,6 +139,10 @@
 
 .settings-card-partners {
   grid-area: partners;
+}
+
+.settings-card-banks {
+  grid-area: banks;
 }
 
 .settings-card-security {
@@ -608,11 +613,65 @@
   color: #86686d;
 }
 
+.settings-partners-intro {
+  margin-top: 0.5rem;
+}
+
+.settings-partners-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.settings-partners-form-section {
+  padding-bottom: 1.15rem;
+  border-bottom: 1px solid rgba(171, 157, 131, 0.14);
+}
+
+.settings-partners-form-heading {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2d2831;
+}
+
+.settings-partners-form-grid {
+  padding-top: 0;
+}
+
+@media (min-width: 640px) {
+  .settings-profile-form.settings-partners-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .settings-profile-form.settings-partners-form-grid .settings-field:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .settings-profile-form.settings-partners-form-grid .settings-partners-submit-row {
+    grid-column: 1 / -1;
+  }
+}
+
+.settings-partners-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.settings-partners-empty {
+  margin: 0;
+}
+
 .settings-partner-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .settings-button-danger {
@@ -643,22 +702,83 @@
 }
 
 .settings-partner-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.85rem;
   border: 1px solid rgba(224, 214, 196, 0.85);
   border-radius: 1rem;
-  padding: 1rem 1.05rem;
+  padding: 1rem 1.1rem;
   background: rgba(255, 255, 255, 0.55);
 }
 
-.settings-partner-card + .settings-partner-card {
-  margin-top: 0.65rem;
+.settings-partner-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-partner-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+}
+
+.settings-partner-title-row h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #2d2831;
+  line-height: 1.25;
+}
+
+.settings-partner-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: #5c5660;
+  word-break: break-word;
 }
 
 .settings-partner-badge {
-  display: inline-block;
-  margin-top: 0.35rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #6a6240;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.settings-partner-badge.is-active {
+  background: rgba(130, 168, 96, 0.18);
+  color: #3d5a2e;
+}
+
+.settings-partner-badge.is-inactive {
+  background: rgba(110, 105, 115, 0.12);
+  color: #635d66;
+}
+
+@media (min-width: 560px) {
+  .settings-partner-card {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem 1.25rem;
+  }
+
+  .settings-partner-actions {
+    flex-shrink: 0;
+    padding-top: 0.1rem;
+  }
+}
+
+@media (max-width: 559px) {
+  .settings-partner-actions {
+    justify-content: flex-start;
+  }
 }
 
 .settings-support-actions {
@@ -702,6 +822,11 @@
   font-size: 1.15rem;
   font-weight: 700;
   color: #2c2730;
+}
+
+.settings-modal-actions {
+  margin-top: 1rem;
+  justify-content: flex-end;
 }
 
 .settings-quick-links {
@@ -748,6 +873,7 @@ a.settings-row.settings-action-row {
       'account'
       'notifications'
       'partners'
+      'banks'
       'security'
       'preferences'
       'privacy'
