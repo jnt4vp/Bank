@@ -96,7 +96,7 @@ export default function Analytics() {
   const empty = !loading && windowed.length === 0
 
   return (
-    <div className="dashboard-shell">
+    <div className="dashboard-shell analytics-page">
       <DashboardTopbar navAriaLabel="Analytics" />
 
       <section className="dashboard-hero">

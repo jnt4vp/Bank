@@ -1329,7 +1329,7 @@ export default function Pacts() {
 
   if (!showDashboard) {
     return (
-      <div className="dashboard-shell">
+      <div className="dashboard-shell pacts-page">
         <DashboardTopbar navAriaLabel="Dashboard" />
         <div className="pacts-intro">
           <div className="pacts-intro-box">
@@ -1361,7 +1361,7 @@ export default function Pacts() {
 
   return (
     <div
-      className={`dashboard-shell ${
+      className={`dashboard-shell pacts-page ${
         disciplineModeEnabled ? `pacts-discipline-${disciplineUiState.key}` : 'pacts-classic-mode'
       }`}
     >

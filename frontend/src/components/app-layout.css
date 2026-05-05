@@ -470,6 +470,54 @@
   color: #ffffff;
 }
 
+/* Analytics page — text matches main dashboard (solid white, easy to read) */
+.app-shell[data-theme="stormy"] .analytics-page {
+  color: #ffffff;
+  --analytics-empty-text: #ffffff;
+  --analytics-category-label: #ffffff;
+  --analytics-amount-strong: #ffffff;
+  --analytics-muted: #ffffff;
+  --analytics-track-bg: rgba(18, 34, 68, 0.78);
+  --analytics-row-divider: rgba(90, 130, 200, 0.32);
+  --analytics-rank-bg: rgba(34, 56, 102, 0.78);
+  --analytics-rank-fg: #ffffff;
+  --analytics-merchant-name: #ffffff;
+  --analytics-merchant-amount: #ffffff;
+}
+
+.app-shell[data-theme="stormy"] .analytics-page .dashboard-card-hero-accent {
+  box-shadow:
+    0 22px 52px rgba(8, 18, 55, 0.38),
+    inset 0 1px 0 rgba(110, 155, 220, 0.16);
+}
+
+/* Goals & Pacts — same readable white text as main dashboard (stormy) */
+.app-shell[data-theme="stormy"] .goals-page *,
+.app-shell[data-theme="stormy"] .pacts-page * {
+  color: #ffffff;
+}
+
+.app-shell[data-theme="stormy"] .goals-page input,
+.app-shell[data-theme="stormy"] .goals-page textarea,
+.app-shell[data-theme="stormy"] .goals-page select,
+.app-shell[data-theme="stormy"] .pacts-page input,
+.app-shell[data-theme="stormy"] .pacts-page textarea,
+.app-shell[data-theme="stormy"] .pacts-page select {
+  color: #2f2932;
+}
+
+.app-shell[data-theme="stormy"] .goals-page input::placeholder,
+.app-shell[data-theme="stormy"] .goals-page textarea::placeholder,
+.app-shell[data-theme="stormy"] .pacts-page input::placeholder,
+.app-shell[data-theme="stormy"] .pacts-page textarea::placeholder {
+  color: rgba(47, 41, 50, 0.55);
+}
+
+.app-shell[data-theme="stormy"] .goals-page input:disabled,
+.app-shell[data-theme="stormy"] .pacts-page input:disabled {
+  color: #6e6770;
+}
+
 /* ── RED ── 2+ broken pacts */
 .app-shell[data-theme="red"] .dashboard-shell {
   --pb-glass-card-bg: linear-gradient(180deg, rgba(75, 18, 18, 0.58) 0%, rgba(55, 10, 10, 0.44) 100%);
@@ -615,6 +663,54 @@
 
 .app-shell[data-theme="red"] .dashboard-activity-amount.is-flagged {
   color: #ffffff;
+}
+
+/* Analytics page — text matches main dashboard (solid white, easy to read) */
+.app-shell[data-theme="red"] .analytics-page {
+  color: #ffffff;
+  --analytics-empty-text: #ffffff;
+  --analytics-category-label: #ffffff;
+  --analytics-amount-strong: #ffffff;
+  --analytics-muted: #ffffff;
+  --analytics-track-bg: rgba(52, 12, 12, 0.82);
+  --analytics-row-divider: rgba(175, 58, 58, 0.38);
+  --analytics-rank-bg: rgba(92, 22, 22, 0.78);
+  --analytics-rank-fg: #ffffff;
+  --analytics-merchant-name: #ffffff;
+  --analytics-merchant-amount: #ffffff;
+}
+
+.app-shell[data-theme="red"] .analytics-page .dashboard-card-hero-accent {
+  box-shadow:
+    0 22px 52px rgba(50, 6, 6, 0.4),
+    inset 0 1px 0 rgba(220, 100, 100, 0.14);
+}
+
+/* Goals & Pacts — same readable white text as main dashboard (red) */
+.app-shell[data-theme="red"] .goals-page *,
+.app-shell[data-theme="red"] .pacts-page * {
+  color: #ffffff;
+}
+
+.app-shell[data-theme="red"] .goals-page input,
+.app-shell[data-theme="red"] .goals-page textarea,
+.app-shell[data-theme="red"] .goals-page select,
+.app-shell[data-theme="red"] .pacts-page input,
+.app-shell[data-theme="red"] .pacts-page textarea,
+.app-shell[data-theme="red"] .pacts-page select {
+  color: #2f2932;
+}
+
+.app-shell[data-theme="red"] .goals-page input::placeholder,
+.app-shell[data-theme="red"] .goals-page textarea::placeholder,
+.app-shell[data-theme="red"] .pacts-page input::placeholder,
+.app-shell[data-theme="red"] .pacts-page textarea::placeholder {
+  color: rgba(47, 41, 50, 0.55);
+}
+
+.app-shell[data-theme="red"] .goals-page input:disabled,
+.app-shell[data-theme="red"] .pacts-page input:disabled {
+  color: #6e6770;
 }
 
 /* ════════════════════════════════════════

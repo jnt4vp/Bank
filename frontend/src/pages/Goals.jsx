@@ -334,7 +334,7 @@ export default function Goals() {
   const monthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
 
   return (
-    <div className="dashboard-shell">
+    <div className="dashboard-shell goals-page">
       <DashboardTopbar navAriaLabel="Goals" />
 
       <section className="dashboard-hero">
